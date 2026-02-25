@@ -98,6 +98,7 @@ def create_app(config_name=None):
     from app.api.reportes import reportes_bp
     from app.api.usuarios import usuarios_bp
     from app.api.dashboard import dashboard_bp
+    from app.api.migracion import migracion_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -112,6 +113,7 @@ def create_app(config_name=None):
     app.register_blueprint(reportes_bp, url_prefix='/api/reportes')
     app.register_blueprint(usuarios_bp, url_prefix='/api/usuarios')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
+    app.register_blueprint(migracion_bp, url_prefix='/api/migracion')
 
     # ── Health check ──
     @app.route('/api/health')

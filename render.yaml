@@ -18,6 +18,10 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
-        generateValue: true
+        sync: false
       - key: JWT_SECRET_KEY
-        generateValue: true
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false

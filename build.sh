@@ -27,6 +27,14 @@ echo ""
 echo "→ Construyendo frontend React..."
 cd ../frontend
 npm install
+
+# Pasar variables de entorno de Render al build de Vite
+echo "VITE_API_URL=/api" > .env.production
+if [ -n "$VITE_GOOGLE_CLIENT_ID" ]; then
+  echo "VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID" >> .env.production
+  echo "  ✓ Google OAuth Client ID configurado"
+fi
+
 npm run build
 
 echo ""
