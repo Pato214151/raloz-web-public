@@ -1,0 +1,23 @@
+# ══════════════════════════════════════════
+# RALOZ COL SAS — Render Blueprint
+# ══════════════════════════════════════════
+services:
+  - type: web
+    name: raloz-web
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: web
+    buildCommand: bash build.sh
+    startCommand: cd backend && gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: NODE_VERSION
+        value: "20.11.0"
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
