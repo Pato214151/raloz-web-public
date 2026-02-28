@@ -16,6 +16,7 @@ class Usuario(db.Model):
     ultimo_login = db.Column(db.DateTime, nullable=True)
     intentos_fallidos = db.Column(db.Integer, default=0)
     bloqueado_hasta = db.Column(db.DateTime, nullable=True)
+    carpeta_datos = db.Column(db.String(500), nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):

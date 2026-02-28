@@ -114,25 +114,29 @@ def productos_mas_vendidos():
 @jwt_required()
 def cuentas_por_cobrar():
     """Facturas con saldo pendiente"""
+    # Buscar facturas no anuladas que tengan saldo
     facturas = Factura.query.filter(
-        Factura.estado.in_(['PENDIENTE', 'ABONO'])
+        Factura.estado != 'ANULADA',
+        Factura.estado != 'CANCELADA',
     ).order_by(Factura.fecha_factura.desc()).all()
 
     resultado = []
     for f in facturas:
         pagado = sum(p.valor for p in f.pagos)
         saldo = f.total - pagado
-        if saldo > 0:
+        # Usar saldo_pendiente de la DB si existe, sino calcular
+        saldo_real = f.saldo_pendiente if f.saldo_pendiente and f.saldo_pendiente > 0 else saldo
+        if saldo_real > 0.5:  # tolerancia de centavos
             resultado.append({
                 **f.to_dict(),
                 'total_pagado': pagado,
-                'saldo': saldo,
+                'saldo': round(saldo_real, 2),
             })
 
     total_por_cobrar = sum(r['saldo'] for r in resultado)
 
     return jsonify({
         'cuentas': resultado,
-        'total_por_cobrar': total_por_cobrar,
+        'total_por_cobrar': round(total_por_cobrar, 2),
         'total_cuentas': len(resultado),
     }), 200

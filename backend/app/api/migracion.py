@@ -86,9 +86,11 @@ def limpiar_tablas():
 def verificar_migracion():
     """Verifica conteo de registros en cada tabla"""
     tablas = [
-        'colegios', 'productos', 'metodos_pago', 'series_facturacion',
-        'precios_colegio', 'stock', 'clientes',
-        'facturas', 'factura_detalle', 'pagos', 'gastos'
+        'usuarios', 'colegios', 'productos', 'metodos_pago', 'series_facturacion',
+        'series_remision', 'precios_colegio', 'stock', 'clientes',
+        'facturas', 'factura_detalle', 'pagos', 'gastos',
+        'stock_pendiente', 'prendas_pendientes', 'empaque_pendientes',
+        'caja_diaria', 'movimientos_caja', 'auditoria'
     ]
 
     conteos = {}
@@ -99,4 +101,4 @@ def verificar_migracion():
         except Exception as e:
             conteos[tabla] = f"ERROR: {str(e)[:100]}"
 
-    return jsonify({'ok': True, 'conteos': conteos})
+    return jsonify({'ok': True, 'tablas': conteos})

@@ -14,6 +14,8 @@ import Gastos from './components/gastos/Gastos'
 import Caja from './components/caja/Caja'
 import Pendientes from './components/pendientes/Pendientes'
 import Usuarios from './components/usuarios/Usuarios'
+import CuentasPorCobrar from './components/reportes/CuentasPorCobrar'
+import Reportes from './components/reportes/Reportes'
 
 function ProtectedRoute({ children, roles }) {
   const { usuario, loading } = useAuth()
@@ -62,6 +64,10 @@ export default function App() {
             <ProtectedRoute roles={['administrador', 'cajero']}><Caja /></ProtectedRoute>
           } />
           <Route path="pendientes" element={<Pendientes />} />
+          <Route path="cuentas" element={<CuentasPorCobrar />} />
+          <Route path="reportes" element={
+            <ProtectedRoute roles={['administrador']}><Reportes /></ProtectedRoute>
+          } />
           <Route path="usuarios" element={
             <ProtectedRoute roles={['administrador']}><Usuarios /></ProtectedRoute>
           } />

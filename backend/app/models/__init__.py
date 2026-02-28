@@ -14,10 +14,14 @@ from app.models.metodo_pago import MetodoPago
 from app.models.cliente import Cliente
 from app.models.caja_diaria import CajaDiaria
 from app.models.movimiento_caja import MovimientoCaja
+from app.models.prenda_pendiente import PrendaPendiente
+from app.models.empaque_pendiente import EmpaquePendiente
+from app.models.serie_remision import SerieRemision
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
     'Factura', 'FacturaDetalle', 'Pago', 'Gasto', 'StockPendiente',
     'Auditoria', 'SerieFacturacion', 'MetodoPago', 'Cliente',
-    'CajaDiaria', 'MovimientoCaja'
+    'CajaDiaria', 'MovimientoCaja', 'PrendaPendiente',
+    'EmpaquePendiente', 'SerieRemision'
 ]
