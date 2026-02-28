@@ -17,8 +17,13 @@ reportes_bp = Blueprint('reportes', __name__)
 @jwt_required()
 def reporte_ventas():
     """Reporte de ventas por período"""
-    fecha_desde = request.args.get('fecha_desde', date.today().replace(day=1).isoformat())
-    fecha_hasta = request.args.get('fecha_hasta', date.today().isoformat())
+    from app.utils.validators import validate_date
+
+    fecha_desde = validate_date(request.args.get('fecha_desde', date.today().replace(day=1).isoformat()))
+    fecha_hasta = validate_date(request.args.get('fecha_hasta', date.today().isoformat()))
+
+    if not fecha_desde or not fecha_hasta:
+        return jsonify({'error': 'Fechas inválidas'}), 400
 
     ventas = db.session.query(
         func.count(Factura.id_factura).label('total_facturas'),
