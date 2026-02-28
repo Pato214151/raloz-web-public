@@ -13,6 +13,8 @@ import Clientes from './components/clientes/Clientes'
 import Gastos from './components/gastos/Gastos'
 import Caja from './components/caja/Caja'
 import Pendientes from './components/pendientes/Pendientes'
+import Precios from './components/precios/Precios'
+import Empaque from './components/empaque/Empaque'
 import Usuarios from './components/usuarios/Usuarios'
 import CuentasPorCobrar from './components/reportes/CuentasPorCobrar'
 import Reportes from './components/reportes/Reportes'
@@ -64,6 +66,10 @@ export default function App() {
             <ProtectedRoute roles={['administrador', 'cajero']}><Caja /></ProtectedRoute>
           } />
           <Route path="pendientes" element={<Pendientes />} />
+          <Route path="empaque" element={<Empaque />} />
+          <Route path="precios" element={
+            <ProtectedRoute roles={['administrador']}><Precios /></ProtectedRoute>
+          } />
           <Route path="cuentas" element={<CuentasPorCobrar />} />
           <Route path="reportes" element={
             <ProtectedRoute roles={['administrador']}><Reportes /></ProtectedRoute>

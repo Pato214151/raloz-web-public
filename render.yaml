@@ -7,7 +7,6 @@ services:
     runtime: python
     region: oregon
     plan: free
-    rootDir: web
     buildCommand: bash build.sh
     startCommand: cd backend && gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
