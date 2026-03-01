@@ -95,6 +95,7 @@ def actualizar_cliente(id_cliente):
         'telefono': 50, 'celular': 50, 'email': 255,
         'direccion': 500, 'ciudad': 100, 'departamento': 100,
         'codigo_postal': 20, 'pais': 50, 'dv': 5,
+        'numero_documento': 50,
         'estudiante_nombre': 200, 'estudiante_grado': 50,
         'notas': 1000, 'tipo_documento': 10,
     }
@@ -131,7 +132,7 @@ def historial_cliente(id_cliente):
 
     facturas = Factura.query.filter(
         Factura.cliente_nombre == cliente.nombre
-    ).order_by(Factura.fecha.desc()).limit(50).all()
+    ).order_by(Factura.fecha_factura.desc()).limit(50).all()
 
     total_compras = sum(f.total for f in facturas)
     total_pagado = sum(f.total_abonado or 0 for f in facturas)
@@ -141,7 +142,7 @@ def historial_cliente(id_cliente):
         'facturas': [{
             'id_factura': f.id_factura,
             'numero_factura': f.numero_factura,
-            'fecha': f.fecha.isoformat() if f.fecha else None,
+            'fecha': f.fecha_factura.isoformat() if f.fecha_factura else None,
             'total': f.total,
             'total_abonado': f.total_abonado or 0,
             'saldo_pendiente': f.saldo_pendiente or 0,

@@ -201,7 +201,7 @@ export default function Empaque() {
                 value={numeroFactura}
                 onChange={(e) => setNumeroFactura(e.target.value)}
                 placeholder="Ej: FAC-2026-000001"
-                className="input pl-10 w-full"
+                className="input-field pl-10 w-full"
               />
             </div>
           </div>
@@ -355,7 +355,7 @@ export default function Empaque() {
                               max={det.cantidad}
                               value={state.cantidad}
                               onChange={(e) => updateItemState(idx, 'cantidad', Math.min(Math.max(1, parseInt(e.target.value) || 1), det.cantidad))}
-                              className="input w-full text-center"
+                              className="input-field w-full text-center"
                             />
                           </div>
                           {/* Género */}
@@ -398,7 +398,7 @@ export default function Empaque() {
                               value={state.observaciones}
                               onChange={(e) => updateItemState(idx, 'observaciones', e.target.value)}
                               placeholder="Ej: largo de S, sin bolsillo..."
-                              className="input w-full"
+                              className="input-field w-full"
                             />
                           </div>
                         </div>

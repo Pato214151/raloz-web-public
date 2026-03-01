@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Users, Plus, Search, Edit, X, Eye, Printer } from 'lucide-react'
+import { Users, Plus, Search, Edit, X, Eye, Printer, Download } from 'lucide-react'
 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -62,6 +62,7 @@ export default function Clientes() {
   })
 
   const openForm = (cliente = null) => {
+    setShowDetail(false) // cerrar modal detalle para que no tape el formulario
     if (cliente) {
       setEditingId(cliente.id_cliente)
       setForm({
@@ -168,6 +169,58 @@ export default function Clientes() {
     w.print()
   }
 
+  const exportarFacturaElectronica = () => {
+    if (!selectedCliente) return
+    const c = selectedCliente
+    // Fila de datos del cliente
+    const clienteRow = [
+      c.tipo_documento || 'CC',
+      c.numero_documento || '',
+      c.dv || '',
+      c.nombre || '',
+      c.apellidos || '',
+      c.razon_social || '',
+      c.email || '',
+      c.telefono || c.celular || '',
+      c.direccion || '',
+      c.ciudad || '',
+      c.departamento || '',
+      c.pais || 'Colombia',
+    ]
+    // Filas de facturas
+    const facturaRows = historialCompras.map(f => [
+      f.numero_factura,
+      f.fecha || '',
+      f.colegio_nombre || '',
+      f.total,
+      f.total_abonado || 0,
+      f.saldo_pendiente || 0,
+      f.estado,
+    ])
+
+    const clienteHeader = ['tipo_documento','numero_documento','dv','nombre','apellidos','razon_social','email','telefono','direccion','ciudad','departamento','pais']
+    const facturaHeader = ['numero_factura','fecha','colegio','total','total_pagado','saldo','estado']
+
+    const csvParts = [
+      '=== DATOS CLIENTE ===',
+      clienteHeader.join(','),
+      clienteRow.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','),
+      '',
+      '=== FACTURAS ===',
+      facturaHeader.join(','),
+      ...facturaRows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')),
+    ]
+
+    const blob = new Blob([csvParts.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `factura_electronica_${c.numero_documento || c.nombre}_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Datos exportados para factura electrónica')
+  }
+
   if (loading && clientes.length === 0) {
     return <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 border-b-2 border-raloz-600 rounded-full"></div></div>
   }
@@ -188,7 +241,7 @@ export default function Clientes() {
       <form onSubmit={handleSearch} className="card flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-64">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-          <input type="text" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar por nombre, teléfono, documento, email..." className="input pl-10 w-full" />
+          <input type="text" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar por nombre, teléfono, documento, email..." className="input-field pl-10 w-full" />
         </div>
         <button type="submit" className="btn-primary">Buscar</button>
       </form>
@@ -240,48 +293,48 @@ export default function Clientes() {
             <form onSubmit={guardarCliente} className="space-y-4">
               <p className="text-sm font-medium text-gray-500 border-b pb-1">Datos Personales</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div><label className="block text-sm font-medium mb-1">Nombre *</label><input type="text" required value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="input w-full" placeholder="Nombre" /></div>
-                <div><label className="block text-sm font-medium mb-1">Apellidos</label><input type="text" value={form.apellidos} onChange={e => setForm({ ...form, apellidos: e.target.value })} className="input w-full" placeholder="Apellidos" /></div>
-                <div><label className="block text-sm font-medium mb-1">Razón Social</label><input type="text" value={form.razon_social} onChange={e => setForm({ ...form, razon_social: e.target.value })} className="input w-full" placeholder="Si es empresa" /></div>
+                <div><label className="block text-sm font-medium mb-1">Nombre *</label><input type="text" required value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="input-field w-full" placeholder="Nombre" /></div>
+                <div><label className="block text-sm font-medium mb-1">Apellidos</label><input type="text" value={form.apellidos} onChange={e => setForm({ ...form, apellidos: e.target.value })} className="input-field w-full" placeholder="Apellidos" /></div>
+                <div><label className="block text-sm font-medium mb-1">Razón Social</label><input type="text" value={form.razon_social} onChange={e => setForm({ ...form, razon_social: e.target.value })} className="input-field w-full" placeholder="Si es empresa" /></div>
               </div>
 
               <p className="text-sm font-medium text-gray-500 border-b pb-1">Documento</p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div><label className="block text-sm font-medium mb-1">Tipo</label>
-                  <select value={form.tipo_documento} onChange={e => setForm({ ...form, tipo_documento: e.target.value })} className="input w-full">
+                  <select value={form.tipo_documento} onChange={e => setForm({ ...form, tipo_documento: e.target.value })} className="input-field w-full">
                     <option value="CC">CC - Cédula</option><option value="CE">CE - Extranjería</option><option value="NIT">NIT</option><option value="PASAPORTE">Pasaporte</option><option value="TI">TI - Tarjeta Id.</option>
                   </select>
                 </div>
-                <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Número</label><input type="text" value={form.numero_documento} onChange={e => setForm({ ...form, numero_documento: e.target.value })} className="input w-full" /></div>
-                <div><label className="block text-sm font-medium mb-1">DV</label><input type="text" value={form.dv} onChange={e => setForm({ ...form, dv: e.target.value })} className="input w-full" maxLength={2} /></div>
+                <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Número</label><input type="text" value={form.numero_documento} onChange={e => setForm({ ...form, numero_documento: e.target.value })} className="input-field w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">DV</label><input type="text" value={form.dv} onChange={e => setForm({ ...form, dv: e.target.value })} className="input-field w-full" maxLength={2} /></div>
               </div>
 
               <p className="text-sm font-medium text-gray-500 border-b pb-1">Contacto</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div><label className="block text-sm font-medium mb-1">Teléfono</label><input type="tel" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} className="input w-full" /></div>
-                <div><label className="block text-sm font-medium mb-1">Celular</label><input type="tel" value={form.celular} onChange={e => setForm({ ...form, celular: e.target.value })} className="input w-full" /></div>
-                <div><label className="block text-sm font-medium mb-1">Email</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">Teléfono</label><input type="tel" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} className="input-field w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">Celular</label><input type="tel" value={form.celular} onChange={e => setForm({ ...form, celular: e.target.value })} className="input-field w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">Email</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field w-full" /></div>
               </div>
 
               <p className="text-sm font-medium text-gray-500 border-b pb-1">Dirección</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Dirección</label><input type="text" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} className="input w-full" /></div>
-                <div><label className="block text-sm font-medium mb-1">Ciudad</label><input type="text" value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} className="input w-full" /></div>
-                <div><label className="block text-sm font-medium mb-1">Departamento</label><input type="text" value={form.departamento} onChange={e => setForm({ ...form, departamento: e.target.value })} className="input w-full" /></div>
+                <div className="md:col-span-2"><label className="block text-sm font-medium mb-1">Dirección</label><input type="text" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} className="input-field w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">Ciudad</label><input type="text" value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} className="input-field w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">Departamento</label><input type="text" value={form.departamento} onChange={e => setForm({ ...form, departamento: e.target.value })} className="input-field w-full" /></div>
               </div>
 
               <p className="text-sm font-medium text-gray-500 border-b pb-1">Colegio / Estudiante</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div><label className="block text-sm font-medium mb-1">Colegio</label>
-                  <select value={form.id_colegio} onChange={e => setForm({ ...form, id_colegio: e.target.value })} className="input w-full">
+                  <select value={form.id_colegio} onChange={e => setForm({ ...form, id_colegio: e.target.value })} className="input-field w-full">
                     <option value="">Seleccionar</option>{colegios.map(c => <option key={c.id_colegio} value={c.id_colegio}>{c.nombre}</option>)}
                   </select>
                 </div>
-                <div><label className="block text-sm font-medium mb-1">Estudiante</label><input type="text" value={form.estudiante_nombre} onChange={e => setForm({ ...form, estudiante_nombre: e.target.value })} className="input w-full" placeholder="Nombre estudiante" /></div>
-                <div><label className="block text-sm font-medium mb-1">Grado</label><input type="text" value={form.estudiante_grado} onChange={e => setForm({ ...form, estudiante_grado: e.target.value })} className="input w-full" /></div>
+                <div><label className="block text-sm font-medium mb-1">Estudiante</label><input type="text" value={form.estudiante_nombre} onChange={e => setForm({ ...form, estudiante_nombre: e.target.value })} className="input-field w-full" placeholder="Nombre estudiante" /></div>
+                <div><label className="block text-sm font-medium mb-1">Grado</label><input type="text" value={form.estudiante_grado} onChange={e => setForm({ ...form, estudiante_grado: e.target.value })} className="input-field w-full" /></div>
               </div>
 
-              <div><label className="block text-sm font-medium mb-1">Notas</label><textarea value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} className="input w-full" rows={2} /></div>
+              <div><label className="block text-sm font-medium mb-1">Notas</label><textarea value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} className="input-field w-full" rows={2} /></div>
 
               <div className="flex gap-3 justify-end pt-4 border-t">
                 <button type="button" onClick={() => { setShowForm(false); setEditingId(null) }} className="btn-secondary">Cancelar</button>
@@ -298,7 +351,10 @@ export default function Clientes() {
           <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">Detalles de Cliente</h3>
-              <button onClick={imprimirHistorial} className="btn-secondary flex items-center gap-1 text-sm"><Printer size={14} /> Imprimir</button>
+              <div className="flex gap-2">
+                <button onClick={exportarFacturaElectronica} className="btn-secondary flex items-center gap-1 text-sm" title="Exportar datos para factura electrónica"><Download size={14} /> Exportar</button>
+                <button onClick={imprimirHistorial} className="btn-secondary flex items-center gap-1 text-sm"><Printer size={14} /> Imprimir</button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 pb-4 border-b">

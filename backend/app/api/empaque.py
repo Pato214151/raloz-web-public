@@ -70,7 +70,7 @@ def obtener_factura_empaque(numero):
         ]
       }
     """
-    factura = Factura.query.filter(Factura.numero_factura == numero).first_or_404()
+    factura = Factura.query.filter(Factura.numero_factura.ilike(f'%{numero}%')).first_or_404()
 
     detalles = []
     for detalle in factura.detalles:
@@ -98,6 +98,7 @@ def obtener_factura_empaque(numero):
             'total': factura.total,
             'estado': factura.estado,
             'estado_entrega': factura.estado_entrega,
+            'genero_estudiante': factura.genero_estudiante,
             'fecha_factura': factura.fecha_factura.isoformat() if factura.fecha_factura else None,
             'detalles': detalles,
         },

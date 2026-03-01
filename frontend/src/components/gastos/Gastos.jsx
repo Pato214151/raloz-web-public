@@ -160,29 +160,29 @@ export default function Gastos() {
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="block text-xs text-gray-600 mb-1">Desde</label>
-            <input type="date" value={filtroFechaDesde} onChange={(e) => setFiltroFechaDesde(e.target.value)} className="input text-sm" />
+            <input type="date" value={filtroFechaDesde} onChange={(e) => setFiltroFechaDesde(e.target.value)} className="input-field text-sm" />
           </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">Hasta</label>
-            <input type="date" value={filtroFechaHasta} onChange={(e) => setFiltroFechaHasta(e.target.value)} className="input text-sm" />
+            <input type="date" value={filtroFechaHasta} onChange={(e) => setFiltroFechaHasta(e.target.value)} className="input-field text-sm" />
           </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">Categoría</label>
-            <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} className="input text-sm">
+            <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} className="input-field text-sm">
               <option value="">Todas</option>
               {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">Método</label>
-            <select value={filtroMetodo} onChange={(e) => setFiltroMetodo(e.target.value)} className="input text-sm">
+            <select value={filtroMetodo} onChange={(e) => setFiltroMetodo(e.target.value)} className="input-field text-sm">
               <option value="">Todos</option>
               {METODOS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">Buscar</label>
-            <input type="text" value={buscarDesc} onChange={(e) => setBuscarDesc(e.target.value)} placeholder="Descripción..." className="input text-sm w-36" />
+            <input type="text" value={buscarDesc} onChange={(e) => setBuscarDesc(e.target.value)} placeholder="Descripción..." className="input-field text-sm w-36" />
           </div>
           <button onClick={() => { setFiltroFechaDesde(''); setFiltroFechaHasta(''); setFiltroCategoria(''); setFiltroMetodo(''); setBuscarDesc('') }} className="btn-secondary text-sm">Limpiar</button>
           <button onClick={() => {
@@ -296,7 +296,7 @@ export default function Gastos() {
                   required
                   value={form.descripcion}
                   onChange={e => setForm({...form, descripcion: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   placeholder="Descripción del gasto"
                 />
               </div>
@@ -310,7 +310,7 @@ export default function Gastos() {
                   step="0.01"
                   value={form.valor}
                   onChange={e => setForm({...form, valor: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   placeholder="0.00"
                 />
               </div>
@@ -320,7 +320,7 @@ export default function Gastos() {
                 <select
                   value={form.categoria}
                   onChange={e => setForm({...form, categoria: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                 >
                   {CATEGORIAS.map(c => (
                     <option key={c} value={c}>{c}</option>
@@ -333,7 +333,7 @@ export default function Gastos() {
                 <select
                   value={form.metodo_pago}
                   onChange={e => setForm({...form, metodo_pago: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                 >
                   {METODOS.map(m => (
                     <option key={m} value={m}>{m}</option>
@@ -347,7 +347,7 @@ export default function Gastos() {
                   type="date"
                   value={form.fecha}
                   onChange={e => setForm({...form, fecha: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                 />
               </div>
 

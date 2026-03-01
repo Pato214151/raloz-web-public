@@ -56,7 +56,9 @@ export default function BuscarFacturas() {
       setColegios(colRes.data.colegios || [])
       setProductos(prodRes.data.productos || [])
     }).catch(() => {})
-  }, [])
+    // Cargar todas las facturas al abrir
+    handleSearch(1)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = async (pageNum = 1) => {
     setLoading(true)
@@ -87,7 +89,18 @@ export default function BuscarFacturas() {
     setBuscar('')
     setEstado('')
     setColegioId('')
-    handleSearch(1)
+    // Llamar directamente con params vacíos en vez de depender del estado que aún no se actualizó
+    setLoading(true)
+    api.get('/facturas', { params: { page: 1, per_page: 20 } })
+      .then(res => {
+        setFacturas(res.data.facturas || [])
+        setTotal(res.data.total || 0)
+        setPages(res.data.pages || 0)
+        setPage(1)
+        setSaldoTotal(res.data.saldo_total || 0)
+      })
+      .catch(() => toast.error('Error cargando facturas'))
+      .finally(() => setLoading(false))
   }
 
   const verDetalle = async (id) => {
