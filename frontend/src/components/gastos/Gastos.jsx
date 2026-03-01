@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, Wallet, X, Edit, TrendingDown, Calendar } from 'lucide-react'
+import { Plus, Wallet, X, Edit, TrendingDown, Calendar, Printer, Search } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -13,9 +13,11 @@ export default function Gastos() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [filtroFecha, setFiltroFecha] = useState('')
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroMetodo, setFiltroMetodo] = useState('')
+  const [buscarDesc, setBuscarDesc] = useState('')
   const [form, setForm] = useState({
     descripcion: '',
     valor: '',
@@ -26,13 +28,14 @@ export default function Gastos() {
 
   useEffect(() => {
     loadGastos()
-  }, [filtroFecha, filtroCategoria, filtroMetodo])
+  }, [filtroFechaDesde, filtroFechaHasta, filtroCategoria, filtroMetodo])
 
   const loadGastos = async () => {
     setLoading(true)
     try {
       const params = {}
-      if (filtroFecha) params.fecha = filtroFecha
+      if (filtroFechaDesde) params.fecha_desde = filtroFechaDesde
+      if (filtroFechaHasta) params.fecha_hasta = filtroFechaHasta
       if (filtroCategoria) params.categoria = filtroCategoria
       if (filtroMetodo) params.metodo_pago = filtroMetodo
       const res = await api.get('/gastos', { params: { ...params, per_page: 200 } })
@@ -101,15 +104,21 @@ export default function Gastos() {
     }
   }
 
+  // Filtrar por búsqueda local
+  const gastosFiltered = buscarDesc.trim()
+    ? gastos.filter(g => g.descripcion?.toLowerCase().includes(buscarDesc.toLowerCase()))
+    : gastos
+  const totalGastosFiltered = gastosFiltered.reduce((sum, g) => sum + (g.valor || 0), 0)
+
   // Cálculos
-  const totalGastos = gastos.reduce((sum, g) => sum + (g.valor || 0), 0)
+  const totalGastos = gastosFiltered.reduce((sum, g) => sum + (g.valor || 0), 0)
   const gastosPorCategoria = CATEGORIAS.map(cat => ({
     categoria: cat,
-    total: gastos.filter(g => g.categoria === cat).reduce((sum, g) => sum + g.valor, 0)
+    total: gastosFiltered.filter(g => g.categoria === cat).reduce((sum, g) => sum + g.valor, 0)
   })).filter(x => x.total > 0)
   const gastosPorMetodo = METODOS.map(met => ({
     metodo: met,
-    total: gastos.filter(g => g.metodo_pago === met).reduce((sum, g) => sum + g.valor, 0)
+    total: gastosFiltered.filter(g => g.metodo_pago === met).reduce((sum, g) => sum + g.valor, 0)
   })).filter(x => x.total > 0)
 
   if (loading && gastos.length === 0) {
@@ -135,12 +144,12 @@ export default function Gastos() {
           </div>
           <div>
             <p className="text-sm text-gray-600">Número de Gastos</p>
-            <p className="text-3xl font-bold text-gray-700">{gastos.length}</p>
+            <p className="text-3xl font-bold text-gray-700">{gastosFiltered.length}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Gasto Promedio</p>
             <p className="text-3xl font-bold text-blue-600">
-              {gastos.length > 0 ? formatMoney(totalGastos / gastos.length) : '$0'}
+              {gastosFiltered.length > 0 ? formatMoney(totalGastos / gastosFiltered.length) : '$0'}
             </p>
           </div>
         </div>
@@ -150,46 +159,39 @@ export default function Gastos() {
       <div className="card">
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Fecha</label>
-            <input
-              type="date"
-              value={filtroFecha}
-              onChange={(e) => setFiltroFecha(e.target.value)}
-              className="input text-sm"
-            />
+            <label className="block text-xs text-gray-600 mb-1">Desde</label>
+            <input type="date" value={filtroFechaDesde} onChange={(e) => setFiltroFechaDesde(e.target.value)} className="input text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Hasta</label>
+            <input type="date" value={filtroFechaHasta} onChange={(e) => setFiltroFechaHasta(e.target.value)} className="input text-sm" />
           </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">Categoría</label>
-            <select
-              value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
-              className="input text-sm"
-            >
+            <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} className="input text-sm">
               <option value="">Todas</option>
-              {CATEGORIAS.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+              {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-600 mb-1">Método</label>
-            <select
-              value={filtroMetodo}
-              onChange={(e) => setFiltroMetodo(e.target.value)}
-              className="input text-sm"
-            >
+            <select value={filtroMetodo} onChange={(e) => setFiltroMetodo(e.target.value)} className="input text-sm">
               <option value="">Todos</option>
-              {METODOS.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
+              {METODOS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          <button
-            onClick={() => { setFiltroFecha(''); setFiltroCategoria(''); setFiltroMetodo('') }}
-            className="btn-secondary text-sm"
-          >
-            Limpiar
-          </button>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Buscar</label>
+            <input type="text" value={buscarDesc} onChange={(e) => setBuscarDesc(e.target.value)} placeholder="Descripción..." className="input text-sm w-36" />
+          </div>
+          <button onClick={() => { setFiltroFechaDesde(''); setFiltroFechaHasta(''); setFiltroCategoria(''); setFiltroMetodo(''); setBuscarDesc('') }} className="btn-secondary text-sm">Limpiar</button>
+          <button onClick={() => {
+            if (!gastos.length) return
+            const w = window.open('', '_blank')
+            const rows = gastosFiltered.map(g => `<tr><td>${g.fecha}</td><td>${g.descripcion}</td><td>${g.categoria || 'Otros'}</td><td>${g.metodo_pago}</td><td style="text-align:right;color:red;font-weight:bold">${formatMoney(g.valor)}</td></tr>`).join('')
+            w.document.write(`<!DOCTYPE html><html><head><title>Gastos</title><style>body{font-family:Arial;margin:20px}h2{color:#e74c3c;border-bottom:3px solid #FFC107;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}th{background:#f5f5f5;padding:6px;border:1px solid #ddd;text-align:left}td{padding:5px 8px;border:1px solid #eee}.total{font-size:20px;font-weight:bold;color:#e74c3c;text-align:center;padding:15px;background:#fce4ec;border-radius:8px;margin:15px 0}@media print{body{margin:10px}}</style></head><body><h2>RALOZ COL SAS - Registro de Gastos</h2><div class="total">Total: ${formatMoney(totalGastosFiltered)} (${gastosFiltered.length} gastos)</div><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Método</th><th style="text-align:right">Valor</th></tr></thead><tbody>${rows}</tbody></table><hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p></body></html>`)
+            w.document.close(); w.print()
+          }} className="btn-secondary text-sm flex items-center gap-1"><Printer size={14} /> Imprimir</button>
         </div>
       </div>
 
@@ -224,7 +226,7 @@ export default function Gastos() {
       )}
 
       {/* Tabla de Gastos */}
-      {gastos.length === 0 ? (
+      {gastosFiltered.length === 0 ? (
         <div className="card text-center py-12">
           <Wallet className="mx-auto text-gray-300 mb-4" size={48} />
           <p className="text-gray-500">No hay gastos registrados</p>
@@ -243,7 +245,7 @@ export default function Gastos() {
               </tr>
             </thead>
             <tbody>
-              {gastos.map(g => (
+              {gastosFiltered.map(g => (
                 <tr key={g.id_gasto} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{g.fecha}</td>
                   <td className="px-4 py-3 text-gray-700">{g.descripcion}</td>

@@ -103,6 +103,7 @@ def create_app(config_name=None):
     from app.api.precios import precios_bp
     from app.api.empaque import empaque_bp
     from app.api.ventas import ventas_bp
+    from app.api.metodos_pago import metodos_pago_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -122,6 +123,7 @@ def create_app(config_name=None):
     app.register_blueprint(precios_bp, url_prefix='/api/precios')
     app.register_blueprint(empaque_bp, url_prefix='/api/empaque')
     app.register_blueprint(ventas_bp, url_prefix='/api/ventas')
+    app.register_blueprint(metodos_pago_bp, url_prefix='/api/metodos-pago')
 
     # ── Health check ──
     @app.route('/api/health')

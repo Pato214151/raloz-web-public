@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Clock, Check, Search, Plus, Package, X, Download, MoreVertical } from 'lucide-react'
+import { Clock, Check, Search, Plus, Package, X, Download, MoreVertical, Printer, FileText } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -145,56 +145,91 @@ export default function Pendientes() {
   }
 
   const generarListaImpresion = () => {
-    const html = `
-      <html>
-      <head>
-        <title>Listado de Prendas Pendientes</title>
-        <style>
-          body { font-family: Arial; margin: 20px; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f5f5f5; }
-          .header { text-align: center; margin-bottom: 20px; }
-          .checkbox { width: 30px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h2>RALOZ COL SAS - Listado de Prendas Pendientes</h2>
-          <p>Fecha: ${new Date().toLocaleDateString('es-CO')}</p>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th class="checkbox">✓</th>
-              <th>Factura</th>
-              <th>Cliente</th>
-              <th>Producto</th>
-              <th>Talla</th>
-              <th>Cantidad</th>
-              <th>Género</th>
-              <th>Escuela</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${prendas.map(p => `
-              <tr>
-                <td class="checkbox">☐</td>
-                <td>${p.numero_factura || ''}</td>
-                <td>${p.cliente_nombre || ''}</td>
-                <td>${p.producto_nombre}</td>
-                <td>${p.talla || '—'}</td>
-                <td>${p.cantidad}</td>
-                <td>${p.genero}</td>
-                <td>${p.colegio_nombre || ''}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `
-    return html
+    return `<!DOCTYPE html><html><head><title>Listado de Prendas Pendientes</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:20px;color:#333}
+        h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+        table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+        th{background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd;font-size:12px}
+        td{padding:6px 8px;border:1px solid #eee}
+        .checkbox{width:30px;text-align:center}
+        .stats{display:flex;gap:20px;margin:10px 0;font-size:13px}
+        .stats span{padding:4px 12px;border-radius:12px;font-weight:bold}
+        .pending{background:#FFF3CD;color:#856404}.delivered{background:#D4EDDA;color:#155724}
+        @media print{body{margin:10px}}
+      </style></head><body>
+      <h2>RALOZ COL SAS - Prendas Pendientes</h2>
+      <p style="font-size:13px;color:#666">Fecha: ${new Date().toLocaleDateString('es-CO')} | Total: ${prendas.length} | Pendientes: ${pendientesCount} | Entregados: ${entregadosCount}</p>
+      <table><thead><tr>
+        <th class="checkbox">✓</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Talla</th><th>Cant.</th><th>Género</th><th>Escuela</th><th>Obs.</th>
+      </tr></thead><tbody>
+      ${prendas.map(p => `<tr>
+        <td class="checkbox">☐</td>
+        <td>${p.numero_factura || ''}</td>
+        <td>${p.cliente_nombre || ''}</td>
+        <td><b>${p.producto_nombre}</b></td>
+        <td>${p.talla || '—'}</td>
+        <td style="text-align:center"><b>${p.cantidad}</b></td>
+        <td>${p.genero}</td>
+        <td>${p.colegio_nombre || ''}</td>
+        <td style="font-size:11px;color:#666">${p.observaciones || ''}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS - Sistema de Facturación</p>
+      </body></html>`
+  }
+
+  // === REPORTE POR COLEGIO (para costureras) ===
+  const generarReportePorColegio = () => {
+    const pendientesSolo = prendas.filter(p => p.estado === 'PENDIENTE')
+    const porColegio = {}
+    pendientesSolo.forEach(p => {
+      const col = p.colegio_nombre || 'Sin Colegio'
+      if (!porColegio[col]) porColegio[col] = []
+      porColegio[col].push(p)
+    })
+
+    const colegiosHTML = Object.entries(porColegio).map(([colegio, items]) => {
+      const totalPrendas = items.reduce((s, i) => s + i.cantidad, 0)
+      const rows = items.map(p => `<tr>
+        <td class="checkbox">☐</td>
+        <td>${p.numero_factura || ''}</td>
+        <td>${p.cliente_nombre || ''}</td>
+        <td><b>${p.producto_nombre}</b></td>
+        <td>${p.talla || '—'}</td>
+        <td style="text-align:center"><b>${p.cantidad}</b></td>
+        <td>${p.genero}</td>
+        <td style="font-size:11px">${p.observaciones || ''}</td>
+      </tr>`).join('')
+
+      return `<div style="page-break-inside:avoid;margin-bottom:24px">
+        <h3 style="background:#1976D2;color:white;padding:8px 12px;border-radius:4px;margin:0">
+          ${colegio} <span style="float:right;font-size:14px">${totalPrendas} prenda(s)</span>
+        </h3>
+        <table><thead><tr>
+          <th class="checkbox">✓</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Talla</th><th>Cant.</th><th>Género</th><th>Obs.</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      </div>`
+    }).join('')
+
+    const ventana = window.open('', '_blank')
+    ventana.document.write(`<!DOCTYPE html><html><head><title>Reporte por Colegio</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:20px;color:#333}
+        h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+        table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+        th{background:#f5f5f5;padding:6px;text-align:left;border:1px solid #ddd}
+        td{padding:5px 6px;border:1px solid #eee}
+        .checkbox{width:30px;text-align:center}
+        @media print{body{margin:10px}h3{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+      </style></head><body>
+      <h2>RALOZ COL SAS - Reporte de Pendientes por Colegio</h2>
+      <p style="font-size:13px;color:#666">Fecha: ${new Date().toLocaleDateString('es-CO')} | Total pendientes: ${pendientesSolo.length} prendas en ${Object.keys(porColegio).length} colegio(s)</p>
+      ${colegiosHTML}
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS - Sistema de Facturación</p>
+      </body></html>`)
+    ventana.document.close()
+    ventana.print()
   }
 
   const pendientesCount = prendas.filter(p => p.estado === 'PENDIENTE').length
@@ -215,8 +250,11 @@ export default function Pendientes() {
               <Check size={16} /> Entregar {selected.size}
             </button>
           )}
+          <button onClick={generarReportePorColegio} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2">
+            <FileText size={16} /> Reporte por Colegio
+          </button>
           <button onClick={printList} className="btn-secondary flex items-center gap-2">
-            <Download size={16} /> Imprimir
+            <Printer size={16} /> Imprimir Listado
           </button>
           <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
             <Plus size={16} /> Nueva Prenda

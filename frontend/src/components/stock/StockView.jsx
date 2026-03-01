@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, AlertTriangle, Edit, Plus, X } from 'lucide-react'
+import { Package, AlertTriangle, Edit, Plus, X, Printer, Search } from 'lucide-react'
 
 const getStockStatus = (cantidad) => {
   if (cantidad === 0) return { label: 'Sin Stock', color: 'bg-red-100 text-red-700', icon: 'bg-red-500' }
@@ -19,6 +19,7 @@ export default function StockView() {
   const [editCantidad, setEditCantidad] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [newStock, setNewStock] = useState({ producto_id: '', talla: '', cantidad: '' })
+  const [buscarProducto, setBuscarProducto] = useState('')
 
   useEffect(() => {
     loadResumen()
@@ -100,9 +101,44 @@ export default function StockView() {
     }
   }
 
-  const totalUnidades = stock.reduce((sum, s) => sum + s.cantidad, 0)
-  const bajoStock = stock.filter(s => s.cantidad > 0 && s.cantidad < 5).length
-  const sinStock = stock.filter(s => s.cantidad === 0).length
+  const stockFiltered = buscarProducto.trim()
+    ? stock.filter(s =>
+        (s.producto_nombre || '').toLowerCase().includes(buscarProducto.toLowerCase()) ||
+        (s.talla_individual || '').toLowerCase().includes(buscarProducto.toLowerCase())
+      )
+    : stock
+
+  const totalUnidades = stockFiltered.reduce((sum, s) => sum + s.cantidad, 0)
+  const bajoStock = stockFiltered.filter(s => s.cantidad > 0 && s.cantidad < 5).length
+  const sinStock = stockFiltered.filter(s => s.cantidad === 0).length
+
+  const imprimirStock = () => {
+    if (!stockFiltered.length) return
+    const colegioNombre = colegios.find(c => c.id_colegio.toString() === colegioId.toString())?.nombre || 'Colegio'
+    const w = window.open('', '_blank')
+    const rows = stockFiltered.map(s => {
+      const color = s.cantidad === 0 ? 'red' : s.cantidad < 5 ? '#f59e0b' : 'green'
+      const st = getStockStatus(s.cantidad)
+      return `<tr><td>${s.producto_nombre || s.id_producto}</td><td>${s.talla_individual || '—'}</td><td style="text-align:right;font-weight:bold;color:${color}">${s.cantidad}</td><td style="color:${color}">${st.label}</td></tr>`
+    }).join('')
+    w.document.write(`<!DOCTYPE html><html><head><title>Stock - ${colegioNombre}</title>
+      <style>body{font-family:Arial;margin:20px}h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+      th{background:#f5f5f5;padding:6px;border:1px solid #ddd;text-align:left}td{padding:5px 8px;border:1px solid #eee}
+      .kpi{display:inline-block;padding:10px 18px;margin:5px;border-radius:8px;text-align:center}
+      @media print{body{margin:10px}}</style></head><body>
+      <h2>RALOZ COL SAS - Inventario de ${colegioNombre}</h2>
+      <div>
+        <div class="kpi" style="background:#D1ECF1;color:#0C5460"><small>Total</small><br><b>${totalUnidades}</b></div>
+        <div class="kpi" style="background:#FFF3CD;color:#856404"><small>Bajo Stock</small><br><b>${bajoStock}</b></div>
+        <div class="kpi" style="background:#F8D7DA;color:#721C24"><small>Sin Stock</small><br><b>${sinStock}</b></div>
+      </div>
+      <table><thead><tr><th>Producto</th><th>Talla</th><th style="text-align:right">Cantidad</th><th>Estado</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p></body></html>`)
+    w.document.close()
+    w.print()
+  }
 
   if (loading) {
     return <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 border-b-2 border-raloz-600 rounded-full"></div></div>
@@ -148,12 +184,19 @@ export default function StockView() {
             <h3 className="font-semibold text-lg">
               Stock de {colegios.find(c => c.id_colegio.toString() === colegioId.toString())?.nombre || 'Colegio'}
             </h3>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="btn-primary flex items-center gap-2 text-sm"
-            >
-              <Plus size={16} /> Agregar Stock
-            </button>
+            <div className="flex gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
+                <input type="text" value={buscarProducto} onChange={e => setBuscarProducto(e.target.value)}
+                  placeholder="Buscar producto..." className="input pl-8 text-sm w-44" />
+              </div>
+              <button onClick={imprimirStock} className="btn-secondary flex items-center gap-1 text-sm">
+                <Printer size={14} /> Imprimir
+              </button>
+              <button onClick={() => setShowAddForm(true)} className="btn-primary flex items-center gap-2 text-sm">
+                <Plus size={16} /> Agregar
+              </button>
+            </div>
           </div>
 
           {/* Stats */}
@@ -173,7 +216,7 @@ export default function StockView() {
           </div>
 
           {/* Tabla de Stock */}
-          {stock.length === 0 ? (
+          {stockFiltered.length === 0 ? (
             <div className="card text-center py-12">
               <Package className="mx-auto text-gray-300 mb-4" size={48} />
               <p className="text-gray-500">No hay items de stock</p>
@@ -191,7 +234,7 @@ export default function StockView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stock.map(s => {
+                  {stockFiltered.map(s => {
                     const status = getStockStatus(s.cantidad)
                     return (
                       <tr key={s.id_stock} className="border-b border-gray-50 hover:bg-gray-50">

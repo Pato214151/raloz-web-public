@@ -105,6 +105,42 @@ def actualizar_stock():
     return jsonify({'message': 'Stock actualizado', 'stock': stock.to_dict()}), 200
 
 
+@stock_bp.route('/<int:id_stock>', methods=['PUT'])
+@jwt_required()
+@rol_requerido('administrador')
+def editar_stock(id_stock):
+    """Editar cantidad de un registro de stock"""
+    stock = Stock.query.get_or_404(id_stock)
+    data = request.get_json()
+
+    if 'cantidad' in data:
+        try:
+            cantidad = int(data['cantidad'])
+            if cantidad < 0:
+                return jsonify({'error': 'La cantidad no puede ser negativa'}), 400
+            stock.cantidad = cantidad
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Cantidad inválida'}), 400
+
+    db.session.commit()
+    registrar_auditoria('stock', id_stock, 'EDITAR', f'Stock editado: {stock.cantidad} uds')
+
+    return jsonify({'message': 'Stock actualizado', 'stock': stock.to_dict()}), 200
+
+
+@stock_bp.route('/<int:id_stock>', methods=['DELETE'])
+@jwt_required()
+@rol_requerido('administrador')
+def eliminar_stock(id_stock):
+    """Eliminar un registro de stock"""
+    stock = Stock.query.get_or_404(id_stock)
+    db.session.delete(stock)
+    db.session.commit()
+    registrar_auditoria('stock', id_stock, 'ELIMINAR', 'Stock eliminado')
+
+    return jsonify({'message': 'Stock eliminado'}), 200
+
+
 @stock_bp.route('/masivo', methods=['POST'])
 @jwt_required()
 @rol_requerido('administrador')

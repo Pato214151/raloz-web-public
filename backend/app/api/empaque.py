@@ -164,6 +164,8 @@ def registrar_prendas_empaque():
             if not validate_positive_number(cantidad):
                 continue
 
+            genero = prenda_data.get('genero', '').strip() or factura.genero_estudiante or 'NIÑO'
+
             prenda = PrendaPendiente(
                 id_factura=id_factura,
                 numero_factura=factura.numero_factura,
@@ -173,7 +175,7 @@ def registrar_prendas_empaque():
                 producto_nombre=producto_nombre,
                 talla=talla,
                 cantidad=int(cantidad),
-                genero=factura.genero_estudiante or 'NIÑO',
+                genero=genero,
                 estado='PENDIENTE',
                 fecha_registro=date.today(),
                 fecha_factura=factura.fecha_factura,

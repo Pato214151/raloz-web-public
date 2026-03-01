@@ -5,9 +5,10 @@ API de Clientes
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import Cliente
+from app.models import Cliente, Factura
 from app.utils.decorators import rol_requerido
 from app.utils.validators import sanitize_string, validate_email, validate_phone
+from datetime import datetime
 
 clientes_bp = Blueprint('clientes', __name__)
 
@@ -27,7 +28,8 @@ def listar_clientes():
         query = query.filter(
             (Cliente.nombre.ilike(like)) |
             (Cliente.telefono.ilike(like)) |
-            (Cliente.numero_documento.ilike(like))
+            (Cliente.numero_documento.ilike(like)) |
+            (Cliente.email.ilike(like))
         )
     if colegio_id:
         query = query.filter(Cliente.id_colegio == colegio_id)
@@ -61,10 +63,20 @@ def crear_cliente():
         tipo_documento=sanitize_string(data.get('tipo_documento', 'CC'), 10),
         numero_documento=sanitize_string(data.get('numero_documento', ''), 50),
         nombre=nombre,
+        apellidos=sanitize_string(data.get('apellidos', ''), 200),
+        razon_social=sanitize_string(data.get('razon_social', ''), 300),
         telefono=telefono,
+        celular=sanitize_string(data.get('celular', ''), 50),
         email=email,
         direccion=sanitize_string(data.get('direccion', ''), 500),
-        id_colegio=data.get('id_colegio'),
+        ciudad=sanitize_string(data.get('ciudad', ''), 100),
+        departamento=sanitize_string(data.get('departamento', ''), 100),
+        codigo_postal=sanitize_string(data.get('codigo_postal', ''), 20),
+        pais=sanitize_string(data.get('pais', 'Colombia'), 50),
+        dv=sanitize_string(data.get('dv', ''), 5),
+        id_colegio=data.get('id_colegio') or None,
+        estudiante_nombre=sanitize_string(data.get('estudiante_nombre', ''), 200),
+        estudiante_grado=sanitize_string(data.get('estudiante_grado', ''), 50),
         notas=sanitize_string(data.get('notas', ''), 1000),
     )
     db.session.add(cliente)
@@ -78,18 +90,68 @@ def actualizar_cliente(id_cliente):
     cliente = Cliente.query.get_or_404(id_cliente)
     data = request.get_json()
 
-    if 'nombre' in data:
-        cliente.nombre = sanitize_string(data['nombre'], 200)
-    if 'telefono' in data:
-        cliente.telefono = sanitize_string(data['telefono'], 50)
-    if 'email' in data:
-        cliente.email = sanitize_string(data['email'], 255)
-    if 'direccion' in data:
-        cliente.direccion = sanitize_string(data['direccion'], 500)
+    campos_texto = {
+        'nombre': 200, 'apellidos': 200, 'razon_social': 300,
+        'telefono': 50, 'celular': 50, 'email': 255,
+        'direccion': 500, 'ciudad': 100, 'departamento': 100,
+        'codigo_postal': 20, 'pais': 50, 'dv': 5,
+        'estudiante_nombre': 200, 'estudiante_grado': 50,
+        'notas': 1000, 'tipo_documento': 10,
+    }
+
+    for campo, max_len in campos_texto.items():
+        if campo in data:
+            setattr(cliente, campo, sanitize_string(data[campo], max_len))
+
     if 'id_colegio' in data:
-        cliente.id_colegio = data['id_colegio']
-    if 'notas' in data:
-        cliente.notas = sanitize_string(data['notas'], 1000)
+        cliente.id_colegio = data['id_colegio'] or None
+
+    cliente.fecha_actualizacion = datetime.utcnow()
 
     db.session.commit()
     return jsonify({'message': 'Cliente actualizado', 'cliente': cliente.to_dict()}), 200
+
+
+@clientes_bp.route('/<int:id_cliente>', methods=['DELETE'])
+@jwt_required()
+def eliminar_cliente(id_cliente):
+    """Desactivar cliente (soft delete)"""
+    cliente = Cliente.query.get_or_404(id_cliente)
+    cliente.activo = False
+    cliente.fecha_actualizacion = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'message': 'Cliente eliminado'}), 200
+
+
+@clientes_bp.route('/<int:id_cliente>/historial', methods=['GET'])
+@jwt_required()
+def historial_cliente(id_cliente):
+    """Historial de compras de un cliente"""
+    cliente = Cliente.query.get_or_404(id_cliente)
+
+    facturas = Factura.query.filter(
+        Factura.cliente_nombre == cliente.nombre
+    ).order_by(Factura.fecha.desc()).limit(50).all()
+
+    total_compras = sum(f.total for f in facturas)
+    total_pagado = sum(f.total_abonado or 0 for f in facturas)
+
+    return jsonify({
+        'cliente': cliente.to_dict(),
+        'facturas': [{
+            'id_factura': f.id_factura,
+            'numero_factura': f.numero_factura,
+            'fecha': f.fecha.isoformat() if f.fecha else None,
+            'total': f.total,
+            'total_abonado': f.total_abonado or 0,
+            'saldo_pendiente': f.saldo_pendiente or 0,
+            'estado': f.estado,
+            'colegio_nombre': f.colegio.nombre if f.colegio else None,
+        } for f in facturas],
+        'resumen': {
+            'total_facturas': len(facturas),
+            'total_compras': total_compras,
+            'total_pagado': total_pagado,
+            'saldo_pendiente': total_compras - total_pagado,
+        }
+    }), 200

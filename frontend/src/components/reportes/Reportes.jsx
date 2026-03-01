@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { Printer, Download } from 'lucide-react'
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16']
+const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
 export default function Reportes() {
   const [tab, setTab] = useState('ventas')
@@ -31,7 +33,73 @@ export default function Reportes() {
     }
   }
 
-  const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
+  const imprimirReporteVentas = () => {
+    if (!reporte) return
+    const w = window.open('', '_blank')
+    const dailyRows = (reporte.ventas_diarias || []).map(d =>
+      `<tr><td>${d.fecha}</td><td style="text-align:right;font-weight:bold">${fmt(d.total)}</td><td style="text-align:center">${d.cantidad || ''}</td></tr>`
+    ).join('')
+
+    w.document.write(`<!DOCTYPE html><html><head><title>Reporte de Ventas</title>
+      <style>body{font-family:Arial;margin:20px}h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+      th{background:#f5f5f5;padding:6px;border:1px solid #ddd;text-align:left}
+      td{padding:5px 8px;border:1px solid #eee}
+      .kpi{display:inline-block;padding:12px 20px;margin:5px;border-radius:8px;text-align:center;min-width:120px}
+      @media print{body{margin:10px}}</style></head><body>
+      <h2>RALOZ COL SAS - Reporte de Ventas</h2>
+      <p>Período: ${fechaDesde} a ${fechaHasta}</p>
+      <div>
+        <div class="kpi" style="background:#D4EDDA;color:#155724"><small>Facturas</small><br><b style="font-size:20px">${reporte.resumen?.total_facturas || 0}</b></div>
+        <div class="kpi" style="background:#D4EDDA;color:#155724"><small>Ventas</small><br><b style="font-size:20px">${fmt(reporte.resumen?.total_ventas)}</b></div>
+        <div class="kpi" style="background:#D1ECF1;color:#0C5460"><small>Cobrado</small><br><b style="font-size:20px">${fmt(reporte.resumen?.total_cobrado)}</b></div>
+        <div class="kpi" style="background:#F8D7DA;color:#721C24"><small>Gastos</small><br><b style="font-size:20px">${fmt(reporte.resumen?.total_gastos)}</b></div>
+        <div class="kpi" style="background:#E8D5F5;color:#4A1A6B"><small>Utilidad</small><br><b style="font-size:20px">${fmt(reporte.resumen?.utilidad_neta)}</b></div>
+      </div>
+      <h3>Ventas Diarias</h3>
+      <table><thead><tr><th>Fecha</th><th style="text-align:right">Total</th><th style="text-align:center">Facturas</th></tr></thead>
+      <tbody>${dailyRows}</tbody></table>
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p></body></html>`)
+    w.document.close()
+    w.print()
+  }
+
+  const imprimirReporteProductos = () => {
+    if (!topProductos.length) return
+    const w = window.open('', '_blank')
+    const rows = topProductos.map((p, i) =>
+      `<tr><td>${i + 1}</td><td>${p.nombre}</td><td style="text-align:right">${p.total_vendido}</td><td style="text-align:right;font-weight:bold;color:green">${fmt(p.total_ingresos)}</td></tr>`
+    ).join('')
+
+    w.document.write(`<!DOCTYPE html><html><head><title>Top Productos</title>
+      <style>body{font-family:Arial;margin:20px}h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+      th{background:#f5f5f5;padding:6px;border:1px solid #ddd;text-align:left}
+      td{padding:5px 8px;border:1px solid #eee}
+      @media print{body{margin:10px}}</style></head><body>
+      <h2>RALOZ COL SAS - Top Productos Más Vendidos</h2>
+      <table><thead><tr><th>#</th><th>Producto</th><th style="text-align:right">Unidades</th><th style="text-align:right">Ingresos</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p></body></html>`)
+    w.document.close()
+    w.print()
+  }
+
+  const exportarCSV = () => {
+    if (!reporte?.ventas_diarias?.length) return
+    let csv = 'Fecha,Total,Facturas\n'
+    reporte.ventas_diarias.forEach(d => {
+      csv += `${d.fecha},${d.total},${d.cantidad || ''}\n`
+    })
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `reporte_ventas_${fechaDesde}_${fechaHasta}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('CSV descargado')
+  }
 
   return (
     <div className="space-y-6">
@@ -43,15 +111,10 @@ export default function Reportes() {
           { id: 'ventas', label: 'Ventas' },
           { id: 'productos', label: 'Top Productos' },
         ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               tab === t.id ? 'bg-white shadow text-raloz-700' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
+            }`}>{t.label}</button>
         ))}
       </div>
 
@@ -68,16 +131,22 @@ export default function Reportes() {
               <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="input-field" />
             </div>
             <button onClick={loadData} disabled={loading} className="btn-primary">Consultar</button>
+            <button onClick={imprimirReporteVentas} className="btn-secondary flex items-center gap-1">
+              <Printer size={16} /> Imprimir
+            </button>
+            <button onClick={exportarCSV} className="btn-secondary flex items-center gap-1">
+              <Download size={16} /> CSV
+            </button>
           </div>
 
           {reporte && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div className="card"><p className="text-sm text-gray-500">Facturas</p><p className="text-2xl font-bold">{reporte.resumen.total_facturas}</p></div>
-                <div className="card"><p className="text-sm text-gray-500">Ventas</p><p className="text-2xl font-bold text-green-600">{fmt(reporte.resumen.total_ventas)}</p></div>
-                <div className="card"><p className="text-sm text-gray-500">Cobrado</p><p className="text-2xl font-bold text-blue-600">{fmt(reporte.resumen.total_cobrado)}</p></div>
-                <div className="card"><p className="text-sm text-gray-500">Gastos</p><p className="text-2xl font-bold text-red-600">{fmt(reporte.resumen.total_gastos)}</p></div>
-                <div className="card"><p className="text-sm text-gray-500">Utilidad</p><p className="text-2xl font-bold text-purple-600">{fmt(reporte.resumen.utilidad_neta)}</p></div>
+                <div className="card"><p className="text-sm text-gray-500">Facturas</p><p className="text-2xl font-bold">{reporte.resumen?.total_facturas || 0}</p></div>
+                <div className="card"><p className="text-sm text-gray-500">Ventas</p><p className="text-2xl font-bold text-green-600">{fmt(reporte.resumen?.total_ventas)}</p></div>
+                <div className="card"><p className="text-sm text-gray-500">Cobrado</p><p className="text-2xl font-bold text-blue-600">{fmt(reporte.resumen?.total_cobrado)}</p></div>
+                <div className="card"><p className="text-sm text-gray-500">Gastos</p><p className="text-2xl font-bold text-red-600">{fmt(reporte.resumen?.total_gastos)}</p></div>
+                <div className="card"><p className="text-sm text-gray-500">Utilidad</p><p className="text-2xl font-bold text-purple-600">{fmt(reporte.resumen?.utilidad_neta)}</p></div>
               </div>
 
               <div className="card">
@@ -87,13 +156,40 @@ export default function Reportes() {
                     <BarChart data={reporte.ventas_diarias}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
-                      <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                      <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
                       <Tooltip formatter={(v) => [fmt(v), 'Ventas']} />
                       <Bar dataKey="total" fill="#22c55e" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
+
+              {/* Tabla detallada */}
+              {reporte.ventas_diarias && reporte.ventas_diarias.length > 0 && (
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-4">Detalle Diario</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-gray-50">
+                          <th className="px-4 py-2 text-left font-medium text-gray-600">Fecha</th>
+                          <th className="px-4 py-2 text-right font-medium text-gray-600">Total Ventas</th>
+                          <th className="px-4 py-2 text-center font-medium text-gray-600">Facturas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reporte.ventas_diarias.map((d, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                            <td className="px-4 py-2 font-medium">{d.fecha}</td>
+                            <td className="px-4 py-2 text-right font-bold text-green-600">{fmt(d.total)}</td>
+                            <td className="px-4 py-2 text-center">{d.cantidad || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -102,9 +198,15 @@ export default function Reportes() {
       {/* Top Productos */}
       {tab === 'productos' && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={imprimirReporteProductos} className="btn-secondary flex items-center gap-1">
+              <Printer size={16} /> Imprimir
+            </button>
+          </div>
+
           <div className="grid md:grid-cols-2 gap-6">
             <div className="card">
-              <h3 className="text-lg font-semibold mb-4">Top 10 Productos Mas Vendidos</h3>
+              <h3 className="text-lg font-semibold mb-4">Top 10 Productos Más Vendidos</h3>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={topProductos} layout="vertical">
@@ -123,19 +225,9 @@ export default function Reportes() {
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      data={topProductos}
-                      dataKey="total_ingresos"
-                      nameKey="nombre"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label={({ nombre, percent }) => `${nombre?.slice(0, 12)} ${(percent * 100).toFixed(0)}%`}
-                      labelLine={false}
-                    >
-                      {topProductos.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
+                    <Pie data={topProductos} dataKey="total_ingresos" nameKey="nombre" cx="50%" cy="50%" outerRadius={100}
+                      label={({ nombre, percent }) => `${nombre?.slice(0, 12)} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      {topProductos.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
                     <Tooltip formatter={(v) => fmt(v)} />
                   </PieChart>
