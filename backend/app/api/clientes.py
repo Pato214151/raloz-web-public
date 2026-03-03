@@ -148,6 +148,13 @@ def historial_cliente(id_cliente):
             'saldo_pendiente': f.saldo_pendiente or 0,
             'estado': f.estado,
             'colegio_nombre': f.colegio.nombre if f.colegio else None,
+            'detalles': [{
+                'producto_nombre': d.producto.nombre if d.producto else '—',
+                'talla': d.talla_individual,
+                'cantidad': d.cantidad,
+                'precio_unitario': d.precio_unitario,
+                'total_linea': d.total_linea,
+            } for d in f.detalles],
         } for f in facturas],
         'resumen': {
             'total_facturas': len(facturas),

@@ -172,53 +172,60 @@ export default function Clientes() {
   const exportarFacturaElectronica = () => {
     if (!selectedCliente) return
     const c = selectedCliente
-    // Fila de datos del cliente
-    const clienteRow = [
-      c.tipo_documento || 'CC',
-      c.numero_documento || '',
-      c.dv || '',
-      c.nombre || '',
-      c.apellidos || '',
-      c.razon_social || '',
-      c.email || '',
-      c.telefono || c.celular || '',
-      c.direccion || '',
-      c.ciudad || '',
-      c.departamento || '',
-      c.pais || 'Colombia',
-    ]
-    // Filas de facturas
-    const facturaRows = historialCompras.map(f => [
-      f.numero_factura,
-      f.fecha || '',
-      f.colegio_nombre || '',
-      f.total,
-      f.total_abonado || 0,
-      f.saldo_pendiente || 0,
-      f.estado,
-    ])
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
-    const clienteHeader = ['tipo_documento','numero_documento','dv','nombre','apellidos','razon_social','email','telefono','direccion','ciudad','departamento','pais']
-    const facturaHeader = ['numero_factura','fecha','colegio','total','total_pagado','saldo','estado']
+    const lines = []
 
-    const csvParts = [
-      '=== DATOS CLIENTE ===',
-      clienteHeader.join(','),
-      clienteRow.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','),
-      '',
-      '=== FACTURAS ===',
-      facturaHeader.join(','),
-      ...facturaRows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')),
-    ]
+    // === DATOS DEL CLIENTE ===
+    lines.push('=== DATOS DEL CLIENTE ===')
+    lines.push(['tipo_documento','numero_documento','dv','nombre','apellidos','razon_social','email','telefono','direccion','ciudad','departamento','pais'].join(','))
+    lines.push([
+      c.tipo_documento || 'CC', c.numero_documento || '', c.dv || '',
+      c.nombre || '', c.apellidos || '', c.razon_social || '',
+      c.email || '', c.telefono || c.celular || '',
+      c.direccion || '', c.ciudad || '', c.departamento || '', c.pais || 'Colombia',
+    ].map(esc).join(','))
+    lines.push('')
 
-    const blob = new Blob([csvParts.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    // === FACTURAS Y PRODUCTOS COMPRADOS ===
+    lines.push('=== FACTURAS Y PRODUCTOS COMPRADOS ===')
+    lines.push(['numero_factura','fecha','colegio','estado','total','total_pagado','saldo','producto','talla','cantidad','precio_unitario','subtotal'].join(','))
+
+    historialCompras.forEach(f => {
+      if (f.detalles && f.detalles.length > 0) {
+        f.detalles.forEach((d, i) => {
+          lines.push([
+            i === 0 ? f.numero_factura : '',
+            i === 0 ? (f.fecha || '') : '',
+            i === 0 ? (f.colegio_nombre || '') : '',
+            i === 0 ? f.estado : '',
+            i === 0 ? f.total : '',
+            i === 0 ? (f.total_abonado || 0) : '',
+            i === 0 ? (f.saldo_pendiente || 0) : '',
+            d.producto_nombre || '—',
+            d.talla || '',
+            d.cantidad,
+            d.precio_unitario,
+            d.total_linea,
+          ].map(esc).join(','))
+        })
+      } else {
+        lines.push([
+          f.numero_factura, f.fecha || '', f.colegio_nombre || '',
+          f.estado, f.total, f.total_abonado || 0, f.saldo_pendiente || 0,
+          '', '', '', '', '',
+        ].map(esc).join(','))
+      }
+    })
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `factura_electronica_${c.numero_documento || c.nombre}_${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `fe_${c.numero_documento || c.nombre}_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success('Datos exportados para factura electrónica')
+    toast.success('Datos exportados — incluye productos por factura')
   }
 
   if (loading && clientes.length === 0) {

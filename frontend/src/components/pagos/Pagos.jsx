@@ -238,9 +238,9 @@ export default function Pagos() {
                         {editingPago?.id_pago === p.id_pago ? (
                           <div className="flex items-center gap-2 flex-1 flex-wrap">
                             <input type="number" value={editingPago.valor} onChange={e => setEditingPago({ ...editingPago, valor: e.target.value })}
-                              className="input w-24 text-sm" />
+                              className="input-field w-24 text-sm" />
                             <select value={editingPago.metodo_pago} onChange={e => setEditingPago({ ...editingPago, metodo_pago: e.target.value })}
-                              className="input text-sm">
+                              className="input-field text-sm">
                               {METODOS.map(m => <option key={m}>{m}</option>)}
                             </select>
                             <button onClick={guardarEdicionPago} className="text-green-600 hover:text-green-800 text-xs font-medium">Guardar</button>
