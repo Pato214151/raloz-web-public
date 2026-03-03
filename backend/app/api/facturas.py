@@ -51,7 +51,7 @@ def listar_facturas():
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
     # Calcular saldo total de los resultados filtrados
-    saldo_total_query = query.with_entities(db.func.sum(Factura.saldo_pendiente)).scalar() or 0
+    saldo_total_query = query.order_by(None).with_entities(db.func.sum(Factura.saldo_pendiente)).scalar() or 0
 
     return jsonify({
         'facturas': [f.to_dict() for f in paginated.items],
