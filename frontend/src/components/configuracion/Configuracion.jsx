@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save } from 'lucide-react'
+import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save, Users, KeyRound } from 'lucide-react'
 
 const TABS = [
   { id: 'colegios', label: 'Colegios', icon: School, color: 'blue' },
   { id: 'productos', label: 'Productos', icon: Package, color: 'green' },
   { id: 'metodos', label: 'Métodos de Pago', icon: CreditCard, color: 'red' },
+  { id: 'usuarios', label: 'Usuarios', icon: Users, color: 'purple' },
 ]
+
+const ROL_BADGE = {
+  administrador: 'bg-purple-100 text-purple-700',
+  vendedor: 'bg-blue-100 text-blue-700',
+  cajero: 'bg-yellow-100 text-yellow-700',
+}
 
 const TIPOS_PRODUCTO = ['uniforme_niño', 'uniforme_niña', 'edu_fisica', 'accesorio']
 
@@ -31,10 +38,18 @@ export default function Configuracion() {
   const [metForm, setMetForm] = useState({ nombre: '' })
   const [showMetForm, setShowMetForm] = useState(false)
 
+  // ── Usuarios ──
+  const [usuarios, setUsuarios] = useState([])
+  const [userForm, setUserForm] = useState({ usuario: '', password: '', rol: 'vendedor', email: '' })
+  const [showUserForm, setShowUserForm] = useState(false)
+  const [pwdModal, setPwdModal] = useState(null)
+  const [nuevaPwd, setNuevaPwd] = useState('')
+
   useEffect(() => {
     loadColegios()
     loadProductos()
     loadMetodos()
+    loadUsuarios()
   }, [])
 
   // ════════════════════ COLEGIOS ════════════════════
@@ -149,6 +164,51 @@ export default function Configuracion() {
       toast.success(met.activo ? 'Método desactivado' : 'Método activado')
       loadMetodos()
     } catch { toast.error('Error') }
+  }
+
+  // ════════════════════ USUARIOS ════════════════════
+  const loadUsuarios = async () => {
+    try {
+      const res = await api.get('/usuarios')
+      setUsuarios(res.data.usuarios || [])
+    } catch { toast.error('Error cargando usuarios') }
+  }
+
+  const crearUsuario = async (e) => {
+    e.preventDefault()
+    if (!userForm.usuario.trim() || !userForm.password.trim()) return toast.error('Usuario y contraseña requeridos')
+    try {
+      await api.post('/usuarios', userForm)
+      toast.success('Usuario creado')
+      setShowUserForm(false)
+      setUserForm({ usuario: '', password: '', rol: 'vendedor', email: '' })
+      loadUsuarios()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error creando usuario')
+    }
+  }
+
+  const toggleUsuario = async (u) => {
+    try {
+      await api.post(`/usuarios/${u.id_usuario}/toggle`)
+      toast.success(u.activo ? 'Usuario desactivado' : 'Usuario activado')
+      loadUsuarios()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error')
+    }
+  }
+
+  const cambiarPassword = async (e) => {
+    e.preventDefault()
+    if (!nuevaPwd || nuevaPwd.length < 6) return toast.error('Mínimo 6 caracteres')
+    try {
+      await api.post(`/usuarios/${pwdModal.id_usuario}/password`, { password: nuevaPwd })
+      toast.success('Contraseña actualizada')
+      setPwdModal(null)
+      setNuevaPwd('')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error')
+    }
   }
 
   // ════════════════════ RENDER ════════════════════
@@ -352,6 +412,130 @@ export default function Configuracion() {
                 ))}
                 {productos.length === 0 && (
                   <tr><td colSpan={6} className="text-center py-8 text-gray-400">No hay productos registrados</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ TAB USUARIOS ══════════ */}
+      {tab === 'usuarios' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between p-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+              <Users size={18} className="text-purple-500" /> Gestionar Usuarios
+              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full ml-2">{usuarios.length}</span>
+            </h2>
+            <button onClick={() => { setUserForm({ usuario: '', password: '', rol: 'vendedor', email: '' }); setShowUserForm(true) }}
+              className="flex items-center gap-1 bg-purple-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-purple-600">
+              <Plus size={14} /> Nuevo usuario
+            </button>
+          </div>
+
+          {/* Form nuevo usuario */}
+          {showUserForm && (
+            <div className="p-4 bg-purple-50 border-b border-purple-100">
+              <form onSubmit={crearUsuario} className="flex items-end gap-3 flex-wrap">
+                <div className="w-44">
+                  <label className="text-xs text-gray-500 mb-1 block">Usuario *</label>
+                  <input value={userForm.usuario} onChange={e => setUserForm({...userForm, usuario: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="nombre_usuario" autoFocus />
+                </div>
+                <div className="w-44">
+                  <label className="text-xs text-gray-500 mb-1 block">Contraseña *</label>
+                  <input type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Mín. 6 caracteres" />
+                </div>
+                <div className="w-36">
+                  <label className="text-xs text-gray-500 mb-1 block">Rol</label>
+                  <select value={userForm.rol} onChange={e => setUserForm({...userForm, rol: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="vendedor">Vendedor</option>
+                    <option value="cajero">Cajero</option>
+                    <option value="administrador">Administrador</option>
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[180px]">
+                  <label className="text-xs text-gray-500 mb-1 block">Email (opcional)</label>
+                  <input type="email" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="correo@ejemplo.com" />
+                </div>
+                <button type="submit" className="flex items-center gap-1 bg-purple-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-600">
+                  <Save size={14} /> Crear
+                </button>
+                <button type="button" onClick={() => setShowUserForm(false)} className="text-gray-400 hover:text-gray-600 p-2">
+                  <X size={18} />
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Modal cambiar contraseña */}
+          {pwdModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl shadow-xl p-6 w-80">
+                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <KeyRound size={16} className="text-purple-500" /> Cambiar contraseña
+                  <span className="text-purple-600 font-bold">— {pwdModal.usuario}</span>
+                </h3>
+                <form onSubmit={cambiarPassword} className="space-y-3">
+                  <input type="password" value={nuevaPwd} onChange={e => setNuevaPwd(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nueva contraseña (mín. 6 caracteres)" autoFocus />
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={() => { setPwdModal(null); setNuevaPwd('') }}
+                      className="px-4 py-2 text-sm text-gray-500 border rounded-lg hover:bg-gray-50">Cancelar</button>
+                    <button type="submit" className="px-4 py-2 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600">Guardar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Tabla usuarios */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                <tr>
+                  <th className="text-left px-4 py-3">Usuario</th>
+                  <th className="text-left px-4 py-3">Email</th>
+                  <th className="text-center px-4 py-3">Rol</th>
+                  <th className="text-center px-4 py-3">Estado</th>
+                  <th className="text-center px-4 py-3">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {usuarios.map(u => (
+                  <tr key={u.id_usuario} className={`hover:bg-gray-50 ${!u.activo ? 'opacity-50' : ''}`}>
+                    <td className="px-4 py-3 font-medium text-gray-800">{u.usuario}</td>
+                    <td className="px-4 py-3 text-gray-500">{u.email || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ROL_BADGE[u.rol] || 'bg-gray-100 text-gray-600'}`}>
+                        {u.rol}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {u.activo ? 'ACTIVO' : 'INACTIVO'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => { setPwdModal(u); setNuevaPwd('') }}
+                          className="text-purple-500 hover:text-purple-700" title="Cambiar contraseña">
+                          <KeyRound size={15} />
+                        </button>
+                        <button onClick={() => toggleUsuario(u)}
+                          className={u.activo ? 'text-orange-500 hover:text-orange-700' : 'text-green-500 hover:text-green-700'}
+                          title={u.activo ? 'Desactivar' : 'Activar'}>
+                          {u.activo ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {usuarios.length === 0 && (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">No hay usuarios registrados</td></tr>
                 )}
               </tbody>
             </table>
