@@ -20,6 +20,7 @@ export default function StockView() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newStock, setNewStock] = useState({ producto_id: '', talla: '', cantidad: '' })
   const [buscarProducto, setBuscarProducto] = useState('')
+  const [productos, setProductos] = useState([])
 
   useEffect(() => {
     loadResumen()
@@ -33,10 +34,14 @@ export default function StockView() {
 
   const loadResumen = async () => {
     try {
-      const res = await api.get('/stock/resumen')
-      setResumen(res.data.resumen || [])
-      const colegiosRes = await api.get('/colegios')
+      const [stockRes, colegiosRes, prodRes] = await Promise.all([
+        api.get('/stock/resumen'),
+        api.get('/colegios'),
+        api.get('/productos'),
+      ])
+      setResumen(stockRes.data.resumen || [])
       setColegios(colegiosRes.data.colegios || [])
+      setProductos(prodRes.data.productos || [])
     } catch (err) {
       toast.error('Error cargando stock')
     } finally {
@@ -188,7 +193,7 @@ export default function StockView() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
                 <input type="text" value={buscarProducto} onChange={e => setBuscarProducto(e.target.value)}
-                  placeholder="Buscar producto..." className="input pl-8 text-sm w-44" />
+                  placeholder="Buscar producto..." className="input-field pl-8 text-sm w-44" />
               </div>
               <button onClick={imprimirStock} className="btn-secondary flex items-center gap-1 text-sm">
                 <Printer size={14} /> Imprimir
@@ -246,7 +251,7 @@ export default function StockView() {
                               type="number"
                               value={editCantidad}
                               onChange={(e) => setEditCantidad(e.target.value)}
-                              className="input w-20 text-right"
+                              className="input-field w-20 text-right"
                               autoFocus
                               onBlur={() => {
                                 if (editCantidad !== s.cantidad.toString()) {
@@ -317,14 +322,17 @@ export default function StockView() {
             <form onSubmit={addStock} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Producto *</label>
-                <input
-                  type="text"
+                <select
                   required
                   value={newStock.producto_id}
                   onChange={e => setNewStock({...newStock, producto_id: e.target.value})}
-                  className="input w-full"
-                  placeholder="ID o nombre del producto"
-                />
+                  className="input-field w-full"
+                >
+                  <option value="">Seleccionar producto</option>
+                  {productos.map(p => (
+                    <option key={p.id_producto} value={p.id_producto}>{p.nombre}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -334,8 +342,8 @@ export default function StockView() {
                   required
                   value={newStock.talla}
                   onChange={e => setNewStock({...newStock, talla: e.target.value})}
-                  className="input w-full"
-                  placeholder="Talla"
+                  className="input-field w-full"
+                  placeholder="Ej: 4, 6, S, M, L"
                 />
               </div>
 
@@ -347,7 +355,7 @@ export default function StockView() {
                   min="1"
                   value={newStock.cantidad}
                   onChange={e => setNewStock({...newStock, cantidad: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   placeholder="0"
                 />
               </div>

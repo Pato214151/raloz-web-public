@@ -169,7 +169,7 @@ export default function Caja() {
                 <div>
                   <label className="block text-sm font-medium mb-2">Monto Inicial en Efectivo</label>
                   <input type="number" min="0" step="0.01" value={montoInicial} onChange={e => setMontoInicial(e.target.value)}
-                    className="input w-full" placeholder="0.00" autoFocus />
+                    className="input-field w-full" placeholder="0.00" autoFocus />
                 </div>
                 <div className="flex gap-3">
                   <button type="button" onClick={() => { setShowForm(false); setMontoInicial('') }} className="btn-secondary flex-1">Cancelar</button>
@@ -320,12 +320,12 @@ export default function Caja() {
                 <div>
                   <label className="block text-sm font-medium mb-2">Monto Real Contado</label>
                   <input type="number" min="0" step="0.01" value={montoReal} onChange={e => setMontoReal(e.target.value)}
-                    className="input w-full" placeholder="Ingresa el dinero contado..." />
+                    className="input-field w-full" placeholder="Ingresa el dinero contado..." />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Observaciones</label>
                   <input type="text" value={observaciones} onChange={e => setObservaciones(e.target.value)}
-                    className="input w-full" placeholder="Notas opcionales..." />
+                    className="input-field w-full" placeholder="Notas opcionales..." />
                 </div>
               </div>
 
@@ -368,17 +368,17 @@ export default function Caja() {
               <div>
                 <label className="block text-sm font-medium mb-1">Concepto *</label>
                 <input type="text" required value={movForm.concepto} onChange={e => setMovForm({ ...movForm, concepto: e.target.value })}
-                  className="input w-full" placeholder="Descripción del movimiento" autoFocus />
+                  className="input-field w-full" placeholder="Descripción del movimiento" autoFocus />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Monto *</label>
                 <input type="number" required min="1" step="0.01" value={movForm.monto}
                   onChange={e => setMovForm({ ...movForm, monto: e.target.value })}
-                  className="input w-full" placeholder="0.00" />
+                  className="input-field w-full" placeholder="0.00" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Método de Pago</label>
-                <select value={movForm.metodo_pago} onChange={e => setMovForm({ ...movForm, metodo_pago: e.target.value })} className="input w-full">
+                <select value={movForm.metodo_pago} onChange={e => setMovForm({ ...movForm, metodo_pago: e.target.value })} className="input-field w-full">
                   {METODOS.map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>

@@ -126,7 +126,7 @@ export default function Precios() {
                 setProductoId('')
                 setPrecios([])
               }}
-              className="input w-full"
+              className="input-field w-full"
             >
               <option value="">Seleccionar colegio</option>
               {colegios.map(c => (
@@ -144,7 +144,7 @@ export default function Precios() {
                 setPrecios([])
               }}
               disabled={!colegioId}
-              className="input w-full disabled:bg-gray-100"
+              className="input-field w-full disabled:bg-gray-100"
             >
               <option value="">Seleccionar producto</option>
               {productos.map(p => (
@@ -203,7 +203,7 @@ export default function Precios() {
                             type="number"
                             value={editPrecio}
                             onChange={(e) => setEditPrecio(e.target.value)}
-                            className="input w-32 text-right"
+                            className="input-field w-32 text-right"
                             autoFocus
                             onBlur={() => {
                               if (editPrecio !== p.precio_unitario.toString()) {
@@ -263,7 +263,7 @@ export default function Precios() {
                 <select
                   value={newPrecio.colegio_id}
                   onChange={e => setNewPrecio({...newPrecio, colegio_id: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   required
                 >
                   <option value="">Seleccionar colegio</option>
@@ -278,7 +278,7 @@ export default function Precios() {
                 <select
                   value={newPrecio.producto_id}
                   onChange={e => setNewPrecio({...newPrecio, producto_id: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   required
                 >
                   <option value="">Seleccionar producto</option>
@@ -295,7 +295,7 @@ export default function Precios() {
                   required
                   value={newPrecio.talla_grupo}
                   onChange={e => setNewPrecio({...newPrecio, talla_grupo: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   placeholder="Ej: 4-6, M, Grande"
                 />
               </div>
@@ -309,7 +309,7 @@ export default function Precios() {
                   step="0.01"
                   value={newPrecio.precio_unitario}
                   onChange={e => setNewPrecio({...newPrecio, precio_unitario: e.target.value})}
-                  className="input w-full"
+                  className="input-field w-full"
                   placeholder="0.00"
                 />
               </div>

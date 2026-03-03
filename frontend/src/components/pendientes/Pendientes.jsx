@@ -304,7 +304,7 @@ export default function Pendientes() {
                 value={buscar}
                 onChange={(e) => setBuscar(e.target.value)}
                 placeholder="Buscar por cliente, producto, factura..."
-                className="input pl-10 w-full"
+                className="input-field pl-10 w-full"
               />
             </div>
             <button type="submit" className="btn-primary">Buscar</button>
@@ -313,7 +313,7 @@ export default function Pendientes() {
           <div className="flex flex-wrap gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Escuela</label>
-              <select value={escuela} onChange={(e) => setEscuela(e.target.value)} className="input text-sm">
+              <select value={escuela} onChange={(e) => setEscuela(e.target.value)} className="input-field text-sm">
                 <option value="">Todas</option>
                 {escuelas.map(e => (
                   <option key={e.id_colegio} value={e.id_colegio}>{e.nombre}</option>
@@ -322,7 +322,7 @@ export default function Pendientes() {
             </div>
             <div>
               <label className="block text-xs text-gray-600 mb-1">Género</label>
-              <select value={genero} onChange={(e) => setGenero(e.target.value)} className="input text-sm">
+              <select value={genero} onChange={(e) => setGenero(e.target.value)} className="input-field text-sm">
                 <option value="">Todos</option>
                 <option value="NIÑO">Niño</option>
                 <option value="NIÑA">Niña</option>
@@ -437,32 +437,32 @@ export default function Pendientes() {
                 <label className="block text-sm font-medium mb-1">ID Factura *</label>
                 <input type="number" required value={nuevaPrenda.id_factura}
                   onChange={e => setNuevaPrenda({...nuevaPrenda, id_factura: e.target.value})}
-                  className="input w-full" placeholder="Número de ID de factura" />
+                  className="input-field w-full" placeholder="Número de ID de factura" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Producto *</label>
                 <input type="text" required value={nuevaPrenda.producto_nombre}
                   onChange={e => setNuevaPrenda({...nuevaPrenda, producto_nombre: e.target.value})}
-                  className="input w-full" placeholder="Nombre del producto" />
+                  className="input-field w-full" placeholder="Nombre del producto" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">Talla</label>
                   <input type="text" value={nuevaPrenda.talla}
                     onChange={e => setNuevaPrenda({...nuevaPrenda, talla: e.target.value})}
-                    className="input w-full" />
+                    className="input-field w-full" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Cantidad *</label>
                   <input type="number" min="1" required value={nuevaPrenda.cantidad}
                     onChange={e => setNuevaPrenda({...nuevaPrenda, cantidad: parseInt(e.target.value) || 1})}
-                    className="input w-full" />
+                    className="input-field w-full" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Género</label>
                   <select value={nuevaPrenda.genero}
                     onChange={e => setNuevaPrenda({...nuevaPrenda, genero: e.target.value})}
-                    className="input w-full">
+                    className="input-field w-full">
                     <option value="NIÑO">NIÑO</option>
                     <option value="NIÑA">NIÑA</option>
                   </select>
@@ -472,7 +472,7 @@ export default function Pendientes() {
                 <label className="block text-sm font-medium mb-1">Observaciones</label>
                 <textarea value={nuevaPrenda.observaciones}
                   onChange={e => setNuevaPrenda({...nuevaPrenda, observaciones: e.target.value})}
-                  className="input w-full" rows={2} />
+                  className="input-field w-full" rows={2} />
               </div>
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancelar</button>
