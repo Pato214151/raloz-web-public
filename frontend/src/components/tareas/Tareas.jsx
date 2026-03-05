@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { apiFetch } from '../../utils/api'
+import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   CheckSquare, Square, Plus, Trash2, ClipboardList,
@@ -44,7 +44,7 @@ export default function Tareas() {
     setLoading(true)
     try {
       const params = filtroPendientes ? '?pendientes=true' : ''
-      const data = await apiFetch(`/tareas${params}`)
+      const { data } = await api.get(`/tareas${params}`)
       setTareas(data)
     } catch {
       toast.error('Error cargando tareas')
@@ -55,7 +55,7 @@ export default function Tareas() {
 
   async function cargarUsuarios() {
     try {
-      const data = await apiFetch('/tareas/usuarios')
+      const { data } = await api.get('/tareas/usuarios')
       setUsuarios(data)
     } catch { /* silencioso */ }
   }
@@ -64,21 +64,18 @@ export default function Tareas() {
     if (!form.titulo.trim()) { toast.error('Escribe un título'); return }
     setGuardando(true)
     try {
-      await apiFetch('/tareas', {
-        method: 'POST',
-        body: JSON.stringify({
-          titulo: form.titulo.trim(),
-          descripcion: form.descripcion.trim() || null,
-          fecha_vencimiento: form.fecha_vencimiento || null,
-          asignada_a: form.asignada_a ? parseInt(form.asignada_a) : null,
-        })
+      await api.post('/tareas', {
+        titulo: form.titulo.trim(),
+        descripcion: form.descripcion.trim() || null,
+        fecha_vencimiento: form.fecha_vencimiento || null,
+        asignada_a: form.asignada_a ? parseInt(form.asignada_a) : null,
       })
       toast.success('Tarea creada')
       setForm({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '' })
       setMostrarForm(false)
       cargar()
     } catch (e) {
-      toast.error(e.message || 'Error al crear tarea')
+      toast.error(e.response?.data?.error || 'Error al crear tarea')
     } finally {
       setGuardando(false)
     }
@@ -86,8 +83,8 @@ export default function Tareas() {
 
   async function toggleCompletar(id) {
     try {
-      const updated = await apiFetch(`/tareas/${id}/completar`, { method: 'PATCH' })
-      setTareas(prev => prev.map(t => t.id_tarea === id ? updated : t))
+      const { data } = await api.patch(`/tareas/${id}/completar`)
+      setTareas(prev => prev.map(t => t.id_tarea === id ? data : t))
     } catch {
       toast.error('Error actualizando tarea')
     }
@@ -96,7 +93,7 @@ export default function Tareas() {
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta tarea?')) return
     try {
-      await apiFetch(`/tareas/${id}`, { method: 'DELETE' })
+      await api.delete(`/tareas/${id}`)
       setTareas(prev => prev.filter(t => t.id_tarea !== id))
       toast.success('Tarea eliminada')
     } catch {
