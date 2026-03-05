@@ -20,6 +20,7 @@ export default function Facturacion() {
     cliente_direccion: '',
     cliente_nit: '',
     fecha_factura: new Date().toISOString().split('T')[0],
+    numero_factura: '',
     metodo_pago: 'EFECTIVO',
     estado_entrega: 'POR_ENTREGAR',
     abono: '',
@@ -144,6 +145,7 @@ export default function Facturacion() {
         metodo_pago: form.metodo_pago,
         estado_entrega: form.estado_entrega,
         observaciones: form.observaciones,
+        numero_factura: form.numero_factura.trim() || undefined,
         abono: abono,
         detalles: detalles.map(d => ({
           id_producto: parseInt(d.id_producto),
@@ -165,7 +167,7 @@ export default function Facturacion() {
         ...f,
         cliente_nombre: '', cliente_telefono: '', cliente_email_user: '',
         cliente_direccion: '', cliente_nit: '', abono: '',
-        genero_estudiante: '', observaciones: '',
+        genero_estudiante: '', observaciones: '', numero_factura: '',
       }))
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error al crear factura')
@@ -239,14 +241,21 @@ export default function Facturacion() {
               <label className="block text-sm font-medium text-gray-700 mb-1"><FileText size={14} className="inline mr-1" />NIT / CC</label>
               <input value={form.cliente_nit} onChange={e => setForm({...form, cliente_nit: e.target.value})} className="input-field" placeholder="NIT o Cédula" />
             </div>
-            {/* Fecha con botones rápidos */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-              <div className="flex gap-1">
-                <input type="date" value={form.fecha_factura} onChange={e => setForm({...form, fecha_factura: e.target.value})} className="input-field flex-1" />
-                <button type="button" onClick={() => ajustarFecha(-1)} className="px-2 py-1 text-xs bg-gray-100 border rounded hover:bg-gray-200">-1</button>
-                <button type="button" onClick={fechaHoy} className="px-2 py-1 text-xs bg-blue-100 text-blue-700 border rounded hover:bg-blue-200">Hoy</button>
-                <button type="button" onClick={() => ajustarFecha(1)} className="px-2 py-1 text-xs bg-gray-100 border rounded hover:bg-gray-200">+1</button>
+            {/* Número de facturero + Fecha */}
+            <div className="flex gap-3">
+              <div className="w-36">
+                <label className="block text-sm font-medium text-gray-700 mb-1"># Facturero <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <input value={form.numero_factura} onChange={e => setForm({...form, numero_factura: e.target.value})}
+                  className="input-field w-full" placeholder="Ej: R-981" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                <div className="flex gap-1">
+                  <input type="date" value={form.fecha_factura} onChange={e => setForm({...form, fecha_factura: e.target.value})} className="input-field flex-1" />
+                  <button type="button" onClick={() => ajustarFecha(-1)} className="px-2 py-1 text-xs bg-gray-100 border rounded hover:bg-gray-200">-1</button>
+                  <button type="button" onClick={fechaHoy} className="px-2 py-1 text-xs bg-blue-100 text-blue-700 border rounded hover:bg-blue-200">Hoy</button>
+                  <button type="button" onClick={() => ajustarFecha(1)} className="px-2 py-1 text-xs bg-gray-100 border rounded hover:bg-gray-200">+1</button>
+                </div>
               </div>
             </div>
           </div>

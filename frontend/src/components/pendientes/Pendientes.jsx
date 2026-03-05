@@ -191,6 +191,28 @@ export default function Pendientes() {
 
     const colegiosHTML = Object.entries(porColegio).map(([colegio, items]) => {
       const totalPrendas = items.reduce((s, i) => s + i.cantidad, 0)
+
+      // Resumen de corte: agrupar por producto → talla → cantidad total
+      const resumenCorte = {}
+      items.forEach(p => {
+        const prod = p.producto_nombre || 'Sin producto'
+        const talla = p.talla || 'Única'
+        if (!resumenCorte[prod]) resumenCorte[prod] = {}
+        resumenCorte[prod][talla] = (resumenCorte[prod][talla] || 0) + p.cantidad
+      })
+
+      const resumenRows = Object.entries(resumenCorte).map(([prod, tallas]) => {
+        const tallasStr = Object.entries(tallas)
+          .map(([t, c]) => `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;background:#E3F2FD;border-radius:4px;font-weight:bold"><b>${c}</b> T${t}</span>`)
+          .join(' ')
+        const totalProd = Object.values(tallas).reduce((a, b) => a + b, 0)
+        return `<tr>
+          <td style="font-weight:bold;padding:6px 8px">${prod}</td>
+          <td style="padding:6px 8px">${tallasStr}</td>
+          <td style="text-align:center;font-weight:bold;padding:6px 8px;color:#1976D2">${totalProd}</td>
+        </tr>`
+      }).join('')
+
       const rows = items.map(p => `<tr>
         <td class="checkbox">☐</td>
         <td>${p.numero_factura || ''}</td>
@@ -202,10 +224,23 @@ export default function Pendientes() {
         <td style="font-size:11px">${p.observaciones || ''}</td>
       </tr>`).join('')
 
-      return `<div style="page-break-inside:avoid;margin-bottom:24px">
-        <h3 style="background:#1976D2;color:white;padding:8px 12px;border-radius:4px;margin:0">
-          ${colegio} <span style="float:right;font-size:14px">${totalPrendas} prenda(s)</span>
+      return `<div style="page-break-before:always;margin-bottom:32px">
+        <h3 style="background:#1976D2;color:white;padding:10px 14px;border-radius:4px 4px 0 0;margin:0;font-size:16px">
+          ${colegio} <span style="float:right;font-size:14px">${totalPrendas} prenda(s) pendientes</span>
         </h3>
+        <div style="border:1px solid #1976D2;border-top:none;border-radius:0 0 4px 4px;margin-bottom:16px">
+          <div style="background:#E3F2FD;padding:6px 14px;font-size:12px;font-weight:bold;color:#1565C0;letter-spacing:0.5px">
+            ✂ RESUMEN DE CORTE PARA SASTRE
+          </div>
+          <table style="margin:0">
+            <thead><tr style="background:#f5f5f5">
+              <th style="padding:5px 8px;text-align:left">Producto</th>
+              <th style="padding:5px 8px;text-align:left">Tallas a cortar</th>
+              <th style="padding:5px 8px;text-align:center;width:60px">Total</th>
+            </tr></thead>
+            <tbody>${resumenRows}</tbody>
+          </table>
+        </div>
         <table><thead><tr>
           <th class="checkbox">✓</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Talla</th><th>Cant.</th><th>Género</th><th>Obs.</th>
         </tr></thead><tbody>${rows}</tbody></table>

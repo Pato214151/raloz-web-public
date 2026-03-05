@@ -87,14 +87,19 @@ def crear_factura():
 
     try:
         # Generar número de factura
-        serie = SerieFacturacion.query.filter_by(activa=True).first()
-        if not serie:
-            ano_actual = datetime.now().year
-            serie = SerieFacturacion(ano=ano_actual, consecutivo_actual=0)
-            db.session.add(serie)
-
-        serie.consecutivo_actual += 1
-        numero = f"FAC-{serie.ano}-{serie.consecutivo_actual:06d}"
+        numero_custom = sanitize_string(data.get('numero_factura', ''), 50).strip()
+        if numero_custom:
+            if Factura.query.filter_by(numero_factura=numero_custom).first():
+                return jsonify({'error': f'Ya existe una factura con el número {numero_custom}'}), 409
+            numero = numero_custom
+        else:
+            serie = SerieFacturacion.query.filter_by(activa=True).first()
+            if not serie:
+                ano_actual = datetime.now().year
+                serie = SerieFacturacion(ano=ano_actual, consecutivo_actual=0)
+                db.session.add(serie)
+            serie.consecutivo_actual += 1
+            numero = f"FAC-{serie.ano}-{serie.consecutivo_actual:06d}"
 
         # Calcular total
         total = 0
