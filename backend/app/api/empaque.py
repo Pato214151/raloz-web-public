@@ -299,3 +299,20 @@ def listar_listos_llamar():
         'total': f.total,
         'saldo_pendiente': f.saldo_pendiente,
     } for f in facturas])
+
+
+@empaque_bp.route('/marcar-entregado/<int:id_factura>', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def marcar_entregado(id_factura):
+    """Marcar un paquete como entregado (cliente lo recogió)"""
+    factura = Factura.query.get_or_404(id_factura)
+    identity = get_current_identity()
+
+    factura.estado_entrega = 'ENTREGADA'
+    db.session.commit()
+
+    registrar_auditoria('facturas', id_factura, 'ENTREGADA',
+                        f'Paquete entregado al cliente. Registrado por {identity["usuario"]}')
+
+    return jsonify({'ok': True, 'numero_factura': factura.numero_factura})

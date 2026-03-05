@@ -3,7 +3,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
 
-const TALLAS = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL']
+const TALLAS = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', '6-8', '8-10', '10-12', '12-14', '14-16']
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 const DOMINIOS_EMAIL = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'outlook.es', 'live.com']
 
@@ -68,7 +68,12 @@ export default function Facturacion() {
   }
 
   const obtenerTallaGrupo = (talla) => {
-    const mapeo = { '4': '4', '6': '6-8', '8': '6-8', '10': '10-12', '12': '10-12', '14': '14-16', '16': '14-16', 'S': 'S-M', 'M': 'S-M', 'L': 'L', 'XL': 'XL' }
+    const mapeo = {
+      '4': '4', '6': '6-8', '8': '6-8', '10': '10-12', '12': '10-12',
+      '14': '14-16', '16': '14-16', 'S': 'S-M', 'M': 'S-M', 'L': 'L', 'XL': 'XL',
+      // Medias (ya son grupos, mapean directo)
+      '6-8': '6-8', '8-10': '8-10', '10-12': '10-12', '12-14': '12-14', '14-16': '14-16',
+    }
     return mapeo[talla] || talla
   }
 

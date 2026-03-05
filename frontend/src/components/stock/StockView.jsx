@@ -22,7 +22,8 @@ function sortTallas(a, b) {
 
 export default function StockView() {
   const [colegioSel, setColegioSel] = useState(null)
-  const [resumen, setResumen] = useState([])
+  const [colegios, setColegios] = useState([])   // TODOS los colegios
+  const [resumen, setResumen] = useState([])      // solo los que tienen stock
   const [stock, setStock] = useState([])
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -46,14 +47,17 @@ export default function StockView() {
 
   async function cargarInicial() {
     try {
-      const [resRes, prodRes] = await Promise.all([
+      const [resRes, prodRes, colRes] = await Promise.all([
         api.get('/stock/resumen'),
         api.get('/productos'),
+        api.get('/colegios'),
       ])
       const res = resRes.data.resumen || []
+      const cols = colRes.data.colegios || []
       setResumen(res)
       setProductos(prodRes.data.productos || [])
-      if (res.length > 0) setColegioSel(res[0])
+      setColegios(cols)
+      if (cols.length > 0) setColegioSel(cols[0])
     } catch {
       toast.error('Error cargando inventario')
     } finally {
@@ -171,28 +175,30 @@ export default function StockView() {
 
   return (
     <div className="flex gap-4 h-full" style={{ minHeight: '70vh' }}>
-      {/* ─── Panel izquierdo: colegios ─── */}
+      {/* ─── Panel izquierdo: TODOS los colegios ─── */}
       <div className="w-56 flex-shrink-0 space-y-1">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-2">Colegios</p>
-        {resumen.length === 0 ? (
-          <p className="text-xs text-gray-400 px-2">Sin datos</p>
+        {colegios.length === 0 ? (
+          <p className="text-xs text-gray-400 px-2">Sin colegios</p>
         ) : (
-          resumen.map(r => (
-            <button
-              key={r.id_colegio}
-              onClick={() => setColegioSel(r)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                colegioSel?.id_colegio === r.id_colegio
-                  ? 'bg-raloz-600 text-white'
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              <p className="font-medium leading-tight">{r.colegio}</p>
-              <p className={`text-xs mt-0.5 ${colegioSel?.id_colegio === r.id_colegio ? 'text-raloz-200' : 'text-gray-400'}`}>
-                {r.total_unidades} uds · {r.total_items} items
-              </p>
-            </button>
-          ))
+          colegios.map(c => {
+            const resumenCol = resumen.find(r => r.id_colegio === c.id_colegio)
+            const activo = colegioSel?.id_colegio === c.id_colegio
+            return (
+              <button
+                key={c.id_colegio}
+                onClick={() => setColegioSel(c)}
+                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  activo ? 'bg-raloz-600 text-white' : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                <p className="font-medium leading-tight">{c.nombre}</p>
+                <p className={`text-xs mt-0.5 ${activo ? 'text-raloz-200' : 'text-gray-400'}`}>
+                  {resumenCol ? `${resumenCol.total_unidades} uds` : 'Sin stock'}
+                </p>
+              </button>
+            )
+          })
         )}
       </div>
 

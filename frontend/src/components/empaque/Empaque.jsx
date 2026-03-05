@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, Search, Check, X, AlertTriangle, FileText, User, School, Calendar, DollarSign, Hash, Phone, Bell, Printer } from 'lucide-react'
+import { Package, Search, Check, X, AlertTriangle, FileText, User, School, Calendar, DollarSign, Hash, Phone, Bell, Printer, CheckCheck } from 'lucide-react'
 
 export default function Empaque() {
   const [numeroFactura, setNumeroFactura] = useState('')
@@ -217,6 +217,17 @@ export default function Empaque() {
     w.document.close()
   }
 
+  const marcarEntregado = async (id_factura, numero) => {
+    if (!confirm(`¿Marcar la factura ${numero} como entregada al cliente?`)) return
+    try {
+      await api.post(`/empaque/marcar-entregado/${id_factura}`)
+      toast.success(`Factura ${numero} marcada como entregada`)
+      setListosLlamar(prev => prev.filter(f => f.id_factura !== id_factura))
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error')
+    }
+  }
+
   const exportarPDFLista = (lista) => {
     const titulo = filtroColegioListos ? `Paquetes listos — ${filtroColegioListos}` : 'Paquetes listos para llamar'
     const filas = lista.map((f, i) => {
@@ -390,6 +401,12 @@ export default function Empaque() {
                       className="btn-secondary text-sm flex items-center gap-1.5"
                     >
                       <Printer size={14} /> Ticket
+                    </button>
+                    <button
+                      onClick={() => marcarEntregado(f.id_factura, f.numero_factura)}
+                      className="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                    >
+                      <CheckCheck size={14} /> Entregado
                     </button>
                   </div>
                 </div>

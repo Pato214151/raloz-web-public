@@ -73,9 +73,13 @@ def actualizar_stock():
     data = request.get_json()
     identity = get_current_identity()
 
-    id_colegio = data.get('id_colegio')
-    id_producto = data.get('id_producto')
-    talla = data.get('talla_individual')
+    try:
+        id_colegio = int(data.get('id_colegio'))
+        id_producto = int(data.get('id_producto'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'id_colegio e id_producto deben ser números'}), 400
+
+    talla = (data.get('talla_individual') or '').strip()
     cantidad = data.get('cantidad')
 
     if not all([id_colegio, id_producto, talla, cantidad is not None]):
