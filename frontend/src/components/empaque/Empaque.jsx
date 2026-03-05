@@ -14,6 +14,7 @@ export default function Empaque() {
   const [tab, setTab] = useState('registrar') // 'registrar' | 'listos'
   const [listosLlamar, setListosLlamar] = useState([])
   const [loadingListos, setLoadingListos] = useState(false)
+  const [filtroColegioListos, setFiltroColegioListos] = useState('')
 
   // Estado por cada detalle: { checked, cantidad, genero, observaciones }
   const [itemStates, setItemStates] = useState({})
@@ -180,27 +181,26 @@ export default function Empaque() {
   const marcarListoLlamar = async () => {
     if (!factura) return
     try {
-      const res = await api.post(`/empaque/listo-llamar/${factura.id_factura}`)
-      toast.success('¡Paquete listo para llamar al cliente!')
-      imprimirTicket(res.data.factura)
+      await api.post(`/empaque/listo-llamar/${factura.id_factura}`)
+      toast.success('¡Paquete agregado a la lista de listos para llamar!')
       limpiar()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error')
     }
   }
 
-  const imprimirTicket = (f) => {
-    const w = window.open('', '_blank', 'width=400,height=300')
+  const imprimirTicketIndividual = (f) => {
     const saldo = f.saldo_pendiente > 0
       ? `<p style="color:#dc2626;font-size:13px">Saldo pendiente: <b>$${Number(f.saldo_pendiente).toLocaleString('es-CO')}</b></p>`
       : '<p style="color:#16a34a;font-size:13px">✅ Factura pagada</p>'
-    w.document.write(`<!DOCTYPE html><html><head><title>Ticket</title>
+    const w = window.open('', '_blank', 'width=420,height=320')
+    w.document.write(`<!DOCTYPE html><html><head><title>Ticket - ${f.numero_factura}</title>
       <style>body{font-family:Arial,sans-serif;text-align:center;padding:20px;font-size:14px}
       .titulo{font-size:18px;font-weight:bold;color:#1e40af}
       .num{font-size:28px;font-weight:bold;color:#1e40af;margin:10px 0}
       .nombre{font-size:20px;font-weight:bold;margin:8px 0}
       hr{border:none;border-top:2px dashed #ccc;margin:12px 0}
-      @media print{body{padding:10px}}</style></head>
+      @media print{body{padding:6px}}</style></head>
       <body>
         <div class="titulo">📦 RALOZ COL SAS</div>
         <div>Paquete listo para entrega</div>
@@ -212,13 +212,52 @@ export default function Empaque() {
         ${saldo}
         <hr>
         <p style="font-size:11px;color:#999">${new Date().toLocaleString('es-CO')}</p>
-        <script>window.onload=function(){window.print();window.close()}<\/script>
+        <script>window.onload=function(){window.print()}<\/script>
       </body></html>`)
     w.document.close()
   }
 
-  const imprimirTicketManual = (f) => {
-    imprimirTicket(f)
+  const exportarPDFLista = (lista) => {
+    const titulo = filtroColegioListos ? `Paquetes listos — ${filtroColegioListos}` : 'Paquetes listos para llamar'
+    const filas = lista.map((f, i) => {
+      const saldoTxt = f.saldo_pendiente > 0
+        ? `<span style="color:#dc2626">Debe $${Number(f.saldo_pendiente).toLocaleString('es-CO')}</span>`
+        : '<span style="color:#16a34a">Pagado</span>'
+      return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">${f.cliente_nombre}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#555">${f.cliente_telefono || '—'}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;font-family:monospace;color:#1e40af">${f.numero_factura}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#555">${f.colegio_nombre || '—'}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${saldoTxt}</td>
+      </tr>`
+    }).join('')
+
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:24px;font-size:13px;color:#222}
+        h2{color:#1e40af;font-size:20px;margin-bottom:4px}
+        .sub{color:#666;font-size:12px;margin-bottom:16px}
+        table{width:100%;border-collapse:collapse}
+        thead tr{background:#1e40af;color:#fff}
+        th{padding:9px 10px;text-align:left;font-size:12px;font-weight:600;letter-spacing:.5px}
+        .footer{margin-top:20px;font-size:11px;color:#999;text-align:right}
+        .badge{display:inline-block;background:#dcfce7;color:#166534;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:600}
+        @media print{body{margin:12px}.no-print{display:none}}
+      </style></head>
+      <body>
+        <h2>📦 RALOZ COL SAS</h2>
+        <div class="sub">${titulo} · ${lista.length} paquete${lista.length !== 1 ? 's' : ''}</div>
+        <table>
+          <thead><tr>
+            <th>Cliente</th><th>Teléfono</th><th>Factura</th><th>Colegio</th><th style="text-align:right">Estado</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <div class="footer">Generado el ${new Date().toLocaleString('es-CO')}</div>
+        <script>window.onload=function(){window.print()}<\/script>
+      </body></html>`)
+    w.document.close()
   }
 
   const limpiar = () => {
@@ -273,51 +312,92 @@ export default function Empaque() {
       </div>
 
       {/* ─── TAB: Listos para llamar ─── */}
-      {tab === 'listos' && (
-        <div className="space-y-3">
-          {loadingListos ? (
-            <div className="flex justify-center py-10"><div className="animate-spin h-8 w-8 border-b-2 border-green-600 rounded-full" /></div>
-          ) : listosLlamar.length === 0 ? (
-            <div className="card text-center py-14">
-              <Bell className="mx-auto text-gray-300 mb-3" size={40} />
-              <p className="text-gray-500">No hay paquetes listos para llamar</p>
-              <p className="text-xs text-gray-400 mt-1">Cuando un paquete esté listo, aparecerá aquí</p>
-            </div>
-          ) : (
-            listosLlamar.map(f => (
-              <div key={f.id_factura} className="card flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Package size={18} className="text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-gray-900">{f.cliente_nombre}</p>
-                    {f.cliente_telefono && (
-                      <p className="text-sm text-gray-500 flex items-center gap-1">
-                        <Phone size={12} /> {f.cliente_telefono}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-400">{f.numero_factura} · {f.colegio_nombre}</p>
-                  </div>
-                </div>
+      {tab === 'listos' && (() => {
+        const colegiosUnicos = [...new Set(listosLlamar.map(f => f.colegio_nombre).filter(Boolean))].sort()
+        const listaFiltrada = filtroColegioListos
+          ? listosLlamar.filter(f => f.colegio_nombre === filtroColegioListos)
+          : listosLlamar
+
+        return (
+          <div className="space-y-3">
+            {/* Controles: filtro + exportar */}
+            {listosLlamar.length > 0 && (
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
-                  {f.saldo_pendiente > 0 && (
-                    <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded-full">
-                      Debe ${Number(f.saldo_pendiente).toLocaleString('es-CO')}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => imprimirTicketManual(f)}
-                    className="btn-secondary text-sm flex items-center gap-1.5"
+                  <select
+                    value={filtroColegioListos}
+                    onChange={e => setFiltroColegioListos(e.target.value)}
+                    className="input-field text-sm"
                   >
-                    <Printer size={14} /> Imprimir
-                  </button>
+                    <option value="">Todos los colegios</option>
+                    {colegiosUnicos.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <span className="text-sm text-gray-500">
+                    {listaFiltrada.length} paquete{listaFiltrada.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
+                <button
+                  onClick={() => exportarPDFLista(listaFiltrada)}
+                  disabled={listaFiltrada.length === 0}
+                  className="btn-primary text-sm flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> Exportar PDF
+                </button>
               </div>
-            ))
-          )}
-        </div>
-      )}
+            )}
+
+            {loadingListos ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin h-8 w-8 border-b-2 border-green-600 rounded-full" />
+              </div>
+            ) : listosLlamar.length === 0 ? (
+              <div className="card text-center py-14">
+                <Bell className="mx-auto text-gray-300 mb-3" size={40} />
+                <p className="text-gray-500">No hay paquetes listos para llamar</p>
+                <p className="text-xs text-gray-400 mt-1">Cuando un paquete esté listo, aparecerá aquí</p>
+              </div>
+            ) : listaFiltrada.length === 0 ? (
+              <div className="card text-center py-10">
+                <p className="text-gray-400 text-sm">No hay paquetes para este colegio</p>
+              </div>
+            ) : (
+              listaFiltrada.map(f => (
+                <div key={f.id_factura} className="card flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Package size={18} className="text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-900">{f.cliente_nombre}</p>
+                      {f.cliente_telefono && (
+                        <p className="text-sm text-gray-500 flex items-center gap-1">
+                          <Phone size={12} /> {f.cliente_telefono}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400">{f.numero_factura} · {f.colegio_nombre}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {f.saldo_pendiente > 0 && (
+                      <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded-full">
+                        Debe ${Number(f.saldo_pendiente).toLocaleString('es-CO')}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => imprimirTicketIndividual(f)}
+                      className="btn-secondary text-sm flex items-center gap-1.5"
+                    >
+                      <Printer size={14} /> Ticket
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )
+      })()}
 
       {/* ─── TAB: Registrar pendientes ─── */}
       {/* Búsqueda */}
