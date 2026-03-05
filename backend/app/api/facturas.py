@@ -5,7 +5,7 @@ API de Facturación
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente, Pago
+from app.models import Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente, Pago, PrendaPendiente, Producto
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
 from app.utils.validators import sanitize_string, validate_date, validate_positive_number, validate_required_fields
 from datetime import datetime, date
@@ -141,7 +141,7 @@ def crear_factura():
             total_abonado=min(abono, total) if abono > 0 else 0,
             saldo_pendiente=max(total - abono, 0) if abono > 0 else total,
             estado='PAGADA' if abono >= total and abono > 0 else 'PENDIENTE',
-            estado_entrega=sanitize_string(data.get('estado_entrega', 'POR_ENTREGAR'), 20),
+            estado_entrega='ENTREGADA' if data.get('entrega_inmediata') else 'POR_ENTREGAR',
             metodo_pago=sanitize_string(data.get('metodo_pago', 'EFECTIVO'), 50),
             observaciones=sanitize_string(data.get('observaciones', ''), 1000),
             usuario_creacion=identity['usuario'],
@@ -149,44 +149,43 @@ def crear_factura():
         db.session.add(factura)
         db.session.flush()
 
-        # Crear detalles y descontar stock
+        entrega_inmediata = bool(data.get('entrega_inmediata', False))
+        id_colegio = int(data['id_colegio'])
+        colegio = factura.colegio
+
+        # Crear detalles
         for det in detalles_validados:
-            detalle = FacturaDetalle(
-                id_factura=factura.id_factura,
-                **det
-            )
+            detalle = FacturaDetalle(id_factura=factura.id_factura, **det)
             db.session.add(detalle)
 
-            stock = Stock.query.filter_by(
-                id_colegio=int(data['id_colegio']),
-                id_producto=det['id_producto'],
-                talla_individual=det['talla_individual']
-            ).first()
-
-            if stock:
-                disponible = stock.cantidad
-                if disponible >= det['cantidad']:
-                    stock.cantidad -= det['cantidad']
-                else:
-                    stock.cantidad = 0
-                    faltante = det['cantidad'] - disponible
-                    pendiente = StockPendiente(
-                        id_factura=factura.id_factura,
-                        id_colegio=int(data['id_colegio']),
-                        id_producto=det['id_producto'],
-                        talla_individual=det['talla_individual'],
-                        cantidad_faltante=faltante,
-                    )
-                    db.session.add(pendiente)
-            else:
-                pendiente = StockPendiente(
-                    id_factura=factura.id_factura,
-                    id_colegio=int(data['id_colegio']),
+            if entrega_inmediata:
+                # Descontar del inventario
+                stock = Stock.query.filter_by(
+                    id_colegio=id_colegio,
                     id_producto=det['id_producto'],
-                    talla_individual=det['talla_individual'],
-                    cantidad_faltante=det['cantidad'],
+                    talla_individual=det['talla_individual']
+                ).first()
+                if stock:
+                    stock.cantidad = max(0, stock.cantidad - det['cantidad'])
+            else:
+                # Guardar como prenda pendiente de entrega
+                producto = Producto.query.get(det['id_producto'])
+                prenda = PrendaPendiente(
+                    id_factura=factura.id_factura,
+                    numero_factura=numero,
+                    id_colegio=id_colegio,
+                    colegio_nombre=colegio.nombre if colegio else None,
+                    cliente_nombre=factura.cliente_nombre,
+                    producto_nombre=producto.nombre if producto else f'Producto {det["id_producto"]}',
+                    talla=det['talla_individual'],
+                    cantidad=det['cantidad'],
+                    genero=sanitize_string(data.get('genero_estudiante', 'NIÑO'), 20) or 'NIÑO',
+                    estado='PENDIENTE',
+                    fecha_registro=date.today(),
+                    fecha_factura=fecha_factura,
+                    usuario_registro=identity['usuario'],
                 )
-                db.session.add(pendiente)
+                db.session.add(prenda)
 
         # Registrar abono inicial
         if abono > 0:

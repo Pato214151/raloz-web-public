@@ -232,12 +232,7 @@ def marcar_factura_completa(id_factura):
     identity = get_current_identity()
     data = request.get_json() or {}
 
-    # Cambiar estado
-    if factura.estado_entrega != 'POR_ENTREGAR':
-        return jsonify({
-            'error': f'La factura no está en estado POR_ENTREGAR (está en: {factura.estado_entrega})'
-        }), 400
-
+    # Cambiar estado — acepta desde cualquier estado previo a LISTO_EMPAQUE
     factura.estado_entrega = 'LISTO_EMPAQUE'
     observaciones = data.get('observaciones', '')
 
@@ -258,3 +253,49 @@ def marcar_factura_completa(id_factura):
             'estado_entrega': factura.estado_entrega,
         },
     }), 200
+
+
+@empaque_bp.route('/listo-llamar/<int:id_factura>', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def marcar_listo_llamar(id_factura):
+    """Marcar un paquete como listo para llamar al cliente"""
+    factura = Factura.query.get_or_404(id_factura)
+    identity = get_current_identity()
+
+    factura.estado_entrega = 'LISTO_LLAMAR'
+    db.session.commit()
+
+    registrar_auditoria('facturas', id_factura, 'LISTO_LLAMAR',
+                        f'Paquete listo para llamar. Marcado por {identity["usuario"]}')
+
+    return jsonify({
+        'message': 'Paquete marcado como listo para llamar',
+        'factura': {
+            'id_factura': factura.id_factura,
+            'numero_factura': factura.numero_factura,
+            'cliente_nombre': factura.cliente_nombre,
+            'cliente_telefono': factura.cliente_telefono,
+            'colegio_nombre': factura.colegio.nombre if factura.colegio else None,
+            'estado_entrega': factura.estado_entrega,
+        },
+    }), 200
+
+
+@empaque_bp.route('/listos-llamar', methods=['GET'])
+@jwt_required()
+def listar_listos_llamar():
+    """Listar todos los paquetes listos para llamar al cliente"""
+    facturas = Factura.query.filter_by(estado_entrega='LISTO_LLAMAR') \
+        .order_by(Factura.fecha_creacion.desc()).all()
+
+    return jsonify([{
+        'id_factura': f.id_factura,
+        'numero_factura': f.numero_factura,
+        'cliente_nombre': f.cliente_nombre,
+        'cliente_telefono': f.cliente_telefono,
+        'colegio_nombre': f.colegio.nombre if f.colegio else None,
+        'fecha_factura': f.fecha_factura.isoformat() if f.fecha_factura else None,
+        'total': f.total,
+        'saldo_pendiente': f.saldo_pendiente,
+    } for f in facturas])

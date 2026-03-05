@@ -1,379 +1,346 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, AlertTriangle, Edit, Plus, X, Printer, Search } from 'lucide-react'
+import { Package, Plus, X, Printer, AlertTriangle } from 'lucide-react'
 
-const getStockStatus = (cantidad) => {
-  if (cantidad === 0) return { label: 'Sin Stock', color: 'bg-red-100 text-red-700', icon: 'bg-red-500' }
-  if (cantidad < 5) return { label: 'Bajo Stock', color: 'bg-yellow-100 text-yellow-700', icon: 'bg-yellow-500' }
-  return { label: 'En Stock', color: 'bg-green-100 text-green-700', icon: 'bg-green-500' }
+const TALLAS_ORDEN = ['2', '4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'Única']
+
+function tallaCaja(cantidad) {
+  if (cantidad === 0) return 'bg-red-100 border-red-300 text-red-700'
+  if (cantidad < 5) return 'bg-amber-100 border-amber-300 text-amber-700'
+  return 'bg-green-100 border-green-300 text-green-700'
+}
+
+function sortTallas(a, b) {
+  const ia = TALLAS_ORDEN.indexOf(a)
+  const ib = TALLAS_ORDEN.indexOf(b)
+  if (ia !== -1 && ib !== -1) return ia - ib
+  if (ia !== -1) return -1
+  if (ib !== -1) return 1
+  return a.localeCompare(b)
 }
 
 export default function StockView() {
+  const [colegioSel, setColegioSel] = useState(null)
   const [resumen, setResumen] = useState([])
-  const [colegios, setColegios] = useState([])
   const [stock, setStock] = useState([])
-  const [colegioId, setColegioId] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [editingId, setEditingId] = useState(null)
-  const [editCantidad, setEditCantidad] = useState('')
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newStock, setNewStock] = useState({ producto_id: '', talla: '', cantidad: '' })
-  const [buscarProducto, setBuscarProducto] = useState('')
   const [productos, setProductos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadingStock, setLoadingStock] = useState(false)
+
+  // Edición inline de talla
+  const [editKey, setEditKey] = useState(null) // key = id_stock
+  const [editVal, setEditVal] = useState('')
+
+  // Modal agregar
+  const [showAdd, setShowAdd] = useState(false)
+  const [newStock, setNewStock] = useState({ producto_id: '', talla: '', cantidad: '' })
 
   useEffect(() => {
-    loadResumen()
+    cargarInicial()
   }, [])
 
   useEffect(() => {
-    if (colegioId) {
-      loadStock(colegioId)
-    }
-  }, [colegioId])
+    if (colegioSel) cargarStock(colegioSel.id_colegio)
+  }, [colegioSel])
 
-  const loadResumen = async () => {
+  async function cargarInicial() {
     try {
-      const [stockRes, colegiosRes, prodRes] = await Promise.all([
+      const [resRes, prodRes] = await Promise.all([
         api.get('/stock/resumen'),
-        api.get('/colegios'),
         api.get('/productos'),
       ])
-      setResumen(stockRes.data.resumen || [])
-      setColegios(colegiosRes.data.colegios || [])
+      const res = resRes.data.resumen || []
+      setResumen(res)
       setProductos(prodRes.data.productos || [])
-    } catch (err) {
-      toast.error('Error cargando stock')
+      if (res.length > 0) setColegioSel(res[0])
+    } catch {
+      toast.error('Error cargando inventario')
     } finally {
       setLoading(false)
     }
   }
 
-  const loadStock = async (id) => {
+  async function cargarStock(colegioId) {
+    setLoadingStock(true)
     try {
-      const res = await api.get('/stock', { params: { colegio_id: id } })
+      const res = await api.get('/stock', { params: { colegio_id: colegioId } })
       setStock(res.data.stock || [])
-    } catch (err) {
-      toast.error('Error cargando detalle')
+    } catch {
+      toast.error('Error cargando stock')
+    } finally {
+      setLoadingStock(false)
     }
   }
 
-  const updateCantidad = async (id) => {
-    if (!editCantidad || editCantidad < 0) {
-      toast.error('Cantidad inválida')
-      return
-    }
+  async function guardarEdicion(id_stock) {
+    const val = parseInt(editVal)
+    if (isNaN(val) || val < 0) { toast.error('Cantidad inválida'); return }
     try {
-      await api.put(`/stock/${id}`, { cantidad: parseInt(editCantidad) })
-      toast.success('Stock actualizado')
-      setEditingId(null)
-      loadStock(colegioId)
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Error')
+      await api.put(`/stock/${id_stock}`, { cantidad: val })
+      setStock(prev => prev.map(s => s.id_stock === id_stock ? { ...s, cantidad: val } : s))
+      // Refresh resumen
+      const r = await api.get('/stock/resumen')
+      setResumen(r.data.resumen || [])
+      setEditKey(null)
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error')
     }
   }
 
-  const deleteStock = async (id) => {
+  async function eliminar(id_stock) {
     if (!confirm('¿Eliminar este ítem de stock?')) return
     try {
-      await api.delete(`/stock/${id}`)
-      toast.success('Eliminado')
-      loadStock(colegioId)
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Error')
+      await api.delete(`/stock/${id_stock}`)
+      setStock(prev => prev.filter(s => s.id_stock !== id_stock))
+      const r = await api.get('/stock/resumen')
+      setResumen(r.data.resumen || [])
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error')
     }
   }
 
-  const addStock = async (e) => {
+  async function agregarStock(e) {
     e.preventDefault()
     if (!newStock.producto_id || !newStock.talla || !newStock.cantidad) {
-      toast.error('Completa todos los campos')
-      return
+      toast.error('Completa todos los campos'); return
     }
     try {
       await api.post('/stock', {
-        colegio_id: colegioId,
-        producto_id: newStock.producto_id,
-        talla_individual: newStock.talla,
+        id_colegio: colegioSel.id_colegio,
+        id_producto: newStock.producto_id,
+        talla_individual: newStock.talla.trim(),
         cantidad: parseInt(newStock.cantidad)
       })
       toast.success('Stock agregado')
-      setShowAddForm(false)
+      setShowAdd(false)
       setNewStock({ producto_id: '', talla: '', cantidad: '' })
-      loadStock(colegioId)
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Error')
+      cargarStock(colegioSel.id_colegio)
+      const r = await api.get('/stock/resumen')
+      setResumen(r.data.resumen || [])
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error')
     }
   }
 
-  const stockFiltered = buscarProducto.trim()
-    ? stock.filter(s =>
-        (s.producto_nombre || '').toLowerCase().includes(buscarProducto.toLowerCase()) ||
-        (s.talla_individual || '').toLowerCase().includes(buscarProducto.toLowerCase())
-      )
-    : stock
+  // Agrupar stock por producto
+  const porProducto = {}
+  stock.forEach(s => {
+    const nombre = s.producto_nombre || `Producto ${s.id_producto}`
+    if (!porProducto[nombre]) porProducto[nombre] = []
+    porProducto[nombre].push(s)
+  })
+  // Ordenar tallas dentro de cada producto
+  Object.values(porProducto).forEach(arr =>
+    arr.sort((a, b) => sortTallas(a.talla_individual, b.talla_individual))
+  )
 
-  const totalUnidades = stockFiltered.reduce((sum, s) => sum + s.cantidad, 0)
-  const bajoStock = stockFiltered.filter(s => s.cantidad > 0 && s.cantidad < 5).length
-  const sinStock = stockFiltered.filter(s => s.cantidad === 0).length
+  const totalUnidades = stock.reduce((s, x) => s + x.cantidad, 0)
+  const bajoStock = stock.filter(s => s.cantidad > 0 && s.cantidad < 5).length
+  const sinStock = stock.filter(s => s.cantidad === 0).length
 
-  const imprimirStock = () => {
-    if (!stockFiltered.length) return
-    const colegioNombre = colegios.find(c => c.id_colegio.toString() === colegioId.toString())?.nombre || 'Colegio'
+  function imprimir() {
+    if (!stock.length) return
     const w = window.open('', '_blank')
-    const rows = stockFiltered.map(s => {
-      const color = s.cantidad === 0 ? 'red' : s.cantidad < 5 ? '#f59e0b' : 'green'
-      const st = getStockStatus(s.cantidad)
-      return `<tr><td>${s.producto_nombre || s.id_producto}</td><td>${s.talla_individual || '—'}</td><td style="text-align:right;font-weight:bold;color:${color}">${s.cantidad}</td><td style="color:${color}">${st.label}</td></tr>`
+    const bloques = Object.entries(porProducto).map(([prod, items]) => {
+      const filas = items.map(s => {
+        const color = s.cantidad === 0 ? '#dc2626' : s.cantidad < 5 ? '#d97706' : '#16a34a'
+        return `<td style="padding:6px 10px;border:1px solid #ddd;text-align:center;font-weight:bold;color:${color}">
+          <div style="font-size:10px;color:#555">${s.talla_individual}</div>${s.cantidad}</td>`
+      }).join('')
+      return `<tr><td style="padding:6px 10px;border:1px solid #ddd;font-weight:600">${prod}</td>${filas}</tr>`
     }).join('')
-    w.document.write(`<!DOCTYPE html><html><head><title>Stock - ${colegioNombre}</title>
-      <style>body{font-family:Arial;margin:20px}h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
-      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
-      th{background:#f5f5f5;padding:6px;border:1px solid #ddd;text-align:left}td{padding:5px 8px;border:1px solid #eee}
-      .kpi{display:inline-block;padding:10px 18px;margin:5px;border-radius:8px;text-align:center}
-      @media print{body{margin:10px}}</style></head><body>
-      <h2>RALOZ COL SAS - Inventario de ${colegioNombre}</h2>
-      <div>
-        <div class="kpi" style="background:#D1ECF1;color:#0C5460"><small>Total</small><br><b>${totalUnidades}</b></div>
-        <div class="kpi" style="background:#FFF3CD;color:#856404"><small>Bajo Stock</small><br><b>${bajoStock}</b></div>
-        <div class="kpi" style="background:#F8D7DA;color:#721C24"><small>Sin Stock</small><br><b>${sinStock}</b></div>
-      </div>
-      <table><thead><tr><th>Producto</th><th>Talla</th><th style="text-align:right">Cantidad</th><th>Estado</th></tr></thead>
-      <tbody>${rows}</tbody></table>
-      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p></body></html>`)
+    w.document.write(`<!DOCTYPE html><html><head><title>Inventario - ${colegioSel?.nombre || ''}</title>
+      <style>body{font-family:Arial,sans-serif;margin:20px;font-size:13px}
+      h2{color:#1976d2}table{border-collapse:collapse;margin-top:10px}
+      @media print{.no-print{display:none}}</style></head>
+      <body><h2>RALOZ COL SAS — Inventario ${colegioSel?.nombre || ''}</h2>
+      <p>Total: <b>${totalUnidades}</b> uds &nbsp; Bajo stock: <b>${bajoStock}</b> &nbsp; Sin stock: <b>${sinStock}</b></p>
+      <table><tbody>${bloques}</tbody></table>
+      <p style="font-size:10px;color:#999;margin-top:20px">Impreso ${new Date().toLocaleString('es-CO')}</p>
+      </body></html>`)
     w.document.close()
     w.print()
   }
 
-  if (loading) {
-    return <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 border-b-2 border-raloz-600 rounded-full"></div></div>
-  }
+  if (loading) return (
+    <div className="flex justify-center py-20">
+      <div className="animate-spin h-10 w-10 border-b-2 border-raloz-600 rounded-full" />
+    </div>
+  )
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Inventario de Prendas</h2>
-
-      {/* Resumen por Colegio */}
-      <div className="space-y-4">
-        <h3 className="font-semibold text-lg">Colegios</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {resumen.map(r => (
-            <div
+    <div className="flex gap-4 h-full" style={{ minHeight: '70vh' }}>
+      {/* ─── Panel izquierdo: colegios ─── */}
+      <div className="w-56 flex-shrink-0 space-y-1">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-2">Colegios</p>
+        {resumen.length === 0 ? (
+          <p className="text-xs text-gray-400 px-2">Sin datos</p>
+        ) : (
+          resumen.map(r => (
+            <button
               key={r.id_colegio}
-              onClick={() => setColegioId(r.id_colegio)}
-              className={`card cursor-pointer hover:shadow-lg transition-all ${
-                colegioId === r.id_colegio ? 'ring-2 ring-raloz-500 shadow-lg' : ''
+              onClick={() => setColegioSel(r)}
+              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                colegioSel?.id_colegio === r.id_colegio
+                  ? 'bg-raloz-600 text-white'
+                  : 'hover:bg-gray-100 text-gray-700'
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="p-2 bg-raloz-100 rounded">
-                    <Package className="text-raloz-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="font-semibold">{r.colegio}</p>
-                    <p className="text-sm text-gray-600">{r.total_unidades} unidades</p>
-                    <p className="text-xs text-gray-500">{r.total_items} items</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              <p className="font-medium leading-tight">{r.colegio}</p>
+              <p className={`text-xs mt-0.5 ${colegioSel?.id_colegio === r.id_colegio ? 'text-raloz-200' : 'text-gray-400'}`}>
+                {r.total_unidades} uds · {r.total_items} items
+              </p>
+            </button>
+          ))
+        )}
       </div>
 
-      {/* Detalle de Stock */}
-      {colegioId && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <h3 className="font-semibold text-lg">
-              Stock de {colegios.find(c => c.id_colegio.toString() === colegioId.toString())?.nombre || 'Colegio'}
-            </h3>
-            <div className="flex gap-2 flex-wrap">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
-                <input type="text" value={buscarProducto} onChange={e => setBuscarProducto(e.target.value)}
-                  placeholder="Buscar producto..." className="input-field pl-8 text-sm w-44" />
+      {/* ─── Panel derecho: inventario ─── */}
+      <div className="flex-1 min-w-0 space-y-4">
+        {!colegioSel ? (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            <Package size={40} className="opacity-30" />
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{colegioSel.nombre || colegioSel.colegio}</h2>
+                <p className="text-sm text-gray-500">{totalUnidades} unidades en stock</p>
               </div>
-              <button onClick={imprimirStock} className="btn-secondary flex items-center gap-1 text-sm">
-                <Printer size={14} /> Imprimir
-              </button>
-              <button onClick={() => setShowAddForm(true)} className="btn-primary flex items-center gap-2 text-sm">
-                <Plus size={16} /> Agregar
-              </button>
+              <div className="flex gap-2">
+                <button onClick={imprimir} className="btn-secondary text-sm flex items-center gap-1.5">
+                  <Printer size={14} /> Imprimir
+                </button>
+                <button onClick={() => setShowAdd(true)} className="btn-primary text-sm flex items-center gap-1.5">
+                  <Plus size={14} /> Agregar
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card">
-              <p className="text-xs text-gray-600 mb-1">Total Unidades</p>
-              <p className="text-2xl font-bold text-blue-600">{totalUnidades}</p>
-            </div>
-            <div className="card">
-              <p className="text-xs text-gray-600 mb-1">Bajo Stock</p>
-              <p className="text-2xl font-bold text-yellow-600">{bajoStock}</p>
-            </div>
-            <div className="card">
-              <p className="text-xs text-gray-600 mb-1">Sin Stock</p>
-              <p className="text-2xl font-bold text-red-600">{sinStock}</p>
-            </div>
-          </div>
+            {/* Badges resumen */}
+            {(bajoStock > 0 || sinStock > 0) && (
+              <div className="flex gap-2 flex-wrap">
+                {sinStock > 0 && (
+                  <span className="flex items-center gap-1 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1 rounded-full">
+                    <AlertTriangle size={11} /> {sinStock} sin stock
+                  </span>
+                )}
+                {bajoStock > 0 && (
+                  <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full">
+                    <AlertTriangle size={11} /> {bajoStock} bajo stock
+                  </span>
+                )}
+              </div>
+            )}
 
-          {/* Tabla de Stock */}
-          {stockFiltered.length === 0 ? (
-            <div className="card text-center py-12">
-              <Package className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500">No hay items de stock</p>
-            </div>
-          ) : (
-            <div className="card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 text-left text-gray-600 font-medium">Producto</th>
-                    <th className="px-4 py-3 text-left text-gray-600 font-medium">Talla</th>
-                    <th className="px-4 py-3 text-right text-gray-600 font-medium">Cantidad</th>
-                    <th className="px-4 py-3 text-center text-gray-600 font-medium">Estado</th>
-                    <th className="px-4 py-3 text-center text-gray-600 font-medium">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockFiltered.map(s => {
-                    const status = getStockStatus(s.cantidad)
-                    return (
-                      <tr key={s.id_stock} className="border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{s.producto_nombre || s.id_producto}</td>
-                        <td className="px-4 py-3 text-gray-700">{s.talla_individual || '—'}</td>
-                        <td className="px-4 py-3 text-right">
-                          {editingId === s.id_stock ? (
-                            <input
-                              type="number"
-                              value={editCantidad}
-                              onChange={(e) => setEditCantidad(e.target.value)}
-                              className="input-field w-20 text-right"
-                              autoFocus
-                              onBlur={() => {
-                                if (editCantidad !== s.cantidad.toString()) {
-                                  updateCantidad(s.id_stock)
-                                } else {
-                                  setEditingId(null)
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') updateCantidad(s.id_stock)
-                                if (e.key === 'Escape') setEditingId(null)
-                              }}
-                            />
+            {/* Grid de productos */}
+            {loadingStock ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin h-8 w-8 border-b-2 border-raloz-600 rounded-full" />
+              </div>
+            ) : Object.keys(porProducto).length === 0 ? (
+              <div className="card text-center py-12">
+                <Package className="mx-auto text-gray-300 mb-3" size={44} />
+                <p className="text-gray-500">No hay stock registrado para este colegio</p>
+                <button onClick={() => setShowAdd(true)} className="btn-primary mt-3 text-sm">
+                  Agregar stock
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {Object.entries(porProducto).map(([nombreProd, items]) => (
+                  <div key={nombreProd} className="card">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-semibold text-gray-800">{nombreProd}</p>
+                      <p className="text-xs text-gray-400">
+                        {items.reduce((s, x) => s + x.cantidad, 0)} uds
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {items.map(s => (
+                        <div key={s.id_stock} className="relative group">
+                          {editKey === s.id_stock ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs text-gray-500 font-medium">{s.talla_individual}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editVal}
+                                onChange={e => setEditVal(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') guardarEdicion(s.id_stock)
+                                  if (e.key === 'Escape') setEditKey(null)
+                                }}
+                                onBlur={() => guardarEdicion(s.id_stock)}
+                                autoFocus
+                                className="w-14 text-center border-2 border-raloz-400 rounded-lg text-sm font-bold py-1 focus:outline-none"
+                              />
+                            </div>
                           ) : (
-                            <span
-                              onClick={() => {
-                                setEditingId(s.id_stock)
-                                setEditCantidad(s.cantidad.toString())
-                              }}
-                              className="cursor-pointer font-semibold hover:text-raloz-600"
+                            <div
+                              onClick={() => { setEditKey(s.id_stock); setEditVal(s.cantidad.toString()) }}
+                              title="Clic para editar cantidad"
+                              className={`cursor-pointer flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 font-bold text-sm transition-all hover:scale-105 hover:shadow-sm ${tallaCaja(s.cantidad)}`}
                             >
-                              {s.cantidad}
-                            </span>
+                              <span className="text-xs font-normal opacity-70">{s.talla_individual}</span>
+                              <span className="text-lg leading-tight">{s.cantidad}</span>
+                            </div>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${status.color}`}>
-                            {status.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
+                          {/* Botón eliminar al hover */}
                           <button
-                            onClick={() => deleteStock(s.id_stock)}
-                            className="text-red-600 hover:text-red-800 p-1"
+                            onClick={() => eliminar(s.id_stock)}
+                            className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full text-xs hover:bg-red-600"
                             title="Eliminar"
                           >
-                            <X size={14} />
+                            <X size={9} />
                           </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Alertas de Stock Bajo */}
-          {bajoStock > 0 && (
-            <div className="card bg-yellow-50 border-yellow-200">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="text-yellow-600 mt-0.5" size={20} />
-                <div>
-                  <p className="font-semibold text-yellow-900">Stock Bajo</p>
-                  <p className="text-sm text-yellow-800">{bajoStock} item(s) con cantidad menor a 5 unidades</p>
-                </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
 
-      {/* Modal Agregar Stock */}
-      {showAddForm && colegioId && (
+      {/* ─── Modal agregar stock ─── */}
+      {showAdd && colegioSel && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-screen overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">Agregar Stock</h3>
-            <form onSubmit={addStock} className="space-y-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold mb-4">Agregar Stock — {colegioSel.nombre || colegioSel.colegio}</h3>
+            <form onSubmit={agregarStock} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Producto *</label>
-                <select
-                  required
-                  value={newStock.producto_id}
-                  onChange={e => setNewStock({...newStock, producto_id: e.target.value})}
-                  className="input-field w-full"
-                >
+                <select required value={newStock.producto_id}
+                  onChange={e => setNewStock({ ...newStock, producto_id: e.target.value })}
+                  className="input-field w-full">
                   <option value="">Seleccionar producto</option>
                   {productos.map(p => (
                     <option key={p.id_producto} value={p.id_producto}>{p.nombre}</option>
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Talla *</label>
-                <input
-                  type="text"
-                  required
-                  value={newStock.talla}
-                  onChange={e => setNewStock({...newStock, talla: e.target.value})}
-                  className="input-field w-full"
-                  placeholder="Ej: 4, 6, S, M, L"
-                />
+                <input type="text" required value={newStock.talla}
+                  onChange={e => setNewStock({ ...newStock, talla: e.target.value })}
+                  className="input-field w-full" placeholder="Ej: 4, 6, S, M, L" />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Cantidad *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={newStock.cantidad}
-                  onChange={e => setNewStock({...newStock, cantidad: e.target.value})}
-                  className="input-field w-full"
-                  placeholder="0"
-                />
+                <input type="number" required min="0" value={newStock.cantidad}
+                  onChange={e => setNewStock({ ...newStock, cantidad: e.target.value })}
+                  className="input-field w-full" placeholder="0" />
               </div>
-
-              <div className="flex gap-3 justify-end pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddForm(false)
-                    setNewStock({ producto_id: '', talla: '', cantidad: '' })
-                  }}
-                  className="btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="btn-primary">
-                  Agregar
-                </button>
+              <div className="flex gap-3 justify-end pt-2 border-t">
+                <button type="button" onClick={() => { setShowAdd(false); setNewStock({ producto_id: '', talla: '', cantidad: '' }) }}
+                  className="btn-secondary">Cancelar</button>
+                <button type="submit" className="btn-primary">Agregar</button>
               </div>
             </form>
           </div>

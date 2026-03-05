@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, Search, Check, X, AlertTriangle, FileText, User, School, Calendar, DollarSign, Hash } from 'lucide-react'
+import { Package, Search, Check, X, AlertTriangle, FileText, User, School, Calendar, DollarSign, Hash, Phone, Bell, Printer } from 'lucide-react'
 
 export default function Empaque() {
   const [numeroFactura, setNumeroFactura] = useState('')
@@ -11,6 +11,9 @@ export default function Empaque() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [totalPendientesSistema, setTotalPendientesSistema] = useState(0)
+  const [tab, setTab] = useState('registrar') // 'registrar' | 'listos'
+  const [listosLlamar, setListosLlamar] = useState([])
+  const [loadingListos, setLoadingListos] = useState(false)
 
   // Estado por cada detalle: { checked, cantidad, genero, observaciones }
   const [itemStates, setItemStates] = useState({})
@@ -19,6 +22,22 @@ export default function Empaque() {
   useEffect(() => {
     cargarTotalPendientes()
   }, [])
+
+  useEffect(() => {
+    if (tab === 'listos') cargarListosLlamar()
+  }, [tab])
+
+  const cargarListosLlamar = async () => {
+    setLoadingListos(true)
+    try {
+      const res = await api.get('/empaque/listos-llamar')
+      setListosLlamar(res.data)
+    } catch {
+      toast.error('Error cargando paquetes listos')
+    } finally {
+      setLoadingListos(false)
+    }
+  }
 
   const cargarTotalPendientes = async () => {
     try {
@@ -158,6 +177,50 @@ export default function Empaque() {
     }
   }
 
+  const marcarListoLlamar = async () => {
+    if (!factura) return
+    try {
+      const res = await api.post(`/empaque/listo-llamar/${factura.id_factura}`)
+      toast.success('¡Paquete listo para llamar al cliente!')
+      imprimirTicket(res.data.factura)
+      limpiar()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error')
+    }
+  }
+
+  const imprimirTicket = (f) => {
+    const w = window.open('', '_blank', 'width=400,height=300')
+    const saldo = f.saldo_pendiente > 0
+      ? `<p style="color:#dc2626;font-size:13px">Saldo pendiente: <b>$${Number(f.saldo_pendiente).toLocaleString('es-CO')}</b></p>`
+      : '<p style="color:#16a34a;font-size:13px">✅ Factura pagada</p>'
+    w.document.write(`<!DOCTYPE html><html><head><title>Ticket</title>
+      <style>body{font-family:Arial,sans-serif;text-align:center;padding:20px;font-size:14px}
+      .titulo{font-size:18px;font-weight:bold;color:#1e40af}
+      .num{font-size:28px;font-weight:bold;color:#1e40af;margin:10px 0}
+      .nombre{font-size:20px;font-weight:bold;margin:8px 0}
+      hr{border:none;border-top:2px dashed #ccc;margin:12px 0}
+      @media print{body{padding:10px}}</style></head>
+      <body>
+        <div class="titulo">📦 RALOZ COL SAS</div>
+        <div>Paquete listo para entrega</div>
+        <hr>
+        <div class="num">${f.numero_factura}</div>
+        <div class="nombre">${f.cliente_nombre}</div>
+        ${f.cliente_telefono ? `<p style="font-size:16px">📞 ${f.cliente_telefono}</p>` : ''}
+        ${f.colegio_nombre ? `<p style="color:#555">${f.colegio_nombre}</p>` : ''}
+        ${saldo}
+        <hr>
+        <p style="font-size:11px;color:#999">${new Date().toLocaleString('es-CO')}</p>
+        <script>window.onload=function(){window.print();window.close()}<\/script>
+      </body></html>`)
+    w.document.close()
+  }
+
+  const imprimirTicketManual = (f) => {
+    imprimirTicket(f)
+  }
+
   const limpiar = () => {
     setNumeroFactura('')
     setFactura(null)
@@ -171,53 +234,123 @@ export default function Empaque() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Package className="text-blue-600" size={28} />
-            Empaque - Registrar Pendientes
+            Empaque
           </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Busca una factura, marca las prendas que quedaron debiendo y guárdalas como pendientes
-          </p>
         </div>
         <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-2">
-          <p className="text-xs text-orange-600">Total pendientes en sistema</p>
+          <p className="text-xs text-orange-600">Pendientes en sistema</p>
           <p className="text-xl font-bold text-orange-700">{totalPendientesSistema} prendas</p>
         </div>
       </div>
 
-      {/* Búsqueda */}
-      <form onSubmit={buscarFactura} className="card">
-        <div className="flex gap-3 flex-wrap items-end">
-          <div className="flex-1 min-w-64">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Número de Factura</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                value={numeroFactura}
-                onChange={(e) => setNumeroFactura(e.target.value)}
-                placeholder="Ej: FAC-2026-000001"
-                className="input-field pl-10 w-full"
-              />
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setTab('registrar')}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'registrar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Registrar pendientes
+        </button>
+        <button
+          onClick={() => setTab('listos')}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            tab === 'listos' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Bell size={14} /> Listos para llamar
+          {listosLlamar.length > 0 && (
+            <span className="bg-green-500 text-white text-xs rounded-full px-1.5 py-0.5">{listosLlamar.length}</span>
+          )}
+        </button>
+      </div>
+
+      {/* ─── TAB: Listos para llamar ─── */}
+      {tab === 'listos' && (
+        <div className="space-y-3">
+          {loadingListos ? (
+            <div className="flex justify-center py-10"><div className="animate-spin h-8 w-8 border-b-2 border-green-600 rounded-full" /></div>
+          ) : listosLlamar.length === 0 ? (
+            <div className="card text-center py-14">
+              <Bell className="mx-auto text-gray-300 mb-3" size={40} />
+              <p className="text-gray-500">No hay paquetes listos para llamar</p>
+              <p className="text-xs text-gray-400 mt-1">Cuando un paquete esté listo, aparecerá aquí</p>
             </div>
-          </div>
-          <button type="submit" className="btn-primary h-10" disabled={loading}>
-            {loading ? 'Buscando...' : 'Buscar Factura'}
-          </button>
-          {factura && (
-            <button type="button" onClick={limpiar} className="btn-secondary h-10">
-              Limpiar
-            </button>
+          ) : (
+            listosLlamar.map(f => (
+              <div key={f.id_factura} className="card flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Package size={18} className="text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900">{f.cliente_nombre}</p>
+                    {f.cliente_telefono && (
+                      <p className="text-sm text-gray-500 flex items-center gap-1">
+                        <Phone size={12} /> {f.cliente_telefono}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400">{f.numero_factura} · {f.colegio_nombre}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {f.saldo_pendiente > 0 && (
+                    <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded-full">
+                      Debe ${Number(f.saldo_pendiente).toLocaleString('es-CO')}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => imprimirTicketManual(f)}
+                    className="btn-secondary text-sm flex items-center gap-1.5"
+                  >
+                    <Printer size={14} /> Imprimir
+                  </button>
+                </div>
+              </div>
+            ))
           )}
         </div>
-      </form>
+      )}
+
+      {/* ─── TAB: Registrar pendientes ─── */}
+      {/* Búsqueda */}
+      {tab === 'registrar' && (
+        <form onSubmit={buscarFactura} className="card">
+          <div className="flex gap-3 flex-wrap items-end">
+            <div className="flex-1 min-w-64">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Número de Factura</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  value={numeroFactura}
+                  onChange={(e) => setNumeroFactura(e.target.value)}
+                  placeholder="Ej: FAC-2026-000001 o R-981"
+                  className="input-field pl-10 w-full"
+                />
+              </div>
+            </div>
+            <button type="submit" className="btn-primary h-10" disabled={loading}>
+              {loading ? 'Buscando...' : 'Buscar'}
+            </button>
+            {factura && (
+              <button type="button" onClick={limpiar} className="btn-secondary h-10">
+                Limpiar
+              </button>
+            )}
+          </div>
+        </form>
+      )}
 
       {/* Detalle de Factura */}
-      {factura && (
+      {tab === 'registrar' && factura && (
         <div className="space-y-4">
           {/* Info Factura */}
           <div className="card bg-blue-50 border-blue-200">
@@ -439,7 +572,14 @@ export default function Empaque() {
                   className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg flex items-center gap-2 transition-colors"
                 >
                   <Check size={16} />
-                  Todo Listo (Sin pendientes)
+                  Todo listo
+                </button>
+                <button
+                  onClick={marcarListoLlamar}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <Bell size={16} />
+                  Listo para llamar
                 </button>
               </div>
             </div>
@@ -447,14 +587,13 @@ export default function Empaque() {
         </div>
       )}
 
-      {/* Estado inicial */}
-      {!factura && !loading && (
+      {/* Estado inicial (solo en tab registrar) */}
+      {tab === 'registrar' && !factura && !loading && (
         <div className="card text-center py-16">
           <Package className="mx-auto text-gray-300 mb-4" size={56} />
           <h3 className="text-lg font-semibold text-gray-700 mb-2">Busca una Factura</h3>
           <p className="text-gray-500 max-w-md mx-auto">
-            Ingresa el número de factura para ver los productos. Podrás marcar las prendas que quedaron debiendo
-            y registrarlas como pendientes automáticamente.
+            Ingresa el número de factura. Puedes registrar pendientes o marcar el paquete como listo para llamar.
           </p>
         </div>
       )}

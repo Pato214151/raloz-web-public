@@ -28,10 +28,16 @@ def listar_stock():
     if solo_disponible:
         query = query.filter(Stock.cantidad > 0)
 
-    stocks = query.all()
+    stocks = query.order_by(Stock.id_producto, Stock.talla_individual).all()
+
+    def stock_full(s):
+        d = s.to_dict()
+        d['producto_nombre'] = s.producto.nombre if s.producto else None
+        d['colegio_nombre'] = s.colegio.nombre if s.colegio else None
+        return d
 
     return jsonify({
-        'stock': [s.to_dict() for s in stocks],
+        'stock': [stock_full(s) for s in stocks],
         'total_items': len(stocks),
     }), 200
 

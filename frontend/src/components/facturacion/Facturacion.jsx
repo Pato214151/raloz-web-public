@@ -23,6 +23,7 @@ export default function Facturacion() {
     numero_factura: '',
     metodo_pago: 'EFECTIVO',
     estado_entrega: 'POR_ENTREGAR',
+    entrega_inmediata: false,
     abono: '',
     genero_estudiante: '',
     observaciones: '',
@@ -143,7 +144,7 @@ export default function Facturacion() {
         genero_estudiante: form.genero_estudiante,
         fecha_factura: form.fecha_factura,
         metodo_pago: form.metodo_pago,
-        estado_entrega: form.estado_entrega,
+        entrega_inmediata: form.entrega_inmediata,
         observaciones: form.observaciones,
         numero_factura: form.numero_factura.trim() || undefined,
         abono: abono,
@@ -340,11 +341,27 @@ export default function Facturacion() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estado Entrega</label>
-              <select value={form.estado_entrega} onChange={e => setForm({...form, estado_entrega: e.target.value})} className="input-field">
-                <option value="POR_ENTREGAR">Por Entregar</option>
-                <option value="ENTREGADO">Entregado</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">¿Entregaste las prendas?</label>
+              <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                <button type="button"
+                  onClick={() => setForm({...form, entrega_inmediata: false})}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    !form.entrega_inmediata
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  No, pendiente
+                </button>
+                <button type="button"
+                  onClick={() => setForm({...form, entrega_inmediata: true})}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    form.entrega_inmediata
+                      ? 'bg-green-600 text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  Sí, entregué
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Abono Inicial</label>
