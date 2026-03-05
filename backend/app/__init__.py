@@ -104,6 +104,7 @@ def create_app(config_name=None):
     from app.api.empaque import empaque_bp
     from app.api.ventas import ventas_bp
     from app.api.metodos_pago import metodos_pago_bp
+    from app.api.tareas import tareas_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -124,6 +125,7 @@ def create_app(config_name=None):
     app.register_blueprint(empaque_bp, url_prefix='/api/empaque')
     app.register_blueprint(ventas_bp, url_prefix='/api/ventas')
     app.register_blueprint(metodos_pago_bp, url_prefix='/api/metodos-pago')
+    app.register_blueprint(tareas_bp, url_prefix='/api/tareas')
 
     # ── Health check ──
     @app.route('/api/health')

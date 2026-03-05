@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   LayoutDashboard, FileText, Search, CreditCard, Package,
   TrendingUp, Users, Wallet, BookOpen, Clock, UserCog,
-  Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle, DollarSign, Box, Settings
+  Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle, DollarSign, Box, Settings, ClipboardList
 } from 'lucide-react'
 
 const menuItems = [
@@ -22,6 +22,7 @@ const menuItems = [
   { path: '/gastos', label: 'Gastos', icon: Wallet, roles: ['administrador', 'cajero'] },
   { path: '/caja', label: 'Caja', icon: BookOpen, roles: ['administrador', 'cajero'] },
   { path: '/pendientes', label: 'Pendientes', icon: Clock, roles: ['administrador', 'vendedor'] },
+  { path: '/tareas', label: 'Tareas', icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
   { path: '/configuracion', label: 'Configuración', icon: Settings, roles: ['administrador'] },
   { path: '/usuarios', label: 'Usuarios', icon: UserCog, roles: ['administrador'] },
 ]
