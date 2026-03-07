@@ -263,6 +263,9 @@ export default function BuscarFacturas() {
   // === IMPRIMIR ===
   const imprimirFactura = () => {
     if (!selected) return
+    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '' }
+    try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* usa default */ }
+
     const printWindow = window.open('', '_blank')
     const detallesHTML = (selected.detalles || []).map(d =>
       `<tr><td>${d.producto_nombre}</td><td style="text-align:center">${d.talla_individual}</td><td style="text-align:center">${d.cantidad}</td><td style="text-align:right">${fmt(d.precio_unitario)}</td><td style="text-align:right">${fmt(d.total_linea)}</td></tr>`
@@ -271,35 +274,56 @@ export default function BuscarFacturas() {
       `<tr><td>${p.fecha_pago}</td><td>${p.metodo_pago}</td><td style="text-align:right">${fmt(p.valor)}</td></tr>`
     ).join('')
 
+    const headerLines = [
+      empresa.nit ? `NIT: ${empresa.nit}` : '',
+      empresa.direccion ? empresa.direccion : '',
+      empresa.ciudad ? empresa.ciudad : '',
+      empresa.telefono ? `Tel: ${empresa.telefono}` : '',
+      empresa.email ? empresa.email : '',
+    ].filter(Boolean).join(' | ')
+
+    const domicilioHTML = selected.domicilio > 0
+      ? `<div class="flex-between text-sm"><span>Domicilio</span><span>+${fmt(selected.domicilio)}</span></div>`
+      : ''
+
     printWindow.document.write(`<!DOCTYPE html><html><head><title>Factura ${selected.numero_factura}</title>
     <style>
       body{font-family:Arial,sans-serif;margin:20px;color:#333}
-      h1{color:#1976D2;font-size:20px;border-bottom:3px solid #FFC107;padding-bottom:8px}
+      .header{border-bottom:3px solid #FFC107;padding-bottom:10px;margin-bottom:12px}
+      .header h1{color:#1976D2;font-size:20px;margin:0 0 4px}
+      .header p{margin:2px 0;font-size:12px;color:#555}
       .info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;font-size:13px}
       .info b{color:#555}
       table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
       th{background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd;font-size:12px}
       td{padding:6px 8px;border:1px solid #eee}
-      .total-row{font-weight:bold;font-size:16px;text-align:right;margin:10px 0}
+      .total-row{font-weight:bold;font-size:16px;text-align:right;margin:6px 0}
+      .sub-row{font-size:13px;text-align:right;margin:4px 0;color:#555}
       .estado{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold}
       .PENDIENTE{background:#FFF3CD;color:#856404}.PAGADA{background:#D4EDDA;color:#155724}.ANULADA{background:#F8D7DA;color:#721C24}
       @media print{body{margin:0}}
     </style></head><body>
-    <h1>FACTURA ${selected.numero_factura} <span class="estado ${selected.estado}">${selected.estado}</span></h1>
+    <div class="header">
+      <h1>${empresa.nombre} <span class="estado ${selected.estado}">${selected.estado}</span></h1>
+      ${headerLines ? `<p>${headerLines}</p>` : ''}
+      <p style="font-size:13px;font-weight:bold;margin-top:6px">FACTURA N° ${selected.numero_factura}</p>
+    </div>
     <div class="info">
       <div><b>Cliente:</b> ${selected.cliente_nombre}</div>
       <div><b>Teléfono:</b> ${selected.cliente_telefono || '—'}</div>
       <div><b>Colegio:</b> ${selected.colegio_nombre}</div>
       <div><b>Fecha:</b> ${selected.fecha_factura}</div>
       ${selected.cliente_email ? `<div><b>Email:</b> ${selected.cliente_email}</div>` : ''}
-      ${selected.observaciones ? `<div><b>Obs:</b> ${selected.observaciones}</div>` : ''}
+      ${selected.cliente_nit ? `<div><b>NIT/CC:</b> ${selected.cliente_nit}</div>` : ''}
+      ${selected.observaciones ? `<div class="col-span-2"><b>Obs:</b> ${selected.observaciones}</div>` : ''}
     </div>
     <h3>Productos</h3>
     <table><thead><tr><th>Producto</th><th>Talla</th><th>Cant.</th><th>P.Unit</th><th>Total</th></tr></thead><tbody>${detallesHTML}</tbody></table>
+    ${selected.domicilio > 0 ? `<div class="sub-row">Subtotal: ${fmt(selected.subtotal || selected.total)}</div><div class="sub-row">Domicilio: +${fmt(selected.domicilio)}</div>` : ''}
     <div class="total-row">TOTAL: ${fmt(selected.total)}</div>
     ${(selected.pagos || []).length > 0 ? `<h3>Pagos Registrados</h3><table><thead><tr><th>Fecha</th><th>Método</th><th>Valor</th></tr></thead><tbody>${pagosHTML}</tbody></table>` : ''}
     <div class="total-row" style="color:${selected.saldo > 0 ? '#D32F2F' : '#2E7D32'}">SALDO: ${fmt(selected.saldo || 0)}</div>
-    <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS - Sistema de Facturación</p>
+    <hr><p style="text-align:center;font-size:11px;color:#999">${empresa.nombre} — Sistema de Facturación</p>
     </body></html>`)
     printWindow.document.close()
     printWindow.print()

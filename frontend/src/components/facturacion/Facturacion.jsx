@@ -3,7 +3,8 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
 
-const TALLAS = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', '6-8', '8-10', '10-12', '12-14', '14-16']
+const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
+const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 const DOMINIOS_EMAIL = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'outlook.es', 'live.com']
 
@@ -24,6 +25,8 @@ export default function Facturacion() {
     metodo_pago: 'EFECTIVO',
     estado_entrega: 'POR_ENTREGAR',
     entrega_inmediata: false,
+    domicilio: false,
+    valor_domicilio: '',
     abono: '',
     genero_estudiante: '',
     observaciones: '',
@@ -108,8 +111,10 @@ export default function Facturacion() {
   const eliminarLinea = (idx) => setDetalles(detalles.filter((_, i) => i !== idx))
 
   const subtotal = detalles.reduce((sum, d) => sum + (d.cantidad * d.precio_unitario), 0)
+  const valorDomicilio = form.domicilio ? (parseFloat(form.valor_domicilio) || 0) : 0
+  const totalConDomicilio = subtotal + valorDomicilio
   const abono = parseFloat(form.abono) || 0
-  const saldo = subtotal - abono
+  const saldo = totalConDomicilio - abono
 
   // Fecha helpers
   const ajustarFecha = (dias) => {
@@ -152,6 +157,7 @@ export default function Facturacion() {
         entrega_inmediata: form.entrega_inmediata,
         observaciones: form.observaciones,
         numero_factura: form.numero_factura.trim() || undefined,
+        domicilio: valorDomicilio,
         abono: abono,
         detalles: detalles.map(d => ({
           id_producto: parseInt(d.id_producto),
@@ -174,6 +180,7 @@ export default function Facturacion() {
         cliente_nombre: '', cliente_telefono: '', cliente_email_user: '',
         cliente_direccion: '', cliente_nit: '', abono: '',
         genero_estudiante: '', observaciones: '', numero_factura: '',
+        domicilio: false, valor_domicilio: '',
       }))
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error al crear factura')
@@ -305,10 +312,16 @@ export default function Facturacion() {
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <select value={det.talla_individual} onChange={e => actualizarLinea(idx, 'talla_individual', e.target.value)} className="input-field w-full">
-                      <option value="">Talla...</option>
-                      {TALLAS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    {(() => {
+                      const prod = productos.find(p => String(p.id_producto) === String(det.id_producto))
+                      const tallas = prod?.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
+                      return (
+                        <select value={det.talla_individual} onChange={e => actualizarLinea(idx, 'talla_individual', e.target.value)} className="input-field w-full">
+                          <option value="">Talla...</option>
+                          {tallas.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      )
+                    })()}
                   </div>
                   <div className="md:col-span-1">
                     <input type="number" min="1" value={det.cantidad} onChange={e => actualizarLinea(idx, 'cantidad', parseInt(e.target.value) || 1)} className="input-field w-full text-center" />
@@ -369,6 +382,33 @@ export default function Facturacion() {
               </div>
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">¿Domicilio?</label>
+              <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                <button type="button"
+                  onClick={() => setForm({...form, domicilio: false, valor_domicilio: ''})}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    !form.domicilio ? 'bg-gray-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  No
+                </button>
+                <button type="button"
+                  onClick={() => setForm({...form, domicilio: true})}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    form.domicilio ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  Sí
+                </button>
+              </div>
+              {form.domicilio && (
+                <div className="relative mt-2">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input type="number" min="0" value={form.valor_domicilio}
+                    onChange={e => setForm({...form, valor_domicilio: e.target.value})}
+                    className="input-field pl-7 w-full" placeholder="Valor domicilio" />
+                </div>
+              )}
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Abono Inicial</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
@@ -387,6 +427,12 @@ export default function Facturacion() {
               <span className="text-gray-500">Subtotal ({detalles.length} items)</span>
               <span className="font-medium">${subtotal.toLocaleString('es-CO')}</span>
             </div>
+            {valorDomicilio > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Domicilio</span>
+                <span className="font-medium text-blue-600">+${valorDomicilio.toLocaleString('es-CO')}</span>
+              </div>
+            )}
             {abono > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Abono</span>
@@ -396,7 +442,7 @@ export default function Facturacion() {
             <div className="flex justify-between text-lg border-t pt-2">
               <span className="font-semibold text-gray-700">{abono > 0 ? 'Saldo Pendiente' : 'Total'}</span>
               <span className={`text-2xl font-bold ${saldo > 0 && abono > 0 ? 'text-red-600' : 'text-raloz-700'}`}>
-                ${(abono > 0 ? saldo : subtotal).toLocaleString('es-CO')}
+                ${(abono > 0 ? saldo : totalConDomicilio).toLocaleString('es-CO')}
               </span>
             </div>
           </div>

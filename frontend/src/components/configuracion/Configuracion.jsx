@@ -1,14 +1,24 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save, Users, KeyRound } from 'lucide-react'
+import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save, Users, KeyRound, Building2 } from 'lucide-react'
 
 const TABS = [
   { id: 'colegios', label: 'Colegios', icon: School, color: 'blue' },
   { id: 'productos', label: 'Productos', icon: Package, color: 'green' },
   { id: 'metodos', label: 'Métodos de Pago', icon: CreditCard, color: 'red' },
   { id: 'usuarios', label: 'Usuarios', icon: Users, color: 'purple' },
+  { id: 'empresa', label: 'Empresa', icon: Building2, color: 'indigo' },
 ]
+
+const EMPRESA_DEFAULT = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '' }
+
+function cargarEmpresa() {
+  try { return JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || EMPRESA_DEFAULT } catch { return EMPRESA_DEFAULT }
+}
+function guardarEmpresaLS(data) {
+  localStorage.setItem('raloz_empresa', JSON.stringify(data))
+}
 
 const ROL_BADGE = {
   administrador: 'bg-purple-100 text-purple-700',
@@ -16,7 +26,7 @@ const ROL_BADGE = {
   cajero: 'bg-yellow-100 text-yellow-700',
 }
 
-const TIPOS_PRODUCTO = ['uniforme_niño', 'uniforme_niña', 'edu_fisica', 'accesorio']
+const TIPOS_PRODUCTO = ['uniforme_niño', 'uniforme_niña', 'edu_fisica', 'accesorio', 'medias']
 
 export default function Configuracion() {
   const [tab, setTab] = useState('colegios')
@@ -44,6 +54,10 @@ export default function Configuracion() {
   const [showUserForm, setShowUserForm] = useState(false)
   const [pwdModal, setPwdModal] = useState(null)
   const [nuevaPwd, setNuevaPwd] = useState('')
+
+  // ── Empresa ──
+  const [empresaForm, setEmpresaForm] = useState(cargarEmpresa)
+  const [empresaSaved, setEmpresaSaved] = useState(false)
 
   useEffect(() => {
     loadColegios()
@@ -539,6 +553,44 @@ export default function Configuracion() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ TAB EMPRESA ══════════ */}
+      {tab === 'empresa' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+              <Building2 size={18} className="text-indigo-500" /> Datos de la Empresa / Factura
+            </h2>
+            <p className="text-xs text-gray-400 mt-1">Esta información aparece en el encabezado al imprimir facturas.</p>
+          </div>
+          <div className="p-6 space-y-4 max-w-lg">
+            {[
+              { label: 'Nombre de la empresa', key: 'nombre', placeholder: 'RALOZ COL SAS' },
+              { label: 'NIT', key: 'nit', placeholder: '900.123.456-7' },
+              { label: 'Dirección', key: 'direccion', placeholder: 'Calle 12 # 45-67' },
+              { label: 'Ciudad', key: 'ciudad', placeholder: 'Bogotá, Colombia' },
+              { label: 'Teléfono', key: 'telefono', placeholder: '601 234 5678' },
+              { label: 'Email', key: 'email', placeholder: 'ventas@empresa.com' },
+            ].map(({ label, key, placeholder }) => (
+              <div key={key}>
+                <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
+                <input
+                  value={empresaForm[key]}
+                  onChange={e => setEmpresaForm({ ...empresaForm, [key]: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                  placeholder={placeholder}
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => { guardarEmpresaLS(empresaForm); setEmpresaSaved(true); setTimeout(() => setEmpresaSaved(false), 2000) }}
+              className="flex items-center gap-2 bg-indigo-500 text-white px-5 py-2 rounded-lg text-sm hover:bg-indigo-600 transition-colors"
+            >
+              <Save size={14} /> {empresaSaved ? '¡Guardado!' : 'Guardar datos'}
+            </button>
           </div>
         </div>
       )}

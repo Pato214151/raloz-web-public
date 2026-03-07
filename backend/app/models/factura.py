@@ -22,6 +22,7 @@ class Factura(db.Model):
     estado_entrega = db.Column(db.String(20), default='POR_ENTREGAR')
     metodo_pago = db.Column(db.String(50))
     genero_estudiante = db.Column(db.String(20))
+    domicilio = db.Column(db.Float, default=0)
     observaciones = db.Column(db.Text)
     fecha_entrega = db.Column(db.Date)
     usuario_creacion = db.Column(db.String(100), nullable=False)
@@ -60,6 +61,7 @@ class Factura(db.Model):
             'estado_entrega': self.estado_entrega,
             'metodo_pago': self.metodo_pago,
             'genero_estudiante': self.genero_estudiante,
+            'domicilio': self.domicilio or 0,
             'observaciones': self.observaciones,
             'fecha_entrega': self.fecha_entrega.isoformat() if self.fecha_entrega else None,
             'usuario_creacion': self.usuario_creacion,

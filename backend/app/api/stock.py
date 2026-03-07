@@ -67,7 +67,7 @@ def resumen_stock():
 
 @stock_bp.route('', methods=['POST'])
 @jwt_required()
-@rol_requerido('administrador')
+@rol_requerido('administrador', 'vendedor', 'cajero')
 def actualizar_stock():
     """Crear o actualizar registro de stock"""
     data = request.get_json()
@@ -117,7 +117,7 @@ def actualizar_stock():
 
 @stock_bp.route('/<int:id_stock>', methods=['PUT'])
 @jwt_required()
-@rol_requerido('administrador')
+@rol_requerido('administrador', 'vendedor', 'cajero')
 def editar_stock(id_stock):
     """Editar cantidad de un registro de stock"""
     stock = Stock.query.get_or_404(id_stock)

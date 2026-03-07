@@ -124,6 +124,8 @@ def crear_factura():
 
         fecha_factura = validate_date(data.get('fecha_factura', '')) or date.today()
         abono = float(data.get('abono', 0))
+        domicilio = float(data.get('domicilio', 0))
+        total_con_domicilio = total + domicilio
 
         # Crear factura con todos los campos
         factura = Factura(
@@ -136,11 +138,12 @@ def crear_factura():
             cliente_nit=sanitize_string(data.get('cliente_nit', ''), 50),
             genero_estudiante=sanitize_string(data.get('genero_estudiante', ''), 20),
             fecha_factura=fecha_factura,
-            total=total,
+            total=total_con_domicilio,
             subtotal=total,
-            total_abonado=min(abono, total) if abono > 0 else 0,
-            saldo_pendiente=max(total - abono, 0) if abono > 0 else total,
-            estado='PAGADA' if abono >= total and abono > 0 else 'PENDIENTE',
+            domicilio=domicilio,
+            total_abonado=min(abono, total_con_domicilio) if abono > 0 else 0,
+            saldo_pendiente=max(total_con_domicilio - abono, 0) if abono > 0 else total_con_domicilio,
+            estado='PAGADA' if abono >= total_con_domicilio and abono > 0 else 'PENDIENTE',
             estado_entrega='ENTREGADA' if data.get('entrega_inmediata') else 'POR_ENTREGAR',
             metodo_pago=sanitize_string(data.get('metodo_pago', 'EFECTIVO'), 50),
             observaciones=sanitize_string(data.get('observaciones', ''), 1000),
