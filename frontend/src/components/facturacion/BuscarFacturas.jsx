@@ -11,7 +11,8 @@ const ESTADOS = [
   { value: 'ANULADA', label: 'Anuladas' },
 ]
 const METODOS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
-const TALLAS = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL']
+const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
+const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
 
 export default function BuscarFacturas() {
   const { isAdmin } = useAuth()
@@ -40,9 +41,11 @@ export default function BuscarFacturas() {
   const [editPagoValor, setEditPagoValor] = useState('')
   const [editPagoMetodo, setEditPagoMetodo] = useState('')
 
-  // Edit products modal
+  // Edit modal
   const [showEditProducts, setShowEditProducts] = useState(false)
+  const [editTab, setEditTab] = useState('cliente')
   const [editDetalles, setEditDetalles] = useState([])
+  const [editCliente, setEditCliente] = useState({})
   const [savingEdit, setSavingEdit] = useState(false)
 
   // Print ref
@@ -208,6 +211,17 @@ export default function BuscarFacturas() {
       cantidad: d.cantidad,
       precio_unitario: d.precio_unitario,
     })))
+    setEditCliente({
+      cliente_nombre: selected.cliente_nombre || '',
+      cliente_telefono: selected.cliente_telefono || '',
+      cliente_email: selected.cliente_email || '',
+      cliente_direccion: selected.cliente_direccion || '',
+      cliente_nit: selected.cliente_nit || '',
+      fecha_factura: selected.fecha_factura || '',
+      metodo_pago: selected.metodo_pago || 'EFECTIVO',
+      observaciones: selected.observaciones || '',
+    })
+    setEditTab('cliente')
     setShowEditProducts(true)
   }
 
@@ -242,6 +256,7 @@ export default function BuscarFacturas() {
     setSavingEdit(true)
     try {
       await api.put(`/facturas/${selected.id_factura}`, {
+        ...editCliente,
         detalles: editDetalles.map(d => ({
           id_producto: parseInt(d.id_producto),
           talla_individual: d.talla_individual,
@@ -249,12 +264,12 @@ export default function BuscarFacturas() {
           precio_unitario: parseFloat(d.precio_unitario),
         }))
       })
-      toast.success('Productos actualizados')
+      toast.success('Factura actualizada')
       setShowEditProducts(false)
       verDetalle(selected.id_factura)
       handleSearch(page)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error editando productos')
+      toast.error(err.response?.data?.error || 'Error editando factura')
     } finally {
       setSavingEdit(false)
     }
@@ -624,66 +639,119 @@ export default function BuscarFacturas() {
         </div>
       </div>
 
-      {/* === MODAL: Editar Productos === */}
+      {/* === MODAL: Editar Factura === */}
       {showEditProducts && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Editar Productos — {selected?.numero_factura}</h3>
+                <h3 className="text-lg font-bold">Editar Factura — {selected?.numero_factura}</h3>
                 <button onClick={() => setShowEditProducts(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
               </div>
 
-              <div className="space-y-2">
-                {/* Header */}
-                <div className="hidden md:grid grid-cols-12 gap-2 px-2 text-xs font-medium text-gray-500 uppercase">
-                  <div className="col-span-4">Producto</div>
-                  <div className="col-span-2">Talla</div>
-                  <div className="col-span-1">Cant.</div>
-                  <div className="col-span-2">Precio</div>
-                  <div className="col-span-2 text-right">Subtotal</div>
-                  <div className="col-span-1"></div>
-                </div>
+              {/* Tabs */}
+              <div className="flex gap-1 border-b border-gray-200">
+                <button onClick={() => setEditTab('cliente')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${editTab === 'cliente' ? 'border-raloz-500 text-raloz-600 bg-raloz-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                  Datos del Cliente
+                </button>
+                <button onClick={() => setEditTab('productos')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${editTab === 'productos' ? 'border-raloz-500 text-raloz-600 bg-raloz-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                  Productos
+                </button>
+              </div>
 
-                {editDetalles.map((det, idx) => (
-                  <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-2 p-2 bg-gray-50 rounded items-center">
-                    <div className="md:col-span-4">
-                      <select value={det.id_producto} onChange={e => updateEditLine(idx, 'id_producto', e.target.value)} className="input-field w-full text-sm">
-                        <option value="">Producto...</option>
-                        {productos.map(p => <option key={p.id_producto} value={p.id_producto}>{p.nombre}</option>)}
-                      </select>
+              {/* Tab: Datos del Cliente */}
+              {editTab === 'cliente' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { label: 'Nombre del cliente *', key: 'cliente_nombre', type: 'text' },
+                    { label: 'Teléfono', key: 'cliente_telefono', type: 'text' },
+                    { label: 'Email', key: 'cliente_email', type: 'email' },
+                    { label: 'Dirección', key: 'cliente_direccion', type: 'text' },
+                    { label: 'NIT / CC', key: 'cliente_nit', type: 'text' },
+                    { label: 'Fecha factura', key: 'fecha_factura', type: 'date' },
+                  ].map(({ label, key, type }) => (
+                    <div key={key}>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                      <input type={type} value={editCliente[key] || ''}
+                        onChange={e => setEditCliente({ ...editCliente, [key]: e.target.value })}
+                        className="input-field w-full text-sm" />
                     </div>
-                    <div className="md:col-span-2">
-                      <select value={det.talla_individual} onChange={e => updateEditLine(idx, 'talla_individual', e.target.value)} className="input-field w-full text-sm">
-                        <option value="">Talla</option>
-                        {TALLAS.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div className="md:col-span-1">
-                      <input type="number" min="1" value={det.cantidad} onChange={e => updateEditLine(idx, 'cantidad', parseInt(e.target.value) || 1)} className="input-field w-full text-sm text-center" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <input type="number" min="0" value={det.precio_unitario} onChange={e => updateEditLine(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="input-field w-full text-sm" />
-                    </div>
-                    <div className="md:col-span-2 text-right text-sm font-bold">
-                      {fmt(det.cantidad * det.precio_unitario)}
-                    </div>
-                    <div className="md:col-span-1 text-right">
-                      <button onClick={() => removeEditLine(idx)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
-                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Método de pago</label>
+                    <select value={editCliente.metodo_pago || 'EFECTIVO'}
+                      onChange={e => setEditCliente({ ...editCliente, metodo_pago: e.target.value })}
+                      className="input-field w-full text-sm">
+                      {METODOS.map(m => <option key={m}>{m}</option>)}
+                    </select>
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
+                    <input value={editCliente.observaciones || ''}
+                      onChange={e => setEditCliente({ ...editCliente, observaciones: e.target.value })}
+                      className="input-field w-full text-sm" placeholder="Notas..." />
+                  </div>
+                </div>
+              )}
 
-              <button onClick={addEditLine} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-                <Plus size={14} /> Agregar producto
-              </button>
+              {/* Tab: Productos */}
+              {editTab === 'productos' && (
+                <div className="space-y-2">
+                  <div className="hidden md:grid grid-cols-12 gap-2 px-2 text-xs font-medium text-gray-500 uppercase">
+                    <div className="col-span-4">Producto</div>
+                    <div className="col-span-2">Talla</div>
+                    <div className="col-span-1">Cant.</div>
+                    <div className="col-span-2">Precio</div>
+                    <div className="col-span-2 text-right">Subtotal</div>
+                    <div className="col-span-1"></div>
+                  </div>
 
-              <div className="text-right text-lg font-bold border-t pt-3">
-                Nuevo Total: {fmt(editDetalles.reduce((s, d) => s + (d.cantidad * d.precio_unitario), 0))}
-              </div>
+                  {editDetalles.map((det, idx) => {
+                    const prod = productos.find(p => String(p.id_producto) === String(det.id_producto))
+                    const tallas = prod?.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
+                    return (
+                      <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-2 p-2 bg-gray-50 rounded items-center">
+                        <div className="md:col-span-4">
+                          <select value={det.id_producto} onChange={e => updateEditLine(idx, 'id_producto', e.target.value)} className="input-field w-full text-sm">
+                            <option value="">Producto...</option>
+                            {productos.map(p => <option key={p.id_producto} value={p.id_producto}>{p.nombre}</option>)}
+                          </select>
+                        </div>
+                        <div className="md:col-span-2">
+                          <select value={det.talla_individual} onChange={e => updateEditLine(idx, 'talla_individual', e.target.value)} className="input-field w-full text-sm">
+                            <option value="">Talla</option>
+                            {tallas.map(t => <option key={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div className="md:col-span-1">
+                          <input type="number" min="1" value={det.cantidad} onChange={e => updateEditLine(idx, 'cantidad', parseInt(e.target.value) || 1)} className="input-field w-full text-sm text-center" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <input type="number" min="0" value={det.precio_unitario} onChange={e => updateEditLine(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="input-field w-full text-sm" />
+                        </div>
+                        <div className="md:col-span-2 text-right text-sm font-bold">
+                          {fmt(det.cantidad * det.precio_unitario)}
+                        </div>
+                        <div className="md:col-span-1 text-right">
+                          <button onClick={() => removeEditLine(idx)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    )
+                  })}
 
-              <div className="flex gap-3 justify-end">
+                  <button onClick={addEditLine} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                    <Plus size={14} /> Agregar producto
+                  </button>
+
+                  <div className="text-right text-lg font-bold border-t pt-3">
+                    Nuevo Total: {fmt(editDetalles.reduce((s, d) => s + (d.cantidad * d.precio_unitario), 0))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end border-t pt-4">
                 <button onClick={() => setShowEditProducts(false)} className="btn-secondary">Cancelar</button>
                 <button onClick={guardarEditProducts} disabled={savingEdit} className="btn-primary flex items-center gap-2">
                   <Save size={16} /> {savingEdit ? 'Guardando...' : 'Guardar Cambios'}

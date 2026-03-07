@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save, Users, KeyRound, Building2 } from 'lucide-react'
+import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save, Users, KeyRound, Building2, Eye, EyeOff } from 'lucide-react'
 
 const TABS = [
   { id: 'colegios', label: 'Colegios', icon: School, color: 'blue' },
@@ -58,6 +58,10 @@ export default function Configuracion() {
   // ── Empresa ──
   const [empresaForm, setEmpresaForm] = useState(cargarEmpresa)
   const [empresaSaved, setEmpresaSaved] = useState(false)
+
+  // ── Visibilidad contraseñas ──
+  const [showPwdCreate, setShowPwdCreate] = useState(false)
+  const [showPwdChange, setShowPwdChange] = useState(false)
 
   useEffect(() => {
     loadColegios()
@@ -458,8 +462,15 @@ export default function Configuracion() {
                 </div>
                 <div className="w-44">
                   <label className="text-xs text-gray-500 mb-1 block">Contraseña *</label>
-                  <input type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})}
-                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Mín. 6 caracteres" />
+                  <div className="relative">
+                    <input type={showPwdCreate ? 'text' : 'password'} value={userForm.password}
+                      onChange={e => setUserForm({...userForm, password: e.target.value})}
+                      className="w-full border rounded-lg px-3 py-2 text-sm pr-8" placeholder="Mín. 6 caracteres" />
+                    <button type="button" onClick={() => setShowPwdCreate(v => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPwdCreate ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
                 </div>
                 <div className="w-36">
                   <label className="text-xs text-gray-500 mb-1 block">Rol</label>
@@ -494,10 +505,22 @@ export default function Configuracion() {
                   <span className="text-purple-600 font-bold">— {pwdModal.usuario}</span>
                 </h3>
                 <form onSubmit={cambiarPassword} className="space-y-3">
-                  <input type="password" value={nuevaPwd} onChange={e => setNuevaPwd(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nueva contraseña (mín. 6 caracteres)" autoFocus />
+                  <div className="relative">
+                    <input type={showPwdChange ? 'text' : 'password'} value={nuevaPwd}
+                      onChange={e => setNuevaPwd(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm pr-10" placeholder="Nueva contraseña (mín. 6 caracteres)" autoFocus />
+                    <button type="button" onClick={() => setShowPwdChange(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPwdChange ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {nuevaPwd && (
+                    <p className="text-xs text-gray-500">
+                      Contraseña: <span className="font-mono font-bold text-gray-800">{showPwdChange ? nuevaPwd : '••••••••'}</span>
+                    </p>
+                  )}
                   <div className="flex gap-2 justify-end">
-                    <button type="button" onClick={() => { setPwdModal(null); setNuevaPwd('') }}
+                    <button type="button" onClick={() => { setPwdModal(null); setNuevaPwd(''); setShowPwdChange(false) }}
                       className="px-4 py-2 text-sm text-gray-500 border rounded-lg hover:bg-gray-50">Cancelar</button>
                     <button type="submit" className="px-4 py-2 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600">Guardar</button>
                   </div>
