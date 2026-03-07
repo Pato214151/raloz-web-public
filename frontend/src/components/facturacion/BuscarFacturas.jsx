@@ -212,6 +212,7 @@ export default function BuscarFacturas() {
       precio_unitario: d.precio_unitario,
     })))
     setEditCliente({
+      numero_factura: selected.numero_factura || '',
       cliente_nombre: selected.cliente_nombre || '',
       cliente_telefono: selected.cliente_telefono || '',
       cliente_email: selected.cliente_email || '',
@@ -664,6 +665,16 @@ export default function BuscarFacturas() {
               {/* Tab: Datos del Cliente */}
               {editTab === 'cliente' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {isAdmin() && (
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        # Número de factura <span className="text-purple-600 font-semibold">(solo admin)</span>
+                      </label>
+                      <input type="text" value={editCliente.numero_factura || ''}
+                        onChange={e => setEditCliente({ ...editCliente, numero_factura: e.target.value })}
+                        className="input-field w-full text-sm font-mono" />
+                    </div>
+                  )}
                   {[
                     { label: 'Nombre del cliente *', key: 'cliente_nombre', type: 'text' },
                     { label: 'Teléfono', key: 'cliente_telefono', type: 'text' },

@@ -231,6 +231,15 @@ def editar_factura(id_factura):
     data = request.get_json()
 
     try:
+        # Actualizar número de factura (solo admin)
+        if 'numero_factura' in data and data['numero_factura'].strip():
+            nuevo_num = sanitize_string(data['numero_factura'], 50)
+            if nuevo_num != factura.numero_factura:
+                existe = Factura.query.filter_by(numero_factura=nuevo_num).first()
+                if existe:
+                    return jsonify({'error': f'Ya existe una factura con el número {nuevo_num}'}), 409
+                factura.numero_factura = nuevo_num
+
         # Actualizar datos del cliente si se envían
         campos_cliente = ['cliente_nombre', 'cliente_telefono', 'cliente_email',
                           'cliente_direccion', 'cliente_nit', 'genero_estudiante',

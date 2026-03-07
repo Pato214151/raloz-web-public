@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Package, Plus, X, Printer, AlertTriangle, Activity, ChevronRight, Trash2, Edit2, Check } from 'lucide-react'
@@ -36,6 +37,7 @@ function fmtFecha(iso) {
 }
 
 export default function StockView() {
+  const { isAdmin } = useAuth()
   const [tab, setTab] = useState('inventario')
 
   // ── Inventario ──
@@ -257,12 +259,14 @@ export default function StockView() {
           }`}>
           <Package size={15} /> Inventario
         </button>
-        <button onClick={() => setTab('actividad')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-            tab === 'actividad' ? 'border-purple-500 text-purple-600 bg-purple-50' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}>
-          <Activity size={15} /> Actividad del equipo
-        </button>
+        {isAdmin() && (
+          <button onClick={() => setTab('actividad')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+              tab === 'actividad' ? 'border-purple-500 text-purple-600 bg-purple-50' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}>
+            <Activity size={15} /> Actividad del equipo
+          </button>
+        )}
       </div>
 
       {/* ════════════════ TAB INVENTARIO ════════════════ */}
@@ -419,7 +423,7 @@ export default function StockView() {
       )}
 
       {/* ════════════════ TAB ACTIVIDAD ════════════════ */}
-      {tab === 'actividad' && (
+      {tab === 'actividad' && isAdmin() && (
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
