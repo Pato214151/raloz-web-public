@@ -37,11 +37,12 @@ export default function Clientes() {
     }
   }
 
-  const loadClientes = async (q = '') => {
+  const loadClientes = async (q = '', showToast = false) => {
     setLoading(true)
     try {
       const res = await api.get('/clientes', { params: { buscar: q, per_page: 100 } })
       setClientes(res.data.clientes || [])
+      if (showToast) toast.success('Lista actualizada')
     } catch {
       toast.error('Error cargando clientes')
     } finally {
@@ -237,7 +238,7 @@ export default function Clientes() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
         <div className="flex gap-2">
-          <button onClick={() => { setBuscar(''); loadClientes('') }} className="btn-secondary flex items-center gap-2" title="Actualizar lista"><RefreshCw size={16} /> Actualizar</button>
+          <button onClick={() => { setBuscar(''); loadClientes('', true) }} className="btn-secondary flex items-center gap-2" title="Actualizar lista"><RefreshCw size={16} /> Actualizar</button>
           <button onClick={() => openForm()} className="btn-primary flex items-center gap-2"><Plus size={18} /> Nuevo Cliente</button>
         </div>
       </div>
