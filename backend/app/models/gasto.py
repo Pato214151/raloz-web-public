@@ -11,6 +11,7 @@ class Gasto(db.Model):
     valor = db.Column(db.Float, nullable=False)
     metodo_pago = db.Column(db.String(50), nullable=False)
     categoria = db.Column(db.String(100), default='Otros')
+    tipo_gasto = db.Column(db.String(20), default='TIENDA')  # 'TIENDA' o 'EMPRESA'
     usuario_registro = db.Column(db.String(100), nullable=False)
     fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -26,6 +27,7 @@ class Gasto(db.Model):
             'valor': self.valor,
             'metodo_pago': self.metodo_pago,
             'categoria': self.categoria or 'Otros',
+            'tipo_gasto': self.tipo_gasto or 'TIENDA',
             'usuario_registro': self.usuario_registro,
             'fecha_registro': self.fecha_registro.isoformat() if self.fecha_registro else None,
         }
