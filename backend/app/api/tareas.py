@@ -9,8 +9,75 @@ from app.models import Tarea, Usuario
 from app.utils.decorators import rol_requerido, get_current_identity
 from app.utils.validators import sanitize_string, validate_date
 from datetime import datetime
+from sqlalchemy import text
 
 tareas_bp = Blueprint('tareas', __name__)
+
+# Cache: evita consultar la BD en cada request
+_prioridad_existe = None
+
+
+def _tiene_columna_prioridad():
+    global _prioridad_existe
+    if _prioridad_existe is not None:
+        return _prioridad_existe
+    try:
+        db.session.execute(text("SELECT prioridad FROM tareas LIMIT 1"))
+        _prioridad_existe = True
+    except Exception:
+        db.session.rollback()
+        _prioridad_existe = False
+    return _prioridad_existe
+
+
+def _row_to_dict(row):
+    keys = list(row._fields) if hasattr(row, '_fields') else list(row.keys())
+    d = dict(zip(keys, tuple(row)))
+    for k in ('fecha_vencimiento', 'fecha_completada', 'fecha_creacion'):
+        val = d.get(k)
+        if val and hasattr(val, 'isoformat'):
+            d[k] = val.isoformat()
+        elif val is None:
+            d[k] = None
+    d.setdefault('prioridad', 'MEDIA')
+    d.setdefault('asignada_a_nombre', None)
+    d.setdefault('creada_por_nombre', None)
+    d.setdefault('completada_por_nombre', None)
+    return d
+
+
+def _tareas_sql(filtro_usuario_id=None, solo_pendientes=False, id_tarea=None):
+    """SQL directo para cuando no existe la columna prioridad"""
+    where = []
+    params = {}
+    if filtro_usuario_id is not None:
+        where.append("(t.asignada_a = :uid OR t.asignada_a IS NULL)")
+        params['uid'] = filtro_usuario_id
+    if solo_pendientes:
+        where.append("t.completada = false")
+    if id_tarea is not None:
+        where.append("t.id_tarea = :id_tarea")
+        params['id_tarea'] = id_tarea
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    sql = text(f"""
+        SELECT t.id_tarea, t.titulo, t.descripcion,
+               t.fecha_vencimiento, t.asignada_a, t.creada_por,
+               t.completada, t.completada_por,
+               t.fecha_completada, t.fecha_creacion,
+               u1.usuario AS asignada_a_nombre,
+               u2.usuario AS creada_por_nombre,
+               u3.usuario AS completada_por_nombre
+        FROM tareas t
+        LEFT JOIN usuarios u1 ON t.asignada_a = u1.id_usuario
+        LEFT JOIN usuarios u2 ON t.creada_por = u2.id_usuario
+        LEFT JOIN usuarios u3 ON t.completada_por = u3.id_usuario
+        {where_sql}
+        ORDER BY t.completada ASC, t.fecha_creacion DESC
+    """)
+    rows = db.session.execute(sql, params).fetchall()
+    return [_row_to_dict(r) for r in rows]
 
 
 @tareas_bp.route('', methods=['GET'])
@@ -19,21 +86,20 @@ def listar_tareas():
     identity = get_current_identity()
     rol = identity.get('rol')
     id_usuario = identity.get('id_usuario')
-
     solo_pendientes = request.args.get('pendientes', 'false').lower() == 'true'
 
-    query = Tarea.query
+    if not _tiene_columna_prioridad():
+        uid = id_usuario if rol == 'vendedor' else None
+        return jsonify(_tareas_sql(filtro_usuario_id=uid, solo_pendientes=solo_pendientes))
 
-    # Vendedor solo ve sus tareas (asignadas a él o a todos)
+    query = Tarea.query
     if rol == 'vendedor':
         query = query.filter(
             db.or_(Tarea.asignada_a == id_usuario, Tarea.asignada_a == None)
         )
-
     if solo_pendientes:
         query = query.filter(Tarea.completada == False)
 
-    # Orden: pendientes primero, luego por prioridad (ALTA > MEDIA > BAJA), luego por vencimiento
     from sqlalchemy import case
     prioridad_order = case(
         (Tarea.prioridad == 'ALTA', 1),
@@ -47,7 +113,6 @@ def listar_tareas():
         Tarea.fecha_vencimiento.asc().nullslast(),
         Tarea.fecha_creacion.desc()
     ).all()
-
     return jsonify([t.to_dict() for t in tareas])
 
 
@@ -64,7 +129,7 @@ def crear_tarea():
 
     descripcion = sanitize_string(data.get('descripcion', ''), 1000).strip() or None
     fecha_venc = validate_date(data.get('fecha_vencimiento')) if data.get('fecha_vencimiento') else None
-    asignada_a = data.get('asignada_a')  # None = todos
+    asignada_a = data.get('asignada_a')
     prioridad = sanitize_string(data.get('prioridad', 'MEDIA'), 10)
     if prioridad not in ('ALTA', 'MEDIA', 'BAJA'):
         prioridad = 'MEDIA'
@@ -73,16 +138,38 @@ def crear_tarea():
         if not Usuario.query.get(asignada_a):
             return jsonify({'error': 'Usuario no encontrado'}), 404
 
-    tarea = Tarea(
-        titulo=titulo,
-        descripcion=descripcion,
-        prioridad=prioridad,
-        fecha_vencimiento=fecha_venc,
-        asignada_a=asignada_a if asignada_a else None,
-        creada_por=identity['id_usuario'],
-    )
-    db.session.add(tarea)
-    db.session.commit()
+    if not _tiene_columna_prioridad():
+        # INSERT sin columna prioridad
+        sql = text("""
+            INSERT INTO tareas (titulo, descripcion, fecha_vencimiento, asignada_a, creada_por, completada, fecha_creacion)
+            VALUES (:titulo, :descripcion, :fecha_venc, :asignada_a, :creada_por, false, NOW())
+            RETURNING id_tarea
+        """)
+        result = db.session.execute(sql, {
+            'titulo': titulo, 'descripcion': descripcion,
+            'fecha_venc': fecha_venc, 'asignada_a': asignada_a if asignada_a else None,
+            'creada_por': identity['id_usuario'],
+        })
+        db.session.commit()
+        id_nuevo = result.fetchone()[0]
+        rows = _tareas_sql(id_tarea=id_nuevo)
+        return jsonify(rows[0] if rows else {}), 201
+
+    try:
+        tarea = Tarea(
+            titulo=titulo,
+            descripcion=descripcion,
+            prioridad=prioridad,
+            fecha_vencimiento=fecha_venc,
+            asignada_a=asignada_a if asignada_a else None,
+            creada_por=identity['id_usuario'],
+        )
+        db.session.add(tarea)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al guardar tarea: {str(e)}'}), 500
+
     return jsonify(tarea.to_dict()), 201
 
 
@@ -93,9 +180,29 @@ def completar_tarea(id_tarea):
     id_usuario = identity.get('id_usuario')
     rol = identity.get('rol')
 
-    tarea = Tarea.query.get_or_404(id_tarea)
+    if not _tiene_columna_prioridad():
+        # Usar SQL directo
+        row = db.session.execute(
+            text("SELECT id_tarea, asignada_a, completada FROM tareas WHERE id_tarea = :id"),
+            {'id': id_tarea}
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Tarea no encontrada'}), 404
+        if rol == 'vendedor' and row[1] is not None and row[1] != id_usuario:
+            return jsonify({'error': 'No tienes permiso para esta tarea'}), 403
 
-    # Vendedor solo puede completar tareas que le corresponden
+        nueva_completada = not row[2]
+        ahora = datetime.utcnow() if nueva_completada else None
+        cp = id_usuario if nueva_completada else None
+        db.session.execute(text("""
+            UPDATE tareas SET completada = :c, completada_por = :cp, fecha_completada = :fc
+            WHERE id_tarea = :id
+        """), {'c': nueva_completada, 'cp': cp, 'fc': ahora, 'id': id_tarea})
+        db.session.commit()
+        rows = _tareas_sql(id_tarea=id_tarea)
+        return jsonify(rows[0] if rows else {})
+
+    tarea = Tarea.query.get_or_404(id_tarea)
     if rol == 'vendedor':
         if tarea.asignada_a is not None and tarea.asignada_a != id_usuario:
             return jsonify({'error': 'No tienes permiso para esta tarea'}), 403
@@ -116,6 +223,15 @@ def completar_tarea(id_tarea):
 @jwt_required()
 @rol_requerido('administrador')
 def eliminar_tarea(id_tarea):
+    if not _tiene_columna_prioridad():
+        result = db.session.execute(
+            text("DELETE FROM tareas WHERE id_tarea = :id"), {'id': id_tarea}
+        )
+        db.session.commit()
+        if result.rowcount == 0:
+            return jsonify({'error': 'Tarea no encontrada'}), 404
+        return jsonify({'ok': True})
+
     tarea = Tarea.query.get_or_404(id_tarea)
     db.session.delete(tarea)
     db.session.commit()
