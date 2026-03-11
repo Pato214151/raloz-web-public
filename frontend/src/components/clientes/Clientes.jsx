@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Users, Plus, Search, Edit, X, Eye, Printer, Download } from 'lucide-react'
+import { Users, Plus, Search, Edit, X, Eye, Printer, Download, RefreshCw } from 'lucide-react'
 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -236,7 +236,10 @@ export default function Clientes() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
-        <button onClick={() => openForm()} className="btn-primary flex items-center gap-2"><Plus size={18} /> Nuevo Cliente</button>
+        <div className="flex gap-2">
+          <button onClick={() => { setBuscar(''); loadClientes('') }} className="btn-secondary flex items-center gap-2" title="Actualizar lista"><RefreshCw size={16} /> Actualizar</button>
+          <button onClick={() => openForm()} className="btn-primary flex items-center gap-2"><Plus size={18} /> Nuevo Cliente</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

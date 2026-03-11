@@ -36,8 +36,9 @@ def listar_tareas():
     # Orden: pendientes primero, luego por prioridad (ALTA > MEDIA > BAJA), luego por vencimiento
     from sqlalchemy import case
     prioridad_order = case(
-        {'ALTA': 1, 'MEDIA': 2, 'BAJA': 3},
-        value=Tarea.prioridad,
+        (Tarea.prioridad == 'ALTA', 1),
+        (Tarea.prioridad == 'MEDIA', 2),
+        (Tarea.prioridad == 'BAJA', 3),
         else_=2
     )
     tareas = query.order_by(

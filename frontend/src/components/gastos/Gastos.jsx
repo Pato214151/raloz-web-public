@@ -50,7 +50,7 @@ export default function Gastos() {
     valor: '',
     metodo_pago: 'EFECTIVO',
     categoria: '',
-    tipo_gasto: 'TIENDA',
+    tipo_gasto: 'EMPRESA',
     fecha: new Date().toISOString().split('T')[0]
   })
 
@@ -94,7 +94,7 @@ export default function Gastos() {
         valor: '',
         metodo_pago: 'EFECTIVO',
         categoria: '',
-        tipo_gasto: 'TIENDA',
+        tipo_gasto: 'EMPRESA',
         fecha: new Date().toISOString().split('T')[0]
       })
     }
