@@ -105,6 +105,7 @@ def create_app(config_name=None):
     from app.api.ventas import ventas_bp
     from app.api.metodos_pago import metodos_pago_bp
     from app.api.tareas import tareas_bp
+    from app.api.public import public_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -126,6 +127,65 @@ def create_app(config_name=None):
     app.register_blueprint(ventas_bp, url_prefix='/api/ventas')
     app.register_blueprint(metodos_pago_bp, url_prefix='/api/metodos-pago')
     app.register_blueprint(tareas_bp, url_prefix='/api/tareas')
+    app.register_blueprint(public_bp, url_prefix='/api/public')
+
+    # ── Migraciones automáticas al arrancar ──
+    with app.app_context():
+        try:
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                # Columnas existentes
+                conn.execute(text(
+                    "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS canal VARCHAR(20) DEFAULT 'PRESENCIAL'"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE gastos ADD COLUMN IF NOT EXISTS tipo_gasto VARCHAR(20) DEFAULT 'TIENDA'"
+                ))
+                # Prioridad en tareas
+                conn.execute(text(
+                    "ALTER TABLE tareas ADD COLUMN IF NOT EXISTS prioridad VARCHAR(10) DEFAULT 'MEDIA'"
+                ))
+                conn.execute(text(
+                    "UPDATE tareas SET prioridad = 'MEDIA' WHERE prioridad IS NULL"
+                ))
+                # Tabla caja diaria
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS caja_diaria (
+                        id_caja          SERIAL PRIMARY KEY,
+                        fecha_apertura   TIMESTAMP NOT NULL,
+                        fecha_cierre     TIMESTAMP,
+                        usuario_apertura VARCHAR(100) NOT NULL,
+                        usuario_cierre   VARCHAR(100),
+                        monto_inicial    FLOAT DEFAULT 0,
+                        total_ventas     FLOAT DEFAULT 0,
+                        total_gastos     FLOAT DEFAULT 0,
+                        monto_esperado   FLOAT DEFAULT 0,
+                        monto_real       FLOAT DEFAULT 0,
+                        diferencia       FLOAT DEFAULT 0,
+                        estado           VARCHAR(20) DEFAULT 'ABIERTA',
+                        observaciones    TEXT
+                    )
+                """))
+                # Tabla movimientos de caja
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS movimientos_caja (
+                        id_movimiento SERIAL PRIMARY KEY,
+                        id_caja       INTEGER NOT NULL REFERENCES caja_diaria(id_caja),
+                        tipo          VARCHAR(50) NOT NULL,
+                        concepto      VARCHAR(500),
+                        valor         FLOAT NOT NULL,
+                        metodo_pago   VARCHAR(50),
+                        referencia    VARCHAR(200),
+                        usuario       VARCHAR(100) NOT NULL,
+                        fecha_hora    TIMESTAMP DEFAULT NOW()
+                    )
+                """))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_movimientos_caja ON movimientos_caja(id_caja)"
+                ))
+                conn.commit()
+        except Exception:
+            pass
 
     # ── Health check ──
     @app.route('/api/health')
