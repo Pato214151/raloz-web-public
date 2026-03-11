@@ -8,6 +8,7 @@ class Tarea(db.Model):
     id_tarea = db.Column(db.Integer, primary_key=True)
     titulo = db.Column(db.String(200), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
+    prioridad = db.Column(db.String(10), default='MEDIA', nullable=True)  # ALTA, MEDIA, BAJA
     fecha_vencimiento = db.Column(db.Date, nullable=True)
     # NULL = para todos los vendedores; un id = asignada a ese usuario
     asignada_a = db.Column(db.Integer, db.ForeignKey('usuarios.id_usuario'), nullable=True)
@@ -26,6 +27,7 @@ class Tarea(db.Model):
             'id_tarea': self.id_tarea,
             'titulo': self.titulo,
             'descripcion': self.descripcion,
+            'prioridad': self.prioridad or 'MEDIA',
             'fecha_vencimiento': self.fecha_vencimiento.isoformat() if self.fecha_vencimiento else None,
             'asignada_a': self.asignada_a,
             'asignada_a_nombre': self.asignado.usuario if self.asignado else None,

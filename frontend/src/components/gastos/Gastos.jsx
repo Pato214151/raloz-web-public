@@ -1,12 +1,38 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, Wallet, X, Edit, TrendingDown, Calendar, Printer, Search } from 'lucide-react'
+import { Plus, Wallet, X, Edit, Printer, Store, Briefcase, AlertTriangle } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
-const CATEGORIAS = ['Servicios', 'Mantenimiento', 'Suministros', 'Personal', 'Impuestos', 'Otros']
+const CATEGORIAS = [
+  'Nómina',
+  'Costo Mercancía',
+  'Arriendo',
+  'Servicios Públicos',
+  'Transporte',
+  'Alimentación',
+  'Suministros',
+  'Mantenimiento',
+  'Impuestos',
+  'Marketing',
+  'Otros',
+]
 const METODOS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
+
+const CATEGORIA_HINTS = {
+  'Nómina': 'Sueldos, salarios y pagos a empleados',
+  'Costo Mercancía': 'Compras de producto: telas, bordados, insumos de fabricación',
+  'Arriendo': 'Pago de arriendo del local',
+  'Servicios Públicos': 'Agua, luz, internet, teléfono',
+  'Transporte': 'Gasolina, parqueadero, fletes',
+  'Alimentación': 'Almuerzos y refrigerios del equipo',
+  'Suministros': 'Papelería, empaques, materiales de oficina',
+  'Mantenimiento': 'Reparaciones, mantenimiento de equipos',
+  'Impuestos': 'ICA, retenciones, obligaciones tributarias',
+  'Marketing': 'Publicidad, redes sociales, volantes',
+  'Otros': '',
+}
 
 export default function Gastos() {
   const [gastos, setGastos] = useState([])
@@ -17,18 +43,20 @@ export default function Gastos() {
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroMetodo, setFiltroMetodo] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('')
   const [buscarDesc, setBuscarDesc] = useState('')
   const [form, setForm] = useState({
     descripcion: '',
     valor: '',
     metodo_pago: 'EFECTIVO',
-    categoria: 'Otros',
+    categoria: '',
+    tipo_gasto: 'TIENDA',
     fecha: new Date().toISOString().split('T')[0]
   })
 
   useEffect(() => {
     loadGastos()
-  }, [filtroFechaDesde, filtroFechaHasta, filtroCategoria, filtroMetodo])
+  }, [filtroFechaDesde, filtroFechaHasta, filtroCategoria, filtroMetodo, filtroTipo])
 
   const loadGastos = async () => {
     setLoading(true)
@@ -38,7 +66,8 @@ export default function Gastos() {
       if (filtroFechaHasta) params.fecha_hasta = filtroFechaHasta
       if (filtroCategoria) params.categoria = filtroCategoria
       if (filtroMetodo) params.metodo_pago = filtroMetodo
-      const res = await api.get('/gastos', { params: { ...params, per_page: 200 } })
+      if (filtroTipo) params.tipo_gasto = filtroTipo
+      const res = await api.get('/gastos', { params: { ...params, per_page: 500 } })
       setGastos(res.data.gastos || [])
     } catch (err) {
       toast.error('Error cargando gastos')
@@ -55,6 +84,7 @@ export default function Gastos() {
         valor: gasto.valor.toString(),
         metodo_pago: gasto.metodo_pago || 'EFECTIVO',
         categoria: gasto.categoria || 'Otros',
+        tipo_gasto: gasto.tipo_gasto || 'TIENDA',
         fecha: gasto.fecha || new Date().toISOString().split('T')[0]
       })
     } else {
@@ -63,7 +93,8 @@ export default function Gastos() {
         descripcion: '',
         valor: '',
         metodo_pago: 'EFECTIVO',
-        categoria: 'Otros',
+        categoria: '',
+        tipo_gasto: 'TIENDA',
         fecha: new Date().toISOString().split('T')[0]
       })
     }
@@ -77,6 +108,7 @@ export default function Gastos() {
 
   const guardarGasto = async (e) => {
     e.preventDefault()
+    if (!form.categoria) { toast.error('Selecciona una categoría'); return }
     try {
       const datos = { ...form, valor: parseFloat(form.valor) }
       if (editingId) {
@@ -112,6 +144,8 @@ export default function Gastos() {
 
   // Cálculos
   const totalGastos = gastosFiltered.reduce((sum, g) => sum + (g.valor || 0), 0)
+  const totalTienda = gastosFiltered.filter(g => (g.tipo_gasto || 'TIENDA') === 'TIENDA').reduce((sum, g) => sum + g.valor, 0)
+  const totalEmpresa = gastosFiltered.filter(g => g.tipo_gasto === 'EMPRESA').reduce((sum, g) => sum + g.valor, 0)
   const gastosPorCategoria = CATEGORIAS.map(cat => ({
     categoria: cat,
     total: gastosFiltered.filter(g => g.categoria === cat).reduce((sum, g) => sum + g.valor, 0)
@@ -136,22 +170,34 @@ export default function Gastos() {
       </div>
 
       {/* Stats */}
-      <div className="card">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-sm text-gray-600">Total Gastos</p>
-            <p className="text-3xl font-bold text-red-600">{formatMoney(totalGastos)}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="card text-center">
+          <p className="text-xs text-gray-500 mb-1">Total Gastos</p>
+          <p className="text-2xl font-bold text-red-600">{formatMoney(totalGastos)}</p>
+          <p className="text-xs text-gray-400 mt-1">{gastosFiltered.length} registros</p>
+        </div>
+        <div className="card text-center border-l-4 border-orange-400">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Store size={14} className="text-orange-500" />
+            <p className="text-xs text-orange-600 font-semibold">Gastos Almacén</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-600">Número de Gastos</p>
-            <p className="text-3xl font-bold text-gray-700">{gastosFiltered.length}</p>
+          <p className="text-2xl font-bold text-orange-600">{formatMoney(totalTienda)}</p>
+          <p className="text-xs text-gray-400 mt-1">operación diaria</p>
+        </div>
+        <div className="card text-center border-l-4 border-blue-400">
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <Briefcase size={14} className="text-blue-500" />
+            <p className="text-xs text-blue-600 font-semibold">Gastos Empresa</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-600">Gasto Promedio</p>
-            <p className="text-3xl font-bold text-blue-600">
-              {gastosFiltered.length > 0 ? formatMoney(totalGastos / gastosFiltered.length) : '$0'}
-            </p>
-          </div>
+          <p className="text-2xl font-bold text-blue-600">{formatMoney(totalEmpresa)}</p>
+          <p className="text-xs text-gray-400 mt-1">empresariales</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-xs text-gray-500 mb-1">Gasto Promedio</p>
+          <p className="text-2xl font-bold text-gray-700">
+            {gastosFiltered.length > 0 ? formatMoney(totalGastos / gastosFiltered.length) : '$0'}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">por registro</p>
         </div>
       </div>
 
@@ -181,10 +227,18 @@ export default function Gastos() {
             </select>
           </div>
           <div>
+            <label className="block text-xs text-gray-600 mb-1">Tipo</label>
+            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className="input-field text-sm">
+              <option value="">Todos</option>
+              <option value="TIENDA">Almacén</option>
+              <option value="EMPRESA">Empresa</option>
+            </select>
+          </div>
+          <div>
             <label className="block text-xs text-gray-600 mb-1">Buscar</label>
             <input type="text" value={buscarDesc} onChange={(e) => setBuscarDesc(e.target.value)} placeholder="Descripción..." className="input-field text-sm w-36" />
           </div>
-          <button onClick={() => { setFiltroFechaDesde(''); setFiltroFechaHasta(''); setFiltroCategoria(''); setFiltroMetodo(''); setBuscarDesc('') }} className="btn-secondary text-sm">Limpiar</button>
+          <button onClick={() => { setFiltroFechaDesde(''); setFiltroFechaHasta(''); setFiltroCategoria(''); setFiltroMetodo(''); setFiltroTipo(''); setBuscarDesc('') }} className="btn-secondary text-sm">Limpiar</button>
           <button onClick={() => {
             if (!gastos.length) return
             const w = window.open('', '_blank')
@@ -238,6 +292,7 @@ export default function Gastos() {
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-4 py-3 text-left text-gray-600 font-medium">Fecha</th>
                 <th className="px-4 py-3 text-left text-gray-600 font-medium">Descripción</th>
+                <th className="px-4 py-3 text-left text-gray-600 font-medium">Tipo</th>
                 <th className="px-4 py-3 text-left text-gray-600 font-medium">Categoría</th>
                 <th className="px-4 py-3 text-left text-gray-600 font-medium">Método</th>
                 <th className="px-4 py-3 text-right text-gray-600 font-medium">Valor</th>
@@ -249,6 +304,12 @@ export default function Gastos() {
                 <tr key={g.id_gasto} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{g.fecha}</td>
                   <td className="px-4 py-3 text-gray-700">{g.descripcion}</td>
+                  <td className="px-4 py-3">
+                    {(g.tipo_gasto || 'TIENDA') === 'TIENDA'
+                      ? <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-medium flex items-center gap-1 w-fit"><Store size={11} /> Almacén</span>
+                      : <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-medium flex items-center gap-1 w-fit"><Briefcase size={11} /> Empresa</span>
+                    }
+                  </td>
                   <td className="px-4 py-3">
                     <span className="bg-gray-100 px-2 py-1 rounded text-xs">{g.categoria || '—'}</span>
                   </td>
@@ -316,16 +377,42 @@ export default function Gastos() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Categoría</label>
+                <label className="block text-sm font-medium mb-1">¿Es gasto del almacén o empresarial?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button"
+                    onClick={() => setForm({...form, tipo_gasto: 'TIENDA'})}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors ${form.tipo_gasto === 'TIENDA' ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                    <Store size={15} /> Almacén
+                  </button>
+                  <button type="button"
+                    onClick={() => setForm({...form, tipo_gasto: 'EMPRESA'})}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors ${form.tipo_gasto === 'EMPRESA' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                    <Briefcase size={15} /> Empresa
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Categoría *</label>
                 <select
+                  required
                   value={form.categoria}
                   onChange={e => setForm({...form, categoria: e.target.value})}
-                  className="input-field w-full"
+                  className={`input-field w-full ${!form.categoria ? 'border-amber-400' : ''}`}
                 >
+                  <option value="">— Selecciona una categoría —</option>
                   {CATEGORIAS.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
+                {form.categoria && CATEGORIA_HINTS[form.categoria] && (
+                  <p className="text-xs text-gray-400 mt-1">{CATEGORIA_HINTS[form.categoria]}</p>
+                )}
+                {form.categoria === 'Otros' && (
+                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                    <AlertTriangle size={11} /> ¿Hay alguna categoría más específica? Usar "Otros" dificulta el análisis contable.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -339,6 +426,11 @@ export default function Gastos() {
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
+                {(form.metodo_pago === 'NEQUI' || form.metodo_pago === 'DAVIPLATA') && (
+                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                    <AlertTriangle size={11} /> Verifica que este sea un gasto real y no un pago de cliente registrado por error.
+                  </p>
+                )}
               </div>
 
               <div>

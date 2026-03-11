@@ -28,6 +28,7 @@ export default function Facturacion() {
     domicilio: false,
     valor_domicilio: '',
     abono: '',
+    descuento: '',
     genero_estudiante: '',
     observaciones: '',
   })
@@ -112,7 +113,8 @@ export default function Facturacion() {
 
   const subtotal = detalles.reduce((sum, d) => sum + (d.cantidad * d.precio_unitario), 0)
   const valorDomicilio = form.domicilio ? (parseFloat(form.valor_domicilio) || 0) : 0
-  const totalConDomicilio = subtotal + valorDomicilio
+  const descuento = parseFloat(form.descuento) || 0
+  const totalConDomicilio = Math.max(0, subtotal - descuento) + valorDomicilio
   const abono = parseFloat(form.abono) || 0
   const saldo = totalConDomicilio - abono
 
@@ -158,6 +160,7 @@ export default function Facturacion() {
         observaciones: form.observaciones,
         numero_factura: form.numero_factura.trim() || undefined,
         domicilio: valorDomicilio,
+        descuento: descuento,
         abono: abono,
         detalles: detalles.map(d => ({
           id_producto: parseInt(d.id_producto),
@@ -178,7 +181,7 @@ export default function Facturacion() {
       setForm(f => ({
         ...f,
         cliente_nombre: '', cliente_telefono: '', cliente_email_user: '',
-        cliente_direccion: '', cliente_nit: '', abono: '',
+        cliente_direccion: '', cliente_nit: '', abono: '', descuento: '',
         genero_estudiante: '', observaciones: '', numero_factura: '',
         domicilio: false, valor_domicilio: '',
       }))
@@ -409,10 +412,17 @@ export default function Facturacion() {
               )}
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descuento</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                <input type="number" min="0" max={subtotal} value={form.descuento} onChange={e => setForm({...form, descuento: e.target.value})} className="input-field pl-7" placeholder="0" />
+              </div>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Abono Inicial</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                <input type="number" min="0" max={subtotal} value={form.abono} onChange={e => setForm({...form, abono: e.target.value})} className="input-field pl-7" placeholder="0" />
+                <input type="number" min="0" max={totalConDomicilio} value={form.abono} onChange={e => setForm({...form, abono: e.target.value})} className="input-field pl-7" placeholder="0" />
               </div>
             </div>
             <div>
@@ -427,6 +437,12 @@ export default function Facturacion() {
               <span className="text-gray-500">Subtotal ({detalles.length} items)</span>
               <span className="font-medium">${subtotal.toLocaleString('es-CO')}</span>
             </div>
+            {descuento > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Descuento</span>
+                <span className="font-medium text-orange-600">-${descuento.toLocaleString('es-CO')}</span>
+              </div>
+            )}
             {valorDomicilio > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Domicilio</span>

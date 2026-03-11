@@ -11,6 +11,8 @@ export default function Reportes() {
   const [tab, setTab] = useState('ventas')
   const [reporte, setReporte] = useState(null)
   const [topProductos, setTopProductos] = useState([])
+  const [gastosCat, setGastosCat] = useState([])
+  const [totalGastos, setTotalGastos] = useState(0)
   const [fechaDesde, setFechaDesde] = useState(new Date().toISOString().slice(0, 8) + '01')
   const [fechaHasta, setFechaHasta] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
@@ -20,12 +22,26 @@ export default function Reportes() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [ventasRes, prodRes] = await Promise.all([
+      const [ventasRes, prodRes, gastosRes] = await Promise.all([
         api.get('/reportes/ventas', { params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta } }),
         api.get('/reportes/productos-mas-vendidos', { params: { limite: 10 } }),
+        api.get('/gastos', { params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, per_page: 500 } }),
       ])
       setReporte(ventasRes.data)
       setTopProductos(prodRes.data.productos || [])
+
+      // Agrupar gastos por categoría
+      const gastos = gastosRes.data.gastos || []
+      const catMap = {}
+      gastos.forEach(g => {
+        const cat = g.categoria || 'Otros'
+        catMap[cat] = (catMap[cat] || 0) + (g.valor || 0)
+      })
+      const catArr = Object.entries(catMap)
+        .map(([categoria, total]) => ({ categoria, total }))
+        .sort((a, b) => b.total - a.total)
+      setGastosCat(catArr)
+      setTotalGastos(gastos.reduce((s, g) => s + (g.valor || 0), 0))
     } catch {
       toast.error('Error cargando reportes')
     } finally {
@@ -109,6 +125,7 @@ export default function Reportes() {
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
         {[
           { id: 'ventas', label: 'Ventas' },
+          { id: 'gastos', label: 'Gastos' },
           { id: 'productos', label: 'Top Productos' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -191,6 +208,81 @@ export default function Reportes() {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+
+      {/* Gastos por Categoría */}
+      {tab === 'gastos' && (
+        <div className="space-y-4">
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Desde</label>
+              <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Hasta</label>
+              <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="input-field" />
+            </div>
+            <button onClick={loadData} disabled={loading} className="btn-primary">Consultar</button>
+          </div>
+
+          <div className="card">
+            <p className="text-sm text-gray-500">Total Gastos en el período</p>
+            <p className="text-3xl font-bold text-red-600">{fmt(totalGastos)}</p>
+          </div>
+
+          {gastosCat.length > 0 ? (
+            <>
+              <div className="card">
+                <h3 className="text-lg font-semibold mb-4">Distribución por Categoría</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={gastosCat} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                      <YAxis type="category" dataKey="categoria" tick={{ fontSize: 11 }} width={130} />
+                      <Tooltip formatter={v => [fmt(v), 'Total']} />
+                      <Bar dataKey="total" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="card">
+                <h3 className="text-lg font-semibold mb-4">Detalle</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left py-3 px-2">Categoría</th>
+                      <th className="text-right py-3 px-2">Total</th>
+                      <th className="text-right py-3 px-2">% del total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gastosCat.map((g, i) => (
+                      <tr key={g.categoria} className="border-b border-gray-100">
+                        <td className="py-2 px-2 font-medium">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                          {g.categoria}
+                        </td>
+                        <td className="py-2 px-2 text-right font-semibold text-red-600">{fmt(g.total)}</td>
+                        <td className="py-2 px-2 text-right text-gray-500">
+                          {totalGastos > 0 ? ((g.total / totalGastos) * 100).toFixed(1) + '%' : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {gastosCat.some(g => g.categoria === 'Otros') && (
+                  <p className="mt-3 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                    ⚠️ Hay gastos en "Otros" — considera reclasificarlos para un mejor análisis contable.
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="card text-center py-12 text-gray-400">No hay gastos en el período seleccionado.</div>
           )}
         </div>
       )}

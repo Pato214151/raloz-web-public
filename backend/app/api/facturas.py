@@ -125,7 +125,8 @@ def crear_factura():
         fecha_factura = validate_date(data.get('fecha_factura', '')) or date.today()
         abono = float(data.get('abono', 0))
         domicilio = float(data.get('domicilio', 0))
-        total_con_domicilio = total + domicilio
+        descuento = max(0, float(data.get('descuento', 0)))
+        total_con_domicilio = max(0, total - descuento) + domicilio
 
         # Crear factura con todos los campos
         factura = Factura(

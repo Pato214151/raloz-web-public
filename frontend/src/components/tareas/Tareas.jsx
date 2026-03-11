@@ -4,8 +4,14 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   CheckSquare, Square, Plus, Trash2, ClipboardList,
-  Calendar, User, ChevronDown, ChevronUp, AlertCircle
+  Calendar, User, ChevronDown, ChevronUp, AlertCircle, Flag
 } from 'lucide-react'
+
+const PRIORIDAD_CONFIG = {
+  ALTA:  { label: 'Alta',  color: 'bg-red-100 text-red-700',    dot: 'bg-red-500' },
+  MEDIA: { label: 'Media', color: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+  BAJA:  { label: 'Baja',  color: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-400' },
+}
 
 const HOY = new Date().toISOString().split('T')[0]
 
@@ -32,7 +38,7 @@ export default function Tareas() {
   const [loading, setLoading] = useState(true)
   const [filtroPendientes, setFiltroPendientes] = useState(false)
   const [mostrarForm, setMostrarForm] = useState(false)
-  const [form, setForm] = useState({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '' })
+  const [form, setForm] = useState({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '', prioridad: 'MEDIA' })
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
@@ -67,11 +73,12 @@ export default function Tareas() {
       await api.post('/tareas', {
         titulo: form.titulo.trim(),
         descripcion: form.descripcion.trim() || null,
+        prioridad: form.prioridad || 'MEDIA',
         fecha_vencimiento: form.fecha_vencimiento || null,
         asignada_a: form.asignada_a ? parseInt(form.asignada_a) : null,
       })
       toast.success('Tarea creada')
-      setForm({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '' })
+      setForm({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '', prioridad: 'MEDIA' })
       setMostrarForm(false)
       cargar()
     } catch (e) {
@@ -166,6 +173,23 @@ export default function Tareas() {
 
           <div className="flex gap-2">
             <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">Prioridad</label>
+              <div className="flex gap-1">
+                {['ALTA', 'MEDIA', 'BAJA'].map(p => {
+                  const cfg = PRIORIDAD_CONFIG[p]
+                  return (
+                    <button key={p} type="button"
+                      onClick={() => setForm({ ...form, prioridad: p })}
+                      className={`flex-1 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors ${
+                        form.prioridad === p ? `${cfg.color} border-current` : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                      }`}>
+                      {cfg.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex-1">
               <label className="block text-xs text-gray-500 mb-1">Fecha límite (opcional)</label>
               <input
                 type="date"
@@ -200,7 +224,7 @@ export default function Tareas() {
               {guardando ? 'Guardando...' : 'Crear tarea'}
             </button>
             <button
-              onClick={() => { setMostrarForm(false); setForm({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '' }) }}
+              onClick={() => { setMostrarForm(false); setForm({ titulo: '', descripcion: '', fecha_vencimiento: '', asignada_a: '', prioridad: 'MEDIA' }) }}
               className="btn-secondary text-sm"
             >
               Cancelar
@@ -294,6 +318,14 @@ function TareaCard({ tarea, esAdmin, onToggle, onEliminar }) {
 
           {/* Meta */}
           <div className="flex flex-wrap items-center gap-2 mt-1.5">
+            {!tarea.completada && tarea.prioridad && tarea.prioridad !== 'MEDIA' && (() => {
+              const cfg = PRIORIDAD_CONFIG[tarea.prioridad] || PRIORIDAD_CONFIG.MEDIA
+              return (
+                <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cfg.color}`}>
+                  <Flag size={9} /> {cfg.label}
+                </span>
+              )
+            })()}
             {tarea.fecha_vencimiento && (
               <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
                 tarea.completada

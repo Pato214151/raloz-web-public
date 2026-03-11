@@ -33,8 +33,16 @@ def listar_tareas():
     if solo_pendientes:
         query = query.filter(Tarea.completada == False)
 
+    # Orden: pendientes primero, luego por prioridad (ALTA > MEDIA > BAJA), luego por vencimiento
+    from sqlalchemy import case
+    prioridad_order = case(
+        {'ALTA': 1, 'MEDIA': 2, 'BAJA': 3},
+        value=Tarea.prioridad,
+        else_=2
+    )
     tareas = query.order_by(
         Tarea.completada.asc(),
+        prioridad_order.asc(),
         Tarea.fecha_vencimiento.asc().nullslast(),
         Tarea.fecha_creacion.desc()
     ).all()
@@ -56,6 +64,9 @@ def crear_tarea():
     descripcion = sanitize_string(data.get('descripcion', ''), 1000).strip() or None
     fecha_venc = validate_date(data.get('fecha_vencimiento')) if data.get('fecha_vencimiento') else None
     asignada_a = data.get('asignada_a')  # None = todos
+    prioridad = sanitize_string(data.get('prioridad', 'MEDIA'), 10)
+    if prioridad not in ('ALTA', 'MEDIA', 'BAJA'):
+        prioridad = 'MEDIA'
 
     if asignada_a:
         if not Usuario.query.get(asignada_a):
@@ -64,6 +75,7 @@ def crear_tarea():
     tarea = Tarea(
         titulo=titulo,
         descripcion=descripcion,
+        prioridad=prioridad,
         fecha_vencimiento=fecha_venc,
         asignada_a=asignada_a if asignada_a else None,
         creada_por=identity['id_usuario'],

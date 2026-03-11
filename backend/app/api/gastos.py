@@ -17,12 +17,13 @@ gastos_bp = Blueprint('gastos', __name__)
 @jwt_required()
 def listar_gastos():
     page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    per_page = min(request.args.get('per_page', 20, type=int), 500)
     fecha = request.args.get('fecha')
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
     categoria = request.args.get('categoria')
     metodo_pago = request.args.get('metodo_pago')
+    tipo_gasto = request.args.get('tipo_gasto')
 
     query = Gasto.query
 
@@ -34,6 +35,8 @@ def listar_gastos():
         query = query.filter(Gasto.categoria == categoria)
     if metodo_pago:
         query = query.filter(Gasto.metodo_pago == metodo_pago)
+    if tipo_gasto:
+        query = query.filter(Gasto.tipo_gasto == tipo_gasto)
     if fecha_desde:
         fd = validate_date(fecha_desde)
         if fd:
@@ -73,12 +76,17 @@ def crear_gasto():
 
     fecha = validate_date(data.get('fecha', '')) or date.today()
 
+    tipo_gasto = sanitize_string(data.get('tipo_gasto', 'TIENDA'), 20)
+    if tipo_gasto not in ('TIENDA', 'EMPRESA'):
+        tipo_gasto = 'TIENDA'
+
     gasto = Gasto(
         fecha=fecha,
         descripcion=descripcion,
         valor=valor,
         metodo_pago=sanitize_string(data.get('metodo_pago', 'EFECTIVO'), 50),
         categoria=sanitize_string(data.get('categoria', 'Otros'), 100),
+        tipo_gasto=tipo_gasto,
         usuario_registro=identity['usuario'],
     )
     db.session.add(gasto)
@@ -110,6 +118,10 @@ def editar_gasto(id_gasto):
         gasto.metodo_pago = sanitize_string(data['metodo_pago'], 50)
     if 'categoria' in data:
         gasto.categoria = sanitize_string(data['categoria'], 100)
+    if 'tipo_gasto' in data:
+        tg = sanitize_string(data['tipo_gasto'], 20)
+        if tg in ('TIENDA', 'EMPRESA'):
+            gasto.tipo_gasto = tg
     if 'fecha' in data:
         nueva_fecha = validate_date(data['fecha'])
         if nueva_fecha:
