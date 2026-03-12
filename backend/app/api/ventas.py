@@ -81,78 +81,94 @@ def hoja_ventas_diaria():
       }
     """
     fecha_str = request.args.get('fecha', date.today().isoformat())
+    fecha_hasta_str = request.args.get('fecha_hasta', fecha_str)
+
     fecha = validate_date(fecha_str)
+    fecha_hasta = validate_date(fecha_hasta_str) or fecha
 
     if not fecha:
         return jsonify({'error': f'Fecha inválida: {fecha_str}'}), 400
 
-    # Facturas del día
+    # Facturas del rango
     facturas = Factura.query.filter(
-        Factura.fecha_factura == fecha,
+        Factura.fecha_factura >= fecha,
+        Factura.fecha_factura <= fecha_hasta,
         Factura.estado != 'ANULADA'
     ).order_by(Factura.numero_factura).all()
 
-    # Pagos del día
+    # Pagos del rango
     pagos = Pago.query.filter(
-        Pago.fecha_pago == fecha
+        Pago.fecha_pago >= fecha,
+        Pago.fecha_pago <= fecha_hasta
     ).order_by(Pago.fecha_pago).all()
 
-    # Gastos del día
+    # Gastos del rango
     gastos = Gasto.query.filter(
-        Gasto.fecha == fecha
+        Gasto.fecha >= fecha,
+        Gasto.fecha <= fecha_hasta
     ).order_by(Gasto.fecha).all()
 
     # Calcular totales
     total_ventas = sum(f.total for f in facturas)
-    total_cobrado = sum(p.valor for p in pagos)
-    total_gastos = sum(g.valor for g in gastos)
+    total_ingresos = sum(p.valor for p in pagos)
+    total_gastos_val = sum(g.valor for g in gastos)
     saldo_pendiente = sum(f.saldo_pendiente or 0 for f in facturas)
-    utilidad = total_cobrado - total_gastos
+    utilidad = total_ingresos - total_gastos_val
+
+    # Agrupar pagos por método
+    por_metodo_dict = {}
+    for p in pagos:
+        m = p.metodo_pago or 'EFECTIVO'
+        if m not in por_metodo_dict:
+            por_metodo_dict[m] = {'metodo': m, 'total': 0, 'cantidad': 0}
+        por_metodo_dict[m]['total'] += p.valor
+        por_metodo_dict[m]['cantidad'] += 1
 
     resumen = {
         'total_facturas': len(facturas),
         'total_ventas': total_ventas,
-        'total_cobrado': total_cobrado,
-        'total_gastos': total_gastos,
+        'total_ingresos': total_ingresos,
+        'total_cobrado': total_ingresos,
+        'total_pagos': len(pagos),
+        'total_gastos': total_gastos_val,
+        'num_gastos': len(gastos),
         'utilidad': utilidad,
         'saldo_pendiente': saldo_pendiente,
     }
 
-    facturas_data = []
-    for f in facturas:
-        facturas_data.append({
-            'numero_factura': f.numero_factura,
-            'cliente_nombre': f.cliente_nombre,
-            'colegio_nombre': f.colegio.nombre if f.colegio else None,
-            'total': f.total,
-            'estado': f.estado,
-            'metodo_pago': f.metodo_pago,
-            'fecha': f.fecha_factura.isoformat() if f.fecha_factura else None,
-        })
+    facturas_data = [{
+        'numero_factura': f.numero_factura,
+        'cliente_nombre': f.cliente_nombre,
+        'colegio_nombre': f.colegio.nombre if f.colegio else None,
+        'total': f.total,
+        'estado': f.estado,
+        'metodo_pago': f.metodo_pago,
+        'fecha': f.fecha_factura.isoformat() if f.fecha_factura else None,
+    } for f in facturas]
 
-    pagos_data = []
-    for p in pagos:
-        pagos_data.append({
-            'id_pago': p.id_pago,
-            'numero_factura': p.factura.numero_factura if p.factura else None,
-            'valor': p.valor,
-            'metodo': p.metodo_pago,
-            'fecha': p.fecha_pago.isoformat() if p.fecha_pago else None,
-        })
+    pagos_data = [{
+        'id_pago': p.id_pago,
+        'numero_factura': p.factura.numero_factura if p.factura else None,
+        'cliente_nombre': p.factura.cliente_nombre if p.factura else None,
+        'valor': p.valor,
+        'metodo_pago': p.metodo_pago,
+        'fecha_pago': p.fecha_pago.isoformat() if p.fecha_pago else None,
+    } for p in pagos]
 
-    gastos_data = []
-    for g in gastos:
-        gastos_data.append({
-            'id_gasto': g.id_gasto if hasattr(g, 'id_gasto') else None,
-            'descripcion': g.descripcion,
-            'valor': g.valor,
-            'categoria': g.categoria if hasattr(g, 'categoria') else None,
-            'fecha': g.fecha.isoformat() if g.fecha else None,
-        })
+    gastos_data = [{
+        'id_gasto': g.id_gasto,
+        'descripcion': g.descripcion,
+        'valor': g.valor,
+        'metodo_pago': g.metodo_pago,
+        'categoria': g.categoria or 'Otros',
+        'fecha': g.fecha.isoformat() if g.fecha else None,
+    } for g in gastos]
 
     return jsonify({
         'fecha': fecha.isoformat(),
+        'fecha_hasta': fecha_hasta.isoformat(),
         'resumen': resumen,
+        'por_metodo': list(por_metodo_dict.values()),
         'facturas': facturas_data,
         'pagos': pagos_data,
         'gastos': gastos_data,

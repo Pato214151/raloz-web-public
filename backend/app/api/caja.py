@@ -93,6 +93,75 @@ def listar_movimientos():
     }), 200
 
 
+@caja_bp.route('/movimiento', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'cajero')
+def registrar_movimiento():
+    """Registrar movimiento manual (ingreso/egreso) en caja"""
+    identity = get_current_identity()
+    data = request.get_json()
+
+    caja = CajaDiaria.query.filter_by(estado='ABIERTA').first()
+    if not caja:
+        return jsonify({'error': 'No hay caja abierta'}), 400
+
+    tipo = data.get('tipo', '').upper()
+    if tipo not in ('INGRESO', 'EGRESO'):
+        return jsonify({'error': 'Tipo debe ser INGRESO o EGRESO'}), 400
+
+    try:
+        monto = float(data.get('monto', 0))
+        if monto <= 0:
+            return jsonify({'error': 'El monto debe ser positivo'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Monto inválido'}), 400
+
+    concepto = data.get('concepto', '').strip()
+    if not concepto:
+        return jsonify({'error': 'Concepto requerido'}), 400
+
+    metodo_pago = data.get('metodo_pago', 'EFECTIVO').strip() or 'EFECTIVO'
+
+    mov = MovimientoCaja(
+        id_caja=caja.id_caja,
+        tipo=tipo,
+        concepto=concepto,
+        valor=monto,
+        metodo_pago=metodo_pago,
+        usuario=identity['usuario'],
+        fecha_hora=datetime.utcnow(),
+    )
+    db.session.add(mov)
+
+    if tipo == 'INGRESO':
+        caja.total_ventas = (caja.total_ventas or 0) + monto
+    else:
+        caja.total_gastos = (caja.total_gastos or 0) + monto
+
+    caja.monto_esperado = (caja.monto_inicial or 0) + (caja.total_ventas or 0) - (caja.total_gastos or 0)
+
+    db.session.commit()
+
+    return jsonify({
+        'message': f'{tipo} registrado',
+        'movimiento': mov.to_dict(),
+        'caja': caja.to_dict(),
+    }), 201
+
+
+@caja_bp.route('/<int:id_caja>/movimientos', methods=['GET'])
+@jwt_required()
+def movimientos_caja(id_caja):
+    """Movimientos de una caja específica"""
+    movimientos = MovimientoCaja.query.filter_by(id_caja=id_caja).order_by(
+        MovimientoCaja.fecha_hora.desc()
+    ).all()
+
+    return jsonify({
+        'movimientos': [m.to_dict() for m in movimientos],
+    }), 200
+
+
 @caja_bp.route('/historial', methods=['GET'])
 @jwt_required()
 def historial_cajas():

@@ -14,7 +14,7 @@ class StockPendiente(db.Model):
     estado = db.Column(db.String(20), default='PENDIENTE')
     fecha_registro = db.Column(db.Date, default=date.today)
 
-    factura = db.relationship('Factura', lazy='joined', overlaps='pendientes')
+    factura = db.relationship('Factura', lazy='joined', back_populates='pendientes')
     colegio = db.relationship('Colegio', lazy='joined')
     producto = db.relationship('Producto', lazy='joined')
 

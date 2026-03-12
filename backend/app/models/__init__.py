@@ -17,6 +17,7 @@ from app.models.movimiento_caja import MovimientoCaja
 from app.models.prenda_pendiente import PrendaPendiente
 from app.models.empaque_pendiente import EmpaquePendiente
 from app.models.serie_remision import SerieRemision
+from app.models.tarea import Tarea
 from app.models.pedido_web import PedidoWeb
 
 __all__ = [
@@ -24,5 +25,5 @@ __all__ = [
     'Factura', 'FacturaDetalle', 'Pago', 'Gasto', 'StockPendiente',
     'Auditoria', 'SerieFacturacion', 'MetodoPago', 'Cliente',
     'CajaDiaria', 'MovimientoCaja', 'PrendaPendiente',
-    'EmpaquePendiente', 'SerieRemision', 'PedidoWeb'
+    'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb'
 ]

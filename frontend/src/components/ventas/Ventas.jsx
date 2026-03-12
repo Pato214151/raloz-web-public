@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Calendar, DollarSign, TrendingUp, TrendingDown, CreditCard, Filter } from 'lucide-react'
+import { Calendar, DollarSign, TrendingUp, TrendingDown, CreditCard, Filter, Printer } from 'lucide-react'
 
 /**
  * Hoja de Ventas — Mirrors desktop's ventas_module.py
@@ -91,8 +91,24 @@ export default function Ventas() {
         </div>
       </div>
 
-      {/* Quick Filters */}
-      <div className="flex flex-wrap gap-2">
+      {/* Quick Filters + Print */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <button onClick={() => {
+          if (!data) return
+          const w = window.open('', '_blank')
+          const metodos = (data.por_metodo || []).map(m => `<tr><td>${m.metodo}</td><td style="text-align:right;font-weight:bold">${fmt(m.total)}</td><td style="text-align:center">${m.cantidad}</td></tr>`).join('')
+          const pagosRows = (data.pagos || []).map(p => `<tr><td>${p.numero_factura}</td><td>${p.cliente_nombre}</td><td>${p.metodo_pago}</td><td style="text-align:right;color:green">${fmt(p.valor)}</td></tr>`).join('')
+          const gastosRows = (data.gastos || []).map(g => `<tr><td>${g.fecha}</td><td>${g.descripcion}</td><td>${g.metodo_pago}</td><td style="text-align:right;color:red">${fmt(g.valor)}</td></tr>`).join('')
+          const bal = (data.resumen?.total_ingresos || 0) - (data.resumen?.total_gastos || 0)
+          w.document.write(`<!DOCTYPE html><html><head><title>Hoja de Ventas</title><style>body{font-family:Arial;margin:20px}h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}th{background:#f5f5f5;padding:6px;border:1px solid #ddd;text-align:left}td{padding:5px 8px;border:1px solid #eee}.balance{font-size:18px;font-weight:bold;text-align:center;padding:12px;margin:10px 0;border-radius:8px}@media print{body{margin:10px}}</style></head><body>
+          <h2>RALOZ COL SAS - Hoja de Ventas</h2><p>Período: ${fechaDesde} ${fechaDesde !== fechaHasta ? 'a ' + fechaHasta : ''}</p>
+          <div class="balance" style="background:${bal >= 0 ? '#D4EDDA' : '#F8D7DA'};color:${bal >= 0 ? '#155724' : '#721C24'}">BALANCE: ${fmt(bal)} (Ingresos: ${fmt(data.resumen?.total_ingresos)} - Gastos: ${fmt(data.resumen?.total_gastos)})</div>
+          <h3>Resumen por Método</h3><table><thead><tr><th>Método</th><th>Total</th><th>Pagos</th></tr></thead><tbody>${metodos}</tbody></table>
+          ${pagosRows ? `<h3>Pagos Recibidos</h3><table><thead><tr><th>Factura</th><th>Cliente</th><th>Método</th><th>Valor</th></tr></thead><tbody>${pagosRows}</tbody></table>` : ''}
+          ${gastosRows ? `<h3>Gastos</h3><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Método</th><th>Valor</th></tr></thead><tbody>${gastosRows}</tbody></table>` : ''}
+          <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p></body></html>`)
+          w.document.close(); w.print()
+        }} className="btn-secondary flex items-center gap-1 ml-auto"><Printer size={16} /> Imprimir</button>
         {filtrosBtns.map(f => (
           <button
             key={f.key}

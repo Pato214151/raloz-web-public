@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Clock, Check, Search, Plus, Package, X, Download, MoreVertical } from 'lucide-react'
+import { Clock, Check, Search, Plus, Package, X, Download, MoreVertical, Printer, FileText } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -145,56 +145,126 @@ export default function Pendientes() {
   }
 
   const generarListaImpresion = () => {
-    const html = `
-      <html>
-      <head>
-        <title>Listado de Prendas Pendientes</title>
-        <style>
-          body { font-family: Arial; margin: 20px; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f5f5f5; }
-          .header { text-align: center; margin-bottom: 20px; }
-          .checkbox { width: 30px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h2>RALOZ COL SAS - Listado de Prendas Pendientes</h2>
-          <p>Fecha: ${new Date().toLocaleDateString('es-CO')}</p>
+    return `<!DOCTYPE html><html><head><title>Listado de Prendas Pendientes</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:20px;color:#333}
+        h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+        table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+        th{background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd;font-size:12px}
+        td{padding:6px 8px;border:1px solid #eee}
+        .checkbox{width:30px;text-align:center}
+        .stats{display:flex;gap:20px;margin:10px 0;font-size:13px}
+        .stats span{padding:4px 12px;border-radius:12px;font-weight:bold}
+        .pending{background:#FFF3CD;color:#856404}.delivered{background:#D4EDDA;color:#155724}
+        @media print{body{margin:10px}}
+      </style></head><body>
+      <h2>RALOZ COL SAS - Prendas Pendientes</h2>
+      <p style="font-size:13px;color:#666">Fecha: ${new Date().toLocaleDateString('es-CO')} | Total: ${prendas.length} | Pendientes: ${pendientesCount} | Entregados: ${entregadosCount}</p>
+      <table><thead><tr>
+        <th class="checkbox">✓</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Talla</th><th>Cant.</th><th>Género</th><th>Escuela</th><th>Obs.</th>
+      </tr></thead><tbody>
+      ${prendas.map(p => `<tr>
+        <td class="checkbox">☐</td>
+        <td>${p.numero_factura || ''}</td>
+        <td>${p.cliente_nombre || ''}</td>
+        <td><b>${p.producto_nombre}</b></td>
+        <td>${p.talla || '—'}</td>
+        <td style="text-align:center"><b>${p.cantidad}</b></td>
+        <td>${p.genero}</td>
+        <td>${p.colegio_nombre || ''}</td>
+        <td style="font-size:11px;color:#666">${p.observaciones || ''}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS - Sistema de Facturación</p>
+      </body></html>`
+  }
+
+  // === REPORTE POR COLEGIO (para costureras) ===
+  const generarReportePorColegio = () => {
+    const pendientesSolo = prendas.filter(p => p.estado === 'PENDIENTE')
+    const porColegio = {}
+    pendientesSolo.forEach(p => {
+      const col = p.colegio_nombre || 'Sin Colegio'
+      if (!porColegio[col]) porColegio[col] = []
+      porColegio[col].push(p)
+    })
+
+    const colegiosHTML = Object.entries(porColegio).map(([colegio, items]) => {
+      const totalPrendas = items.reduce((s, i) => s + i.cantidad, 0)
+
+      // Resumen de corte: agrupar por producto → talla → cantidad total
+      const resumenCorte = {}
+      items.forEach(p => {
+        const prod = p.producto_nombre || 'Sin producto'
+        const talla = p.talla || 'Única'
+        if (!resumenCorte[prod]) resumenCorte[prod] = {}
+        resumenCorte[prod][talla] = (resumenCorte[prod][talla] || 0) + p.cantidad
+      })
+
+      const resumenRows = Object.entries(resumenCorte).map(([prod, tallas]) => {
+        const tallasStr = Object.entries(tallas)
+          .map(([t, c]) => `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;background:#E3F2FD;border-radius:4px;font-weight:bold"><b>${c}</b> T${t}</span>`)
+          .join(' ')
+        const totalProd = Object.values(tallas).reduce((a, b) => a + b, 0)
+        return `<tr>
+          <td style="font-weight:bold;padding:6px 8px">${prod}</td>
+          <td style="padding:6px 8px">${tallasStr}</td>
+          <td style="text-align:center;font-weight:bold;padding:6px 8px;color:#1976D2">${totalProd}</td>
+        </tr>`
+      }).join('')
+
+      const rows = items.map(p => `<tr>
+        <td class="checkbox">☐</td>
+        <td>${p.numero_factura || ''}</td>
+        <td>${p.cliente_nombre || ''}</td>
+        <td><b>${p.producto_nombre}</b></td>
+        <td>${p.talla || '—'}</td>
+        <td style="text-align:center"><b>${p.cantidad}</b></td>
+        <td>${p.genero}</td>
+        <td style="font-size:11px">${p.observaciones || ''}</td>
+      </tr>`).join('')
+
+      return `<div style="page-break-before:always;margin-bottom:32px">
+        <h3 style="background:#1976D2;color:white;padding:10px 14px;border-radius:4px 4px 0 0;margin:0;font-size:16px">
+          ${colegio} <span style="float:right;font-size:14px">${totalPrendas} prenda(s) pendientes</span>
+        </h3>
+        <div style="border:1px solid #1976D2;border-top:none;border-radius:0 0 4px 4px;margin-bottom:16px">
+          <div style="background:#E3F2FD;padding:6px 14px;font-size:12px;font-weight:bold;color:#1565C0;letter-spacing:0.5px">
+            ✂ RESUMEN DE CORTE PARA SASTRE
+          </div>
+          <table style="margin:0">
+            <thead><tr style="background:#f5f5f5">
+              <th style="padding:5px 8px;text-align:left">Producto</th>
+              <th style="padding:5px 8px;text-align:left">Tallas a cortar</th>
+              <th style="padding:5px 8px;text-align:center;width:60px">Total</th>
+            </tr></thead>
+            <tbody>${resumenRows}</tbody>
+          </table>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th class="checkbox">✓</th>
-              <th>Factura</th>
-              <th>Cliente</th>
-              <th>Producto</th>
-              <th>Talla</th>
-              <th>Cantidad</th>
-              <th>Género</th>
-              <th>Escuela</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${prendas.map(p => `
-              <tr>
-                <td class="checkbox">☐</td>
-                <td>${p.numero_factura || ''}</td>
-                <td>${p.cliente_nombre || ''}</td>
-                <td>${p.producto_nombre}</td>
-                <td>${p.talla || '—'}</td>
-                <td>${p.cantidad}</td>
-                <td>${p.genero}</td>
-                <td>${p.colegio_nombre || ''}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `
-    return html
+        <table><thead><tr>
+          <th class="checkbox">✓</th><th>Factura</th><th>Cliente</th><th>Producto</th><th>Talla</th><th>Cant.</th><th>Género</th><th>Obs.</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      </div>`
+    }).join('')
+
+    const ventana = window.open('', '_blank')
+    ventana.document.write(`<!DOCTYPE html><html><head><title>Reporte por Colegio</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:20px;color:#333}
+        h2{color:#1976D2;border-bottom:3px solid #FFC107;padding-bottom:8px}
+        table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+        th{background:#f5f5f5;padding:6px;text-align:left;border:1px solid #ddd}
+        td{padding:5px 6px;border:1px solid #eee}
+        .checkbox{width:30px;text-align:center}
+        @media print{body{margin:10px}h3{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+      </style></head><body>
+      <h2>RALOZ COL SAS - Reporte de Pendientes por Colegio</h2>
+      <p style="font-size:13px;color:#666">Fecha: ${new Date().toLocaleDateString('es-CO')} | Total pendientes: ${pendientesSolo.length} prendas en ${Object.keys(porColegio).length} colegio(s)</p>
+      ${colegiosHTML}
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS - Sistema de Facturación</p>
+      </body></html>`)
+    ventana.document.close()
+    ventana.print()
   }
 
   const pendientesCount = prendas.filter(p => p.estado === 'PENDIENTE').length
@@ -215,8 +285,11 @@ export default function Pendientes() {
               <Check size={16} /> Entregar {selected.size}
             </button>
           )}
+          <button onClick={generarReportePorColegio} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2">
+            <FileText size={16} /> Reporte por Colegio
+          </button>
           <button onClick={printList} className="btn-secondary flex items-center gap-2">
-            <Download size={16} /> Imprimir
+            <Printer size={16} /> Imprimir Listado
           </button>
           <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
             <Plus size={16} /> Nueva Prenda
@@ -266,7 +339,7 @@ export default function Pendientes() {
                 value={buscar}
                 onChange={(e) => setBuscar(e.target.value)}
                 placeholder="Buscar por cliente, producto, factura..."
-                className="input pl-10 w-full"
+                className="input-field pl-10 w-full"
               />
             </div>
             <button type="submit" className="btn-primary">Buscar</button>
@@ -275,7 +348,7 @@ export default function Pendientes() {
           <div className="flex flex-wrap gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Escuela</label>
-              <select value={escuela} onChange={(e) => setEscuela(e.target.value)} className="input text-sm">
+              <select value={escuela} onChange={(e) => setEscuela(e.target.value)} className="input-field text-sm">
                 <option value="">Todas</option>
                 {escuelas.map(e => (
                   <option key={e.id_colegio} value={e.id_colegio}>{e.nombre}</option>
@@ -284,7 +357,7 @@ export default function Pendientes() {
             </div>
             <div>
               <label className="block text-xs text-gray-600 mb-1">Género</label>
-              <select value={genero} onChange={(e) => setGenero(e.target.value)} className="input text-sm">
+              <select value={genero} onChange={(e) => setGenero(e.target.value)} className="input-field text-sm">
                 <option value="">Todos</option>
                 <option value="NIÑO">Niño</option>
                 <option value="NIÑA">Niña</option>
@@ -399,32 +472,32 @@ export default function Pendientes() {
                 <label className="block text-sm font-medium mb-1">ID Factura *</label>
                 <input type="number" required value={nuevaPrenda.id_factura}
                   onChange={e => setNuevaPrenda({...nuevaPrenda, id_factura: e.target.value})}
-                  className="input w-full" placeholder="Número de ID de factura" />
+                  className="input-field w-full" placeholder="Número de ID de factura" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Producto *</label>
                 <input type="text" required value={nuevaPrenda.producto_nombre}
                   onChange={e => setNuevaPrenda({...nuevaPrenda, producto_nombre: e.target.value})}
-                  className="input w-full" placeholder="Nombre del producto" />
+                  className="input-field w-full" placeholder="Nombre del producto" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">Talla</label>
                   <input type="text" value={nuevaPrenda.talla}
                     onChange={e => setNuevaPrenda({...nuevaPrenda, talla: e.target.value})}
-                    className="input w-full" />
+                    className="input-field w-full" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Cantidad *</label>
                   <input type="number" min="1" required value={nuevaPrenda.cantidad}
                     onChange={e => setNuevaPrenda({...nuevaPrenda, cantidad: parseInt(e.target.value) || 1})}
-                    className="input w-full" />
+                    className="input-field w-full" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Género</label>
                   <select value={nuevaPrenda.genero}
                     onChange={e => setNuevaPrenda({...nuevaPrenda, genero: e.target.value})}
-                    className="input w-full">
+                    className="input-field w-full">
                     <option value="NIÑO">NIÑO</option>
                     <option value="NIÑA">NIÑA</option>
                   </select>
@@ -434,7 +507,7 @@ export default function Pendientes() {
                 <label className="block text-sm font-medium mb-1">Observaciones</label>
                 <textarea value={nuevaPrenda.observaciones}
                   onChange={e => setNuevaPrenda({...nuevaPrenda, observaciones: e.target.value})}
-                  className="input w-full" rows={2} />
+                  className="input-field w-full" rows={2} />
               </div>
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancelar</button>

@@ -15,16 +15,12 @@ cd backend
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 2. Crear tablas + datos iniciales (con manejo de error si DB no está lista)
+# 2. Crear tablas + datos iniciales
 echo ""
-echo "→ Inicializando base de datos..."
+echo "→ Creando tablas en base de datos..."
 export FLASK_APP=run.py
-if python -m flask init-db 2>/dev/null; then
-  python -m flask seed 2>/dev/null || echo "  ℹ️  Seed omitido (datos ya existen o DB no disponible)"
-  echo "  ✓ Base de datos lista"
-else
-  echo "  ⚠️  DB no disponible en build — se inicializará al primer arranque"
-fi
+python -m flask init-db
+python -m flask seed
 
 # 3. Construir frontend React
 echo ""

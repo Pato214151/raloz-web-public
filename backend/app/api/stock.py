@@ -28,10 +28,17 @@ def listar_stock():
     if solo_disponible:
         query = query.filter(Stock.cantidad > 0)
 
-    stocks = query.all()
+    stocks = query.order_by(Stock.id_producto, Stock.talla_individual).all()
+
+    def stock_full(s):
+        d = s.to_dict()
+        d['producto_nombre'] = s.producto.nombre if s.producto else None
+        d['producto_tipo'] = s.producto.tipo if s.producto else None
+        d['colegio_nombre'] = s.colegio.nombre if s.colegio else None
+        return d
 
     return jsonify({
-        'stock': [s.to_dict() for s in stocks],
+        'stock': [stock_full(s) for s in stocks],
         'total_items': len(stocks),
     }), 200
 
@@ -59,18 +66,48 @@ def resumen_stock():
     }), 200
 
 
+@stock_bp.route('/actividad', methods=['GET'])
+@jwt_required()
+def actividad_stock():
+    """Actividad/log de movimientos de stock"""
+    from app.models.auditoria import Auditoria
+    usuario_filtro = request.args.get('usuario', '').strip()
+    limit = min(request.args.get('limit', 200, type=int), 500)
+
+    query = Auditoria.query.filter_by(tabla_afectada='stock')
+    if usuario_filtro:
+        query = query.filter(Auditoria.usuario == usuario_filtro)
+
+    registros = query.order_by(Auditoria.fecha_hora.desc()).limit(limit).all()
+
+    # Usuarios únicos para filtro
+    todos_usuarios = db.session.query(Auditoria.usuario).filter_by(
+        tabla_afectada='stock'
+    ).distinct().all()
+
+    return jsonify({
+        'actividad': [r.to_dict() for r in registros],
+        'usuarios': [u[0] for u in todos_usuarios],
+    }), 200
+
+
 @stock_bp.route('', methods=['POST'])
 @jwt_required()
-@rol_requerido('administrador')
+@rol_requerido('administrador', 'vendedor', 'cajero')
 def actualizar_stock():
     """Crear o actualizar registro de stock"""
     data = request.get_json()
     identity = get_current_identity()
 
-    id_colegio = data.get('id_colegio')
-    id_producto = data.get('id_producto')
-    talla = data.get('talla_individual')
+    try:
+        id_colegio = int(data.get('id_colegio'))
+        id_producto = int(data.get('id_producto'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'id_colegio e id_producto deben ser números'}), 400
+
+    talla = (data.get('talla_individual') or '').strip()
     cantidad = data.get('cantidad')
+    observaciones = (data.get('observaciones') or '').strip()
 
     if not all([id_colegio, id_producto, talla, cantidad is not None]):
         return jsonify({'error': 'Todos los campos son requeridos'}), 400
@@ -88,6 +125,11 @@ def actualizar_stock():
         talla_individual=talla,
     ).first()
 
+    producto = Producto.query.get(id_producto)
+    colegio = Colegio.query.get(id_colegio)
+    prod_nombre = producto.nombre if producto else f'Prod#{id_producto}'
+    col_nombre = colegio.nombre if colegio else f'Col#{id_colegio}'
+
     if stock:
         stock.cantidad = cantidad
     else:
@@ -100,14 +142,73 @@ def actualizar_stock():
         db.session.add(stock)
 
     db.session.commit()
-    registrar_auditoria('stock', stock.id_stock, 'ACTUALIZAR', f'Stock: {cantidad} uds')
 
-    return jsonify({'message': 'Stock actualizado', 'stock': stock.to_dict()}), 200
+    comentario = f'{prod_nombre} | Talla {talla} | {col_nombre} | {cantidad} uds'
+    if observaciones:
+        comentario += f' | Obs: {observaciones}'
+    registrar_auditoria('stock', stock.id_stock, 'ACTUALIZAR', comentario)
+
+    d = stock.to_dict()
+    d['producto_nombre'] = prod_nombre
+    d['colegio_nombre'] = col_nombre
+    return jsonify({'message': 'Stock actualizado', 'stock': d}), 200
+
+
+@stock_bp.route('/<int:id_stock>', methods=['PUT'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def editar_stock(id_stock):
+    """Editar cantidad de un registro de stock"""
+    stock = Stock.query.get_or_404(id_stock)
+    data = request.get_json()
+
+    cantidad_anterior = stock.cantidad
+    observaciones = (data.get('observaciones') or '').strip()
+
+    if 'cantidad' in data:
+        try:
+            cantidad = int(data['cantidad'])
+            if cantidad < 0:
+                return jsonify({'error': 'La cantidad no puede ser negativa'}), 400
+            stock.cantidad = cantidad
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Cantidad inválida'}), 400
+
+    db.session.commit()
+
+    prod_nombre = stock.producto.nombre if stock.producto else f'Prod#{stock.id_producto}'
+    col_nombre = stock.colegio.nombre if stock.colegio else f'Col#{stock.id_colegio}'
+    comentario = f'{prod_nombre} | Talla {stock.talla_individual} | {col_nombre} | {cantidad_anterior}→{stock.cantidad} uds'
+    if observaciones:
+        comentario += f' | Obs: {observaciones}'
+    registrar_auditoria('stock', id_stock, 'EDITAR', comentario)
+
+    d = stock.to_dict()
+    d['producto_nombre'] = prod_nombre
+    d['colegio_nombre'] = col_nombre
+    return jsonify({'message': 'Stock actualizado', 'stock': d}), 200
+
+
+@stock_bp.route('/<int:id_stock>', methods=['DELETE'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def eliminar_stock(id_stock):
+    """Eliminar un registro de stock"""
+    stock = Stock.query.get_or_404(id_stock)
+    prod_nombre = stock.producto.nombre if stock.producto else f'Prod#{stock.id_producto}'
+    col_nombre = stock.colegio.nombre if stock.colegio else f'Col#{stock.id_colegio}'
+    comentario = f'{prod_nombre} | Talla {stock.talla_individual} | {col_nombre} | Eliminado ({stock.cantidad} uds)'
+
+    db.session.delete(stock)
+    db.session.commit()
+    registrar_auditoria('stock', id_stock, 'ELIMINAR', comentario)
+
+    return jsonify({'message': 'Stock eliminado'}), 200
 
 
 @stock_bp.route('/masivo', methods=['POST'])
 @jwt_required()
-@rol_requerido('administrador')
+@rol_requerido('administrador', 'vendedor', 'cajero')
 def actualizar_stock_masivo():
     """Actualizar múltiples items de stock"""
     data = request.get_json()

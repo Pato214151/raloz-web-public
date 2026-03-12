@@ -120,22 +120,41 @@ export default function Dashboard() {
       </div>
 
       {/* Resumen financiero mes */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card">
-          <p className="text-sm text-gray-500">Cobrado este mes</p>
-          <p className="text-xl font-bold text-green-600">{formatMoney(data?.cobros_mes)}</p>
-        </div>
-        <div className="card">
-          <p className="text-sm text-gray-500">Gastos este mes</p>
-          <p className="text-xl font-bold text-red-600">{formatMoney(data?.gastos_mes)}</p>
-        </div>
-        <div className="card">
-          <p className="text-sm text-gray-500">Utilidad neta</p>
-          <p className="text-xl font-bold text-blue-600">
-            {formatMoney((data?.cobros_mes || 0) - (data?.gastos_mes || 0))}
-          </p>
-        </div>
-      </div>
+      {(() => {
+        const cobros = data?.cobros_mes || 0
+        const gastos = data?.gastos_mes || 0
+        const utilidad = cobros - gastos
+        const margen = cobros > 0 ? ((utilidad / cobros) * 100).toFixed(1) : null
+        const utilPositiva = utilidad >= 0
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card">
+              <p className="text-sm text-gray-500">Cobrado este mes</p>
+              <p className="text-xl font-bold text-green-600">{formatMoney(cobros)}</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500">Gastos este mes</p>
+              <p className="text-xl font-bold text-red-600">{formatMoney(gastos)}</p>
+              {cobros > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {((gastos / cobros) * 100).toFixed(1)}% de lo cobrado
+                </p>
+              )}
+            </div>
+            <div className={`card border-l-4 ${utilPositiva ? 'border-green-400' : 'border-red-400'}`}>
+              <p className="text-sm text-gray-500">Utilidad neta</p>
+              <p className={`text-xl font-bold ${utilPositiva ? 'text-green-600' : 'text-red-600'}`}>
+                {utilPositiva ? '' : '−'}{formatMoney(Math.abs(utilidad))}
+              </p>
+              {margen !== null && (
+                <p className={`text-xs mt-1 font-medium ${utilPositiva ? 'text-green-500' : 'text-red-500'}`}>
+                  Margen: {utilPositiva ? '' : '-'}{Math.abs(parseFloat(margen))}%
+                </p>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

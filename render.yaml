@@ -15,29 +15,21 @@ services:
       - key: NODE_VERSION
         value: "20.11.0"
       - key: DATABASE_URL
-        fromDatabase:
-          name: raloz-db
-          property: connectionString
+        sync: false
       - key: SECRET_KEY
-        generateValue: true
+        sync: false
       - key: JWT_SECRET_KEY
-        generateValue: true
+        sync: false
       - key: NETLIFY_URL
-        sync: false          # URL de tu página en Netlify (ej: https://raloz.netlify.app)
+        sync: false
       - key: MP_ACCESS_TOKEN
-        sync: false          # Token de MercadoPago (APP_USR-xxxx...)
+        sync: false
       - key: MP_REDIRECT_URL
-        sync: false          # URL donde llega el cliente después de pagar (tu página Netlify)
+        sync: false
       - key: BACKEND_URL
-        sync: false          # URL de este backend (ej: https://raloz-web.onrender.com)
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
 
-databases:
-  - name: raloz-db
-    databaseName: raloz
-    user: raloz_user
-    region: oregon
-    plan: free

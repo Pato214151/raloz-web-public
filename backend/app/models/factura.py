@@ -22,6 +22,8 @@ class Factura(db.Model):
     estado_entrega = db.Column(db.String(20), default='POR_ENTREGAR')
     metodo_pago = db.Column(db.String(50))
     genero_estudiante = db.Column(db.String(20))
+    domicilio = db.Column(db.Float, default=0)
+    canal = db.Column(db.String(20), default='PRESENCIAL')  # 'PRESENCIAL' o 'WEB'
     observaciones = db.Column(db.Text)
     fecha_entrega = db.Column(db.Date)
     usuario_creacion = db.Column(db.String(100), nullable=False)
@@ -30,7 +32,7 @@ class Factura(db.Model):
     # Relaciones
     detalles = db.relationship('FacturaDetalle', backref='factura', lazy='dynamic', cascade='all, delete-orphan')
     pagos = db.relationship('Pago', backref='factura', lazy='dynamic', cascade='all, delete-orphan')
-    pendientes = db.relationship('StockPendiente', backref='factura', lazy='dynamic')
+    pendientes = db.relationship('StockPendiente', back_populates='factura', lazy='dynamic')
 
     __table_args__ = (
         db.Index('idx_facturas_numero', 'numero_factura'),
@@ -60,6 +62,8 @@ class Factura(db.Model):
             'estado_entrega': self.estado_entrega,
             'metodo_pago': self.metodo_pago,
             'genero_estudiante': self.genero_estudiante,
+            'domicilio': self.domicilio or 0,
+            'canal': self.canal or 'PRESENCIAL',
             'observaciones': self.observaciones,
             'fecha_entrega': self.fecha_entrega.isoformat() if self.fecha_entrega else None,
             'usuario_creacion': self.usuario_creacion,
