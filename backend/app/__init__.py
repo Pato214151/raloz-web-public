@@ -55,8 +55,10 @@ def create_app(config_name=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
-    # CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+    # CORS — permite la página web de Netlify y el software
+    netlify_url = os.getenv('NETLIFY_URL', '*')
+    cors_origins = ["*"] if netlify_url == '*' else [netlify_url, "http://localhost:5173", "http://localhost:3000"]
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True)
 
     # ── Security Headers ──
     @app.after_request
@@ -103,6 +105,7 @@ def create_app(config_name=None):
     from app.api.precios import precios_bp
     from app.api.empaque import empaque_bp
     from app.api.ventas import ventas_bp
+    from app.api.tienda import tienda_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -122,6 +125,7 @@ def create_app(config_name=None):
     app.register_blueprint(precios_bp, url_prefix='/api/precios')
     app.register_blueprint(empaque_bp, url_prefix='/api/empaque')
     app.register_blueprint(ventas_bp, url_prefix='/api/ventas')
+    app.register_blueprint(tienda_bp, url_prefix='/api/tienda')
 
     # ── Health check ──
     @app.route('/api/health')
