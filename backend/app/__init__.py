@@ -56,7 +56,7 @@ def create_app(config_name=None):
     limiter.init_app(app)
 
     # CORS — permite la página web de Netlify y el software
-    netlify_url = os.getenv('NETLIFY_URL', '*')
+    netlify_url = os.getenv('NETLIFY_URL', '*').rstrip('/')
     cors_origins = ["*"] if netlify_url == '*' else [netlify_url, "http://localhost:5173", "http://localhost:3000"]
     CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True)
 
