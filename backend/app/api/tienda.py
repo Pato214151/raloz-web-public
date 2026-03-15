@@ -102,6 +102,9 @@ def crear_pedido():
     if not items or not isinstance(items, list):
         return jsonify({'error': 'El carrito está vacío'}), 400
 
+    logger.info('[PEDIDO] id_colegio=%s items=%s', data['id_colegio'],
+                [(i.get('id_producto'), i.get('talla'), i.get('nombre')) for i in items])
+
     colegio = Colegio.query.get(data['id_colegio'])
     if not colegio:
         return jsonify({'error': 'Colegio no encontrado'}), 404
