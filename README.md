@@ -50,11 +50,36 @@ venv\Scripts\activate
 source venv/bin/activate
 
 pip install -r requirements.txt
-# Crear .env con las variables de arriba
+# Crear .env con las variables (ver .env.example)
 python run.py
 ```
 
 Backend disponible en: `http://localhost:5000`
+
+### Modo prueba (sin cobrar dinero real)
+
+El archivo `.env.test` contiene las credenciales sandbox de MercadoPago.
+Para activarlo localmente:
+
+```bash
+cd backend
+# Windows:
+copy .env.test .env
+# Mac/Linux:
+cp .env.test .env
+
+python run.py
+```
+
+Tarjetas de prueba para el checkout:
+
+| Tarjeta    | Número               | CVV | Nombre | Resultado  |
+|------------|----------------------|-----|--------|------------|
+| Mastercard | 5031 7557 3453 0604  | 123 | APRO   | ✅ Aprobado |
+| Visa       | 4509 9535 6623 3704  | 123 | APRO   | ✅ Aprobado |
+| Cualquiera | 4000 0000 0000 0002  | 123 | OTHE   | ❌ Rechazado|
+
+> ⚠️ El `.env.test` está en `.gitignore` — nunca se sube a GitHub.
 
 ### Frontend (panel admin)
 
