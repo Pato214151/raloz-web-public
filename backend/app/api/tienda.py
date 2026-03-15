@@ -7,9 +7,12 @@ Pagos procesados por MercadoPago (persona natural)
 import os
 import json
 import uuid
+import logging
 import requests
 from datetime import datetime, date
 from flask import Blueprint, request, jsonify
+
+logger = logging.getLogger(__name__)
 from app import db
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
@@ -155,7 +158,10 @@ def crear_pedido():
 
     # Crear preferencia en MercadoPago
     mp_token = os.getenv('MP_ACCESS_TOKEN', '')
-    redirect_base = os.getenv('MP_REDIRECT_URL', '')
+    redirect_base = os.getenv('MP_REDIRECT_URL', 'https://ralozcol-web.pages.dev')
+    backend_url   = os.getenv('BACKEND_URL', 'https://raloz-web.onrender.com')
+
+    logger.info('[MP] token presente: %s | redirect_base: %s', bool(mp_token), redirect_base)
 
     pago_url = None
     if mp_token:
@@ -185,7 +191,7 @@ def crear_pedido():
                     'pending': f"{redirect_base}?estado=pendiente&ref={referencia}",
                 },
                 'auto_return': 'approved',
-                'notification_url': f"{os.getenv('BACKEND_URL', '')}/api/tienda/mp/webhook",
+                'notification_url': f"{backend_url}/api/tienda/mp/webhook",
                 'statement_descriptor': 'RALOZ UNIFORMES',
             }
 
@@ -196,17 +202,19 @@ def crear_pedido():
                     'Authorization': f'Bearer {mp_token}',
                     'Content-Type': 'application/json',
                 },
-                timeout=10,
+                timeout=20,
             )
 
             if resp.status_code in (200, 201):
                 mp_data = resp.json()
                 pago_url = mp_data.get('init_point')
-                pedido.wompi_transaction_id = mp_data.get('id')  # guardamos preference_id
+                pedido.wompi_transaction_id = mp_data.get('id')
                 db.session.commit()
+            else:
+                logger.error('[MP] Preferencia rechazada %s: %s', resp.status_code, resp.text)
 
-        except Exception:
-            pass  # Si MP falla, retornamos sin URL y el cliente puede intentar de nuevo
+        except Exception as e:
+            logger.error('[MP] Error creando preferencia: %s', str(e))
 
     return jsonify({
         'pedido': {

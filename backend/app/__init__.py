@@ -41,6 +41,7 @@ def create_app(config_name=None):
         'pool_pre_ping': True,
         'pool_size': 5,
         'max_overflow': 10,
+        'pool_recycle': 300,  # Recicla conexiones cada 5 min — evita SSL stale en Supabase/Render
     }
 
     # JWT Config
@@ -55,9 +56,13 @@ def create_app(config_name=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
-    # CORS — permite la página web de Netlify y el software
-    netlify_url = os.getenv('NETLIFY_URL', '*').rstrip('/')
-    cors_origins = ["*"] if netlify_url == '*' else [netlify_url, "http://localhost:5173", "http://localhost:3000"]
+    # CORS — lee CORS_ORIGINS del env (separados por coma) o permite todo
+    _cors_raw = os.getenv('CORS_ORIGINS', '*')
+    if _cors_raw.strip() == '*':
+        cors_origins = '*'
+    else:
+        cors_origins = [o.strip().rstrip('/') for o in _cors_raw.split(',') if o.strip()]
+        cors_origins += ["http://localhost:5173", "http://localhost:3000"]
     CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True)
 
     # ── Security Headers ──
