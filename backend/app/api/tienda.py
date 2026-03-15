@@ -102,8 +102,7 @@ def crear_pedido():
     if not items or not isinstance(items, list):
         return jsonify({'error': 'El carrito está vacío'}), 400
 
-    logger.info('[PEDIDO] id_colegio=%s items=%s', data['id_colegio'],
-                [(i.get('id_producto'), i.get('talla'), i.get('nombre')) for i in items])
+    print(f"[PEDIDO] id_colegio={data['id_colegio']} items={[(i.get('id_producto'), i.get('talla'), i.get('nombre')) for i in items]}", flush=True)
 
     colegio = Colegio.query.get(data['id_colegio'])
     if not colegio:
@@ -119,6 +118,7 @@ def crear_pedido():
             talla_individual=item['talla']
         ).first()
 
+        print(f"[STOCK] buscando id_colegio={data['id_colegio']} id_producto={item['id_producto']} talla={repr(item['talla'])} → encontrado={stock is not None} cantidad={stock.cantidad if stock else 'N/A'}", flush=True)
         if not stock or stock.cantidad < item['cantidad']:
             return jsonify({'error': f"Sin stock: {item.get('nombre', '')} talla {item.get('talla', '')}"}), 400
 
