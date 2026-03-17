@@ -19,11 +19,12 @@ from app.models.empaque_pendiente import EmpaquePendiente
 from app.models.serie_remision import SerieRemision
 from app.models.tarea import Tarea
 from app.models.pedido_web import PedidoWeb
+from app.models.reserva import Reserva
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
     'Factura', 'FacturaDetalle', 'Pago', 'Gasto', 'StockPendiente',
     'Auditoria', 'SerieFacturacion', 'MetodoPago', 'Cliente',
     'CajaDiaria', 'MovimientoCaja', 'PrendaPendiente',
-    'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb'
+    'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb', 'Reserva'
 ]

@@ -9,7 +9,8 @@ import json
 import uuid
 import logging
 import requests
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from sqlalchemy import func
 from flask import Blueprint, request, jsonify
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ from app.utils.email_service import enviar_email_factura
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
-    SerieFacturacion, MetodoPago, Cliente
+    SerieFacturacion, MetodoPago, Cliente, Reserva
 )
 
 tienda_bp = Blueprint('tienda', __name__)
@@ -68,12 +69,27 @@ def catalogo_colegio(id_colegio):
             id_producto=pid
         ).filter(Stock.cantidad > 0).all()
 
+        ahora = datetime.utcnow()
         for s in stocks:
-            if s.talla_individual:
+            if not s.talla_individual:
+                continue
+            # Restar reservas activas no expiradas para mostrar stock real
+            reservas_activas = db.session.query(
+                func.coalesce(func.sum(Reserva.cantidad), 0)
+            ).filter(
+                Reserva.id_colegio == id_colegio,
+                Reserva.id_producto == pid,
+                Reserva.talla == s.talla_individual,
+                Reserva.estado == 'activa',
+                Reserva.fecha_expiracion > ahora,
+            ).scalar() or 0
+
+            stock_disponible = max(0, s.cantidad - reservas_activas)
+            if stock_disponible > 0:
                 productos_map[pid]['tallas'].append({
                     'talla': s.talla_individual,
                     'precio': precio.precio_unitario,
-                    'stock': s.cantidad,
+                    'stock': stock_disponible,
                     'talla_grupo': precio.talla_grupo,
                 })
 
@@ -83,6 +99,97 @@ def catalogo_colegio(id_colegio):
         'colegio': {'id_colegio': colegio.id_colegio, 'nombre': colegio.nombre},
         'productos': catalogo
     }), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# RESERVAR — reserva temporal de stock (15 minutos)
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/reservar', methods=['POST'])
+def reservar_producto():
+    """Reserva temporalmente un producto por 15 minutos para el carrito."""
+    data = request.get_json() or {}
+
+    session_id  = (data.get('session_id') or '').strip()
+    id_colegio  = data.get('id_colegio')
+    id_producto = data.get('id_producto')
+    talla       = (data.get('talla') or '').strip()
+    cantidad    = data.get('cantidad', 1)
+
+    if not all([session_id, id_colegio, id_producto, talla]):
+        return jsonify({'error': 'Datos incompletos'}), 400
+
+    try:
+        id_colegio  = int(id_colegio)
+        id_producto = int(id_producto)
+        cantidad    = int(cantidad)
+        if cantidad < 1:
+            return jsonify({'error': 'Cantidad inválida'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Datos inválidos'}), 400
+
+    stock = Stock.query.filter_by(
+        id_colegio=id_colegio,
+        id_producto=id_producto,
+        talla_individual=talla,
+    ).first()
+
+    if not stock or stock.cantidad == 0:
+        return jsonify({'error': 'Sin stock para esta talla'}), 409
+
+    ahora = datetime.utcnow()
+
+    # Reservas activas de OTRAS sesiones
+    reservas_otros = db.session.query(
+        func.coalesce(func.sum(Reserva.cantidad), 0)
+    ).filter(
+        Reserva.id_colegio == id_colegio,
+        Reserva.id_producto == id_producto,
+        Reserva.talla == talla,
+        Reserva.estado == 'activa',
+        Reserva.fecha_expiracion > ahora,
+        Reserva.session_id != session_id,
+    ).scalar() or 0
+
+    # Reserva activa de esta misma sesión (si ya había agregado antes)
+    reserva_propia = Reserva.query.filter(
+        Reserva.session_id == session_id,
+        Reserva.id_colegio == id_colegio,
+        Reserva.id_producto == id_producto,
+        Reserva.talla == talla,
+        Reserva.estado == 'activa',
+        Reserva.fecha_expiracion > ahora,
+    ).first()
+
+    cantidad_propia = reserva_propia.cantidad if reserva_propia else 0
+    stock_disponible = max(0, stock.cantidad - reservas_otros - cantidad_propia)
+
+    if stock_disponible < cantidad:
+        disp = stock_disponible + cantidad_propia  # cuánto puede pedir en total esta sesión
+        if disp <= 0:
+            return jsonify({'error': 'Sin stock disponible para esta talla'}), 409
+        return jsonify({'error': f'Solo quedan {stock_disponible} unidades disponibles'}), 409
+
+    nueva_expiracion = ahora + timedelta(minutes=15)
+
+    if reserva_propia:
+        # Sumar cantidad y renovar expiración
+        reserva_propia.cantidad += cantidad
+        reserva_propia.fecha_expiracion = nueva_expiracion
+        db.session.commit()
+        return jsonify({'id_reserva': reserva_propia.id_reserva, 'ok': True}), 200
+    else:
+        nueva = Reserva(
+            session_id=session_id,
+            id_colegio=id_colegio,
+            id_producto=id_producto,
+            talla=talla,
+            cantidad=cantidad,
+            fecha_expiracion=nueva_expiracion,
+        )
+        db.session.add(nueva)
+        db.session.commit()
+        return jsonify({'id_reserva': nueva.id_reserva, 'ok': True}), 201
 
 
 # ══════════════════════════════════════════════════════════════
@@ -112,16 +219,32 @@ def crear_pedido():
     # Validar stock y calcular total
     total = 0
     items_validados = []
+    ahora = datetime.utcnow()
     for item in items:
-        stock = Stock.query.filter_by(
-            id_colegio=data['id_colegio'],
-            id_producto=item['id_producto'],
-            talla_individual=item['talla']
-        ).first()
+        id_reserva = item.get('id_reserva')
 
-        print(f"[STOCK] buscando id_colegio={data['id_colegio']} id_producto={item['id_producto']} talla={repr(item['talla'])} → encontrado={stock is not None} cantidad={stock.cantidad if stock else 'N/A'}", flush=True)
-        if not stock or stock.cantidad < item['cantidad']:
-            return jsonify({'error': f"Sin stock: {item.get('nombre', '')} talla {item.get('talla', '')}"}), 400
+        if id_reserva:
+            # Validar que la reserva siga activa
+            reserva = Reserva.query.get(id_reserva)
+            if not reserva or reserva.estado != 'activa' or reserva.fecha_expiracion < ahora:
+                return jsonify({
+                    'error': f"La reserva de {item.get('nombre', '')} talla {item.get('talla', '')} "
+                             f"expiró. Vuelve a agregar el producto al carrito."
+                }), 409
+            if reserva.cantidad < item['cantidad']:
+                return jsonify({
+                    'error': f"La cantidad reservada de {item.get('nombre', '')} es insuficiente."
+                }), 409
+        else:
+            # Sin reserva: validar stock directo (compatibilidad hacia atrás)
+            stock = Stock.query.filter_by(
+                id_colegio=data['id_colegio'],
+                id_producto=item['id_producto'],
+                talla_individual=item['talla']
+            ).first()
+            print(f"[STOCK] buscando id_colegio={data['id_colegio']} id_producto={item['id_producto']} talla={repr(item['talla'])} → encontrado={stock is not None} cantidad={stock.cantidad if stock else 'N/A'}", flush=True)
+            if not stock or stock.cantidad < item['cantidad']:
+                return jsonify({'error': f"Sin stock: {item.get('nombre', '')} talla {item.get('talla', '')}"}), 400
 
         precio = PrecioColegio.query.filter_by(
             id_colegio=data['id_colegio'],
@@ -134,12 +257,13 @@ def crear_pedido():
         subtotal_item = precio.precio_unitario * item['cantidad']
         total += subtotal_item
         items_validados.append({
-            'id_producto': item['id_producto'],
-            'nombre': item.get('nombre', ''),
-            'talla': item['talla'],
-            'cantidad': item['cantidad'],
+            'id_producto':  item['id_producto'],
+            'nombre':       item.get('nombre', ''),
+            'talla':        item['talla'],
+            'cantidad':     item['cantidad'],
             'precio_unitario': precio.precio_unitario,
-            'subtotal': subtotal_item,
+            'subtotal':     subtotal_item,
+            'id_reserva':   id_reserva,
         })
 
     referencia = f"RALOZ-{uuid.uuid4().hex[:12].upper()}"
@@ -291,6 +415,16 @@ def mp_webhook():
 
         elif estado_mp in ('rejected', 'cancelled', 'refunded', 'charged_back'):
             pedido.estado = 'fallido'
+            # Liberar reservas para que el stock vuelva a estar disponible
+            try:
+                items_pedido = json.loads(pedido.items_json) if pedido.items_json else []
+                for item in items_pedido:
+                    if item.get('id_reserva'):
+                        reserva = Reserva.query.get(item['id_reserva'])
+                        if reserva and reserva.estado == 'activa':
+                            reserva.estado = 'cancelada'
+            except Exception:
+                pass
 
         db.session.commit()
 
@@ -298,6 +432,88 @@ def mp_webhook():
         pass
 
     return jsonify({'ok': True}), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# ADMIN — Gestión de pedidos online (requiere JWT)
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/admin/pedidos', methods=['GET'])
+def listar_pedidos_admin():
+    """Lista todos los pedidos online con filtros. Requiere JWT."""
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    estado  = request.args.get('estado', '').strip()
+    limit   = min(request.args.get('limit', 50, type=int), 200)
+    offset  = request.args.get('offset', 0, type=int)
+
+    query = PedidoWeb.query
+    if estado:
+        query = query.filter(PedidoWeb.estado == estado)
+    query = query.order_by(PedidoWeb.fecha_creacion.desc())
+
+    total  = query.count()
+    pedidos = query.offset(offset).limit(limit).all()
+
+    return jsonify({
+        'pedidos': [p.to_dict() for p in pedidos],
+        'total':   total,
+        'limit':   limit,
+        'offset':  offset,
+    }), 200
+
+
+@tienda_bp.route('/admin/pedidos/<int:id_pedido>', methods=['GET'])
+def detalle_pedido_admin(id_pedido):
+    """Detalle de un pedido con sus items. Requiere JWT."""
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    pedido = PedidoWeb.query.get_or_404(id_pedido)
+    d = pedido.to_dict()
+
+    if pedido.id_factura:
+        factura = Factura.query.get(pedido.id_factura)
+        if factura:
+            d['factura_numero'] = factura.numero_factura
+            d['factura_id']     = factura.id_factura
+
+    return jsonify({'pedido': d}), 200
+
+
+@tienda_bp.route('/admin/pedidos/<int:id_pedido>/factura.pdf', methods=['GET'])
+def descargar_factura_admin(id_pedido):
+    """Genera y descarga el PDF de la factura de un pedido. Requiere JWT."""
+    from flask_jwt_extended import verify_jwt_in_request
+    from flask import Response
+    from app.utils.email_service import generar_pdf_factura
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    pedido = PedidoWeb.query.get_or_404(id_pedido)
+    if not pedido.id_factura:
+        return jsonify({'error': 'Este pedido no tiene factura aún'}), 404
+
+    factura  = Factura.query.get_or_404(pedido.id_factura)
+    detalles = list(factura.detalles)
+    pdf_buf  = generar_pdf_factura(factura, detalles)
+
+    return Response(
+        pdf_buf.read(),
+        mimetype='application/pdf',
+        headers={
+            'Content-Disposition': f'attachment; filename="Factura-{factura.numero_factura}.pdf"',
+        },
+    )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -374,6 +590,12 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
         ).first()
         if stock:
             stock.cantidad = max(0, stock.cantidad - item['cantidad'])
+
+        # Marcar reserva como completada
+        if item.get('id_reserva'):
+            reserva = Reserva.query.get(item['id_reserva'])
+            if reserva:
+                reserva.estado = 'completada'
 
     metodo_pago = MetodoPago.query.filter_by(nombre='TRANSFERENCIA').first()
     db.session.add(Pago(
