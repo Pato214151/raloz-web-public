@@ -13,7 +13,7 @@ class Reserva(db.Model):
     cantidad         = db.Column(db.Integer, nullable=False, default=1)
     fecha_creacion   = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_expiracion = db.Column(db.DateTime, nullable=False)
-    estado           = db.Column(db.String(20), default='activa')  # activa | completada | cancelada
+    estado           = db.Column(db.String(20), default='activa')  # activa | completada | cancelada | expirada
 
     __table_args__ = (
         db.Index('idx_reservas_sesion',    'session_id'),

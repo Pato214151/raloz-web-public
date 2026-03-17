@@ -2,10 +2,43 @@
 RALOZ COL SAS - Entry Point
 """
 
+import threading
+import time
+import logging
+from datetime import datetime
+
 from app import create_app, db
 from app.models import *
 
+logger = logging.getLogger(__name__)
 app = create_app()
+
+
+# ─── Job: expiración automática de reservas (cada 60 s) ──────────
+def _job_limpiar_reservas():
+    """
+    Hilo daemon que cada 60 s marca como 'expirada' las reservas
+    cuya fecha_expiracion ya pasó y siguen en estado 'activa'.
+    daemon=True → muere automáticamente cuando gunicorn para el worker.
+    Idempotente: múltiples workers haciendo el UPDATE al mismo tiempo es seguro.
+    """
+    time.sleep(15)  # espera inicial — deja que la app arranque completamente
+    while True:
+        try:
+            with app.app_context():
+                actualizadas = Reserva.query.filter(
+                    Reserva.estado == 'activa',
+                    Reserva.fecha_expiracion < datetime.utcnow(),
+                ).update({'estado': 'expirada'})
+                db.session.commit()
+                if actualizadas:
+                    logger.info('[RESERVAS-JOB] %d reserva(s) marcadas como expirada', actualizadas)
+        except Exception as e:
+            logger.error('[RESERVAS-JOB] Error: %s', str(e))
+        time.sleep(60)
+
+
+threading.Thread(target=_job_limpiar_reservas, daemon=True, name='reservas-cleanup').start()
 
 
 @app.cli.command('init-db')
