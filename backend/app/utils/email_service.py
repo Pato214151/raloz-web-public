@@ -149,7 +149,12 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
     cliente_email  = _v(factura, 'cliente_email')
     cliente_tel    = _v(factura, 'cliente_telefono')
     cliente_nit    = _v(factura, 'cliente_nit')
-    colegio_nombre = _v(factura, 'colegio_nombre', None) or ''
+    # Intentar colegio via relación ORM primero, luego via dict
+    colegio_nombre = (
+        getattr(getattr(factura, 'colegio', None), 'nombre', None)
+        or _v(factura, 'colegio_nombre', None)
+        or ''
+    )
 
     cliente_data = [
         [Paragraph('Nombre:', st_label),     Paragraph(cliente_nombre, st_valor),
