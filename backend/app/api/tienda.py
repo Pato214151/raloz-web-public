@@ -14,6 +14,7 @@ from flask import Blueprint, request, jsonify
 
 logger = logging.getLogger(__name__)
 from app import db
+from app.utils.email_service import enviar_email_factura
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
@@ -273,11 +274,20 @@ def mp_webhook():
         if estado_mp == 'approved' and pedido.estado == 'pendiente':
             pedido.estado = 'pagado'
             pedido.fecha_pago = datetime.utcnow()
+            factura = None
             try:
                 factura = _crear_factura_desde_pedido(pedido)
                 pedido.id_factura = factura.id_factura
             except Exception:
                 db.session.rollback()
+
+            # Enviar email con factura PDF al cliente (fallo no bloquea la respuesta)
+            if factura and pedido.email_cliente:
+                try:
+                    detalles = list(factura.detalles)
+                    enviar_email_factura(pedido.email_cliente, factura, detalles)
+                except Exception as e:
+                    logger.error('[WEBHOOK] Error enviando email: %s', str(e))
 
         elif estado_mp in ('rejected', 'cancelled', 'refunded', 'charged_back'):
             pedido.estado = 'fallido'

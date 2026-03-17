@@ -21,5 +21,8 @@ python-dotenv==1.0.1
 bleach==6.2.0
 marshmallow==3.23.1
 
+# PDF generation
+reportlab==4.2.5
+
 # Production
 gunicorn==23.0.0
