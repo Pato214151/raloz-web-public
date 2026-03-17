@@ -20,11 +20,14 @@ from app.models.serie_remision import SerieRemision
 from app.models.tarea import Tarea
 from app.models.pedido_web import PedidoWeb
 from app.models.reserva import Reserva
+from app.models.pedido_fabricacion import PedidoFabricacion
+from app.models.stock_pendiente_fabricacion import StockPendienteFabricacion
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
     'Factura', 'FacturaDetalle', 'Pago', 'Gasto', 'StockPendiente',
     'Auditoria', 'SerieFacturacion', 'MetodoPago', 'Cliente',
     'CajaDiaria', 'MovimientoCaja', 'PrendaPendiente',
-    'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb', 'Reserva'
+    'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb', 'Reserva',
+    'PedidoFabricacion', 'StockPendienteFabricacion',
 ]

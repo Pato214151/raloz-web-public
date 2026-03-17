@@ -19,7 +19,8 @@ from app.utils.email_service import enviar_email_factura
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
-    SerieFacturacion, MetodoPago, Cliente, Reserva
+    SerieFacturacion, MetodoPago, Cliente, Reserva,
+    PedidoFabricacion, StockPendienteFabricacion,
 )
 
 tienda_bp = Blueprint('tienda', __name__)
@@ -53,27 +54,31 @@ def catalogo_colegio(id_colegio):
     colegio = Colegio.query.get_or_404(id_colegio)
     precios = PrecioColegio.query.filter_by(id_colegio=id_colegio).all()
 
-    productos_map = {}
+    # 1er paso: construir meta de productos y tabla de precios por talla
+    productos_meta = {}   # pid → {nombre, tipo}
+    precios_por_pid = {}  # pid → {talla_grupo: precio_unitario}
     for precio in precios:
         pid = precio.id_producto
-        if pid not in productos_map:
-            productos_map[pid] = {
-                'id_producto': pid,
+        if pid not in productos_meta:
+            productos_meta[pid] = {
                 'nombre': precio.producto.nombre,
-                'tipo': precio.producto.tipo,
-                'tallas': []
+                'tipo':   precio.producto.tipo,
             }
+        precios_por_pid.setdefault(pid, {})[precio.talla_grupo] = precio.precio_unitario
 
+    # 2do paso: consultar stock UNA vez por producto y armar catálogo
+    catalogo = []
+    ahora = datetime.utcnow()
+    for pid, meta in productos_meta.items():
         stocks = Stock.query.filter_by(
             id_colegio=id_colegio,
             id_producto=pid
         ).filter(Stock.cantidad > 0).all()
 
-        ahora = datetime.utcnow()
+        tallas = []
         for s in stocks:
             if not s.talla_individual:
                 continue
-            # Restar reservas activas no expiradas para mostrar stock real
             reservas_activas = db.session.query(
                 func.coalesce(func.sum(Reserva.cantidad), 0)
             ).filter(
@@ -86,14 +91,36 @@ def catalogo_colegio(id_colegio):
 
             stock_disponible = max(0, s.cantidad - reservas_activas)
             if stock_disponible > 0:
-                productos_map[pid]['tallas'].append({
-                    'talla': s.talla_individual,
-                    'precio': precio.precio_unitario,
-                    'stock': stock_disponible,
-                    'talla_grupo': precio.talla_grupo,
+                precio_u = precios_por_pid.get(pid, {}).get(s.talla_individual, 0)
+                tallas.append({
+                    'talla':       s.talla_individual,
+                    'precio':      precio_u,
+                    'stock':       stock_disponible,
+                    'talla_grupo': s.talla_individual,
                 })
 
-    catalogo = [p for p in productos_map.values() if p['tallas']]
+        if tallas:
+            catalogo.append({
+                'id_producto': pid,
+                'nombre':      meta['nombre'],
+                'tipo':        meta['tipo'],
+                'tallas':      tallas,
+                'fabricacion': False,
+            })
+        else:
+            # Sin stock → disponible como pedido anticipado (fabricación)
+            tallas_fab = [
+                {'talla': tg, 'precio': pu, 'stock': 0}
+                for tg, pu in sorted(precios_por_pid.get(pid, {}).items())
+            ]
+            if tallas_fab:
+                catalogo.append({
+                    'id_producto': pid,
+                    'nombre':      meta['nombre'],
+                    'tipo':        meta['tipo'],
+                    'tallas':      tallas_fab,
+                    'fabricacion': True,
+                })
 
     return jsonify({
         'colegio': {'id_colegio': colegio.id_colegio, 'nombre': colegio.nombre},
@@ -210,21 +237,31 @@ def crear_pedido():
     if not items or not isinstance(items, list):
         return jsonify({'error': 'El carrito está vacío'}), 400
 
-    print(f"[PEDIDO] id_colegio={data['id_colegio']} items={[(i.get('id_producto'), i.get('talla'), i.get('nombre')) for i in items]}", flush=True)
+    # Porcentaje de abono (50 o 100). Solo aplica si hay items de fabricación.
+    abono_porcentaje = int(data.get('abono_porcentaje', 100))
+    if abono_porcentaje not in (50, 100):
+        abono_porcentaje = 100
+
+    print(f"[PEDIDO] id_colegio={data['id_colegio']} abono={abono_porcentaje}% items={[(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido','normal')) for i in items]}", flush=True)
 
     colegio = Colegio.query.get(data['id_colegio'])
     if not colegio:
         return jsonify({'error': 'Colegio no encontrado'}), 404
 
-    # Validar stock y calcular total
-    total = 0
+    total_orden = 0
     items_validados = []
+    tiene_fabricacion = False
     ahora = datetime.utcnow()
-    for item in items:
-        id_reserva = item.get('id_reserva')
 
-        if id_reserva:
-            # Validar que la reserva siga activa
+    for item in items:
+        tipo_pedido = item.get('tipo_pedido', 'normal')
+        id_reserva  = item.get('id_reserva')
+
+        if tipo_pedido == 'fabricacion':
+            # Pedido anticipado: no hay stock, no se necesita reserva
+            tiene_fabricacion = True
+        elif id_reserva:
+            # Reserva activa existente
             reserva = Reserva.query.get(id_reserva)
             if not reserva or reserva.estado != 'activa' or reserva.fecha_expiracion < ahora:
                 return jsonify({
@@ -236,13 +273,13 @@ def crear_pedido():
                     'error': f"La cantidad reservada de {item.get('nombre', '')} es insuficiente."
                 }), 409
         else:
-            # Sin reserva: validar stock directo (compatibilidad hacia atrás)
+            # Sin reserva: validar stock directo
             stock = Stock.query.filter_by(
                 id_colegio=data['id_colegio'],
                 id_producto=item['id_producto'],
                 talla_individual=item['talla']
             ).first()
-            print(f"[STOCK] buscando id_colegio={data['id_colegio']} id_producto={item['id_producto']} talla={repr(item['talla'])} → encontrado={stock is not None} cantidad={stock.cantidad if stock else 'N/A'}", flush=True)
+            print(f"[STOCK] id_producto={item['id_producto']} talla={repr(item['talla'])} → cantidad={stock.cantidad if stock else 'N/A'}", flush=True)
             if not stock or stock.cantidad < item['cantidad']:
                 return jsonify({'error': f"Sin stock: {item.get('nombre', '')} talla {item.get('talla', '')}"}), 400
 
@@ -250,21 +287,28 @@ def crear_pedido():
             id_colegio=data['id_colegio'],
             id_producto=item['id_producto'],
         ).first()
-
         if not precio:
             return jsonify({'error': f"Precio no encontrado: {item.get('nombre', '')}"}), 400
 
         subtotal_item = precio.precio_unitario * item['cantidad']
-        total += subtotal_item
+        total_orden  += subtotal_item
         items_validados.append({
-            'id_producto':  item['id_producto'],
-            'nombre':       item.get('nombre', ''),
-            'talla':        item['talla'],
-            'cantidad':     item['cantidad'],
+            'id_producto':     item['id_producto'],
+            'nombre':          item.get('nombre', ''),
+            'talla':           item['talla'],
+            'cantidad':        item['cantidad'],
             'precio_unitario': precio.precio_unitario,
-            'subtotal':     subtotal_item,
-            'id_reserva':   id_reserva,
+            'subtotal':        subtotal_item,
+            'id_reserva':      id_reserva,
+            'tipo_pedido':     tipo_pedido,
         })
+
+    # Monto a cobrar ahora (puede ser 50% si es pedido con abono)
+    if tiene_fabricacion and abono_porcentaje == 50:
+        total_cobrar = round(total_orden * 0.5)
+    else:
+        total_cobrar    = total_orden
+        abono_porcentaje = 100
 
     referencia = f"RALOZ-{uuid.uuid4().hex[:12].upper()}"
 
@@ -278,9 +322,16 @@ def crear_pedido():
         id_colegio=colegio.id_colegio,
         nombre_colegio=colegio.nombre,
         items_json=json.dumps(items_validados),
-        total=total,
+        total=total_cobrar,   # lo que se cobra ahora
         estado='pendiente',
     )
+    # Columnas opcionales (presentes tras migración)
+    try:
+        pedido.total_orden       = total_orden
+        pedido.abono_porcentaje  = abono_porcentaje
+        pedido.tiene_fabricacion = tiene_fabricacion
+    except Exception:
+        pass
     db.session.add(pedido)
     db.session.commit()
 
@@ -346,10 +397,13 @@ def crear_pedido():
 
     return jsonify({
         'pedido': {
-            'referencia': referencia,
-            'id_pedido': pedido.id_pedido,
-            'total': total,
-            'items': items_validados,
+            'referencia':        referencia,
+            'id_pedido':         pedido.id_pedido,
+            'total_cobrar':      total_cobrar,
+            'total_orden':       total_orden,
+            'abono_porcentaje':  abono_porcentaje,
+            'tiene_fabricacion': tiene_fabricacion,
+            'items':             items_validados,
         },
         'pago_url': pago_url,
     }), 201
@@ -402,10 +456,10 @@ def mp_webhook():
             try:
                 factura = _crear_factura_desde_pedido(pedido)
                 pedido.id_factura = factura.id_factura
-            except Exception:
+            except Exception as e:
+                logger.error('[WEBHOOK] Error creando factura: %s', str(e))
                 db.session.rollback()
 
-            # Enviar email con factura PDF al cliente (fallo no bloquea la respuesta)
             if factura and pedido.email_cliente:
                 try:
                     detalles = list(factura.detalles)
@@ -413,9 +467,14 @@ def mp_webhook():
                 except Exception as e:
                     logger.error('[WEBHOOK] Error enviando email: %s', str(e))
 
+            # Crear PedidoFabricacion si aplica
+            try:
+                _crear_pedido_fabricacion_si_aplica(pedido)
+            except Exception as e:
+                logger.error('[WEBHOOK] Error creando pedido fabricacion: %s', str(e))
+
         elif estado_mp in ('rejected', 'cancelled', 'refunded', 'charged_back'):
             pedido.estado = 'fallido'
-            # Liberar reservas para que el stock vuelva a estar disponible
             try:
                 items_pedido = json.loads(pedido.items_json) if pedido.items_json else []
                 for item in items_pedido:
@@ -517,6 +576,138 @@ def descargar_factura_admin(id_pedido):
 
 
 # ══════════════════════════════════════════════════════════════
+# ADMIN — Pedidos de Fabricación
+# ══════════════════════════════════════════════════════════════
+
+def _jwt_required():
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+        return None
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+
+@tienda_bp.route('/admin/fabricacion/pedidos', methods=['GET'])
+def listar_pedidos_fabricacion():
+    err = _jwt_required()
+    if err: return err
+
+    estado = request.args.get('estado', '').strip()
+    limit  = min(request.args.get('limit', 50, type=int), 200)
+    offset = request.args.get('offset', 0, type=int)
+
+    q = PedidoFabricacion.query
+    if estado:
+        q = q.filter(PedidoFabricacion.estado == estado)
+    q = q.order_by(PedidoFabricacion.fecha_pedido.desc())
+
+    total   = q.count()
+    pedidos = q.offset(offset).limit(limit).all()
+    return jsonify({'pedidos': [p.to_dict() for p in pedidos], 'total': total}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>', methods=['GET'])
+def detalle_pedido_fabricacion(id_pedido):
+    err = _jwt_required()
+    if err: return err
+    pf = PedidoFabricacion.query.get_or_404(id_pedido)
+    return jsonify({'pedido': pf.to_dict()}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-listo', methods=['POST'])
+def marcar_pedido_fabricacion_listo(id_pedido):
+    err = _jwt_required()
+    if err: return err
+    pf = PedidoFabricacion.query.get_or_404(id_pedido)
+    if pf.estado == 'entregado':
+        return jsonify({'error': 'El pedido ya fue entregado'}), 400
+    pf.estado = 'listo_para_entrega'
+    db.session.commit()
+    return jsonify({'ok': True, 'estado': pf.estado}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-entregado', methods=['POST'])
+def marcar_pedido_fabricacion_entregado(id_pedido):
+    err = _jwt_required()
+    if err: return err
+    pf = PedidoFabricacion.query.get_or_404(id_pedido)
+    pf.estado = 'entregado'
+    db.session.commit()
+    return jsonify({'ok': True, 'estado': pf.estado}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/stock-pendiente', methods=['GET'])
+def listar_stock_pendiente():
+    err = _jwt_required()
+    if err: return err
+    items = StockPendienteFabricacion.query.filter_by(estado='pendiente')\
+        .order_by(StockPendienteFabricacion.fecha_creacion.asc()).all()
+    return jsonify({'items': [i.to_dict() for i in items]}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/stock-pendiente/registrar', methods=['POST'])
+def registrar_fabricacion():
+    """Registra unidades fabricadas: suma stock real y actualiza pedidos afectados"""
+    err = _jwt_required()
+    if err: return err
+
+    data        = request.get_json() or {}
+    id_pendiente = data.get('id_pendiente')
+    cantidad_fab = int(data.get('cantidad_fabricada', 0))
+    if not id_pendiente or cantidad_fab <= 0:
+        return jsonify({'error': 'Datos incompletos'}), 400
+
+    spf = StockPendienteFabricacion.query.get_or_404(id_pendiente)
+
+    # 1. Sumar al stock real
+    stock = Stock.query.filter_by(
+        id_colegio=spf.id_colegio,
+        id_producto=spf.id_producto,
+        talla_individual=spf.talla,
+    ).first()
+    if stock:
+        stock.cantidad += cantidad_fab
+    else:
+        db.session.add(Stock(
+            id_colegio=spf.id_colegio,
+            id_producto=spf.id_producto,
+            talla_individual=spf.talla,
+            cantidad=cantidad_fab,
+        ))
+
+    # 2. Reducir pendiente o marcar completado
+    spf.cantidad_pendiente = max(0, spf.cantidad_pendiente - cantidad_fab)
+    if spf.cantidad_pendiente == 0:
+        spf.estado = 'completado'
+
+    # 3. Actualizar pedidos de fabricación afectados → listo_para_entrega
+    if spf.ids_pedidos:
+        ids = [int(x) for x in spf.ids_pedidos.split(',') if x.strip().isdigit()]
+        for pid in ids:
+            pf = PedidoFabricacion.query.get(pid)
+            if pf and pf.estado == 'en_produccion':
+                # Verificar si todos sus items ya están listos
+                items_pf = json.loads(pf.items_json) if pf.items_json else []
+                todos_listos = True
+                for item in items_pf:
+                    spf_item = StockPendienteFabricacion.query.filter_by(
+                        id_colegio=pf.id_colegio,
+                        id_producto=item['id_producto'],
+                        talla=item['talla'],
+                        estado='pendiente',
+                    ).first()
+                    if spf_item and spf_item.cantidad_pendiente > 0:
+                        todos_listos = False
+                        break
+                if todos_listos:
+                    pf.estado = 'listo_para_entrega'
+
+    db.session.commit()
+    return jsonify({'ok': True, 'cantidad_pendiente': spf.cantidad_pendiente}), 200
+
+
+# ══════════════════════════════════════════════════════════════
 # CONSULTAR ESTADO DEL PEDIDO
 # ══════════════════════════════════════════════════════════════
 
@@ -536,6 +727,19 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
     """Convierte un PedidoWeb pagado en una Factura del sistema"""
     items = json.loads(pedido.items_json)
 
+    # Separar items normales de fabricación
+    items_normales = [i for i in items if i.get('tipo_pedido') != 'fabricacion']
+    items_fab      = [i for i in items if i.get('tipo_pedido') == 'fabricacion']
+
+    # Totales
+    total_normal = sum(i['subtotal'] for i in items_normales)
+    total_fab    = sum(i['subtotal'] for i in items_fab)
+    total_orden  = total_normal + total_fab
+
+    # Abono pagado (lo que registró MercadoPago = pedido.total)
+    abono_pagado    = pedido.total
+    saldo_pendiente = max(0, total_orden - abono_pagado)
+
     serie = SerieFacturacion.query.filter_by(activa=True).first()
     if not serie:
         raise ValueError('No hay serie de facturación activa')
@@ -553,6 +757,7 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
         db.session.add(cliente)
         db.session.flush()
 
+    obs_fab = ' [INCLUYE PEDIDO POR FABRICACIÓN]' if items_fab else ''
     factura = Factura(
         numero_factura=numero,
         id_colegio=pedido.id_colegio,
@@ -561,14 +766,14 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
         cliente_email=pedido.email_cliente,
         cliente_nit=pedido.documento_cliente or '',
         fecha_factura=date.today(),
-        total=pedido.total,
-        subtotal=pedido.total,
-        total_abonado=pedido.total,
-        saldo_pendiente=0,
-        estado='PAGADA',
+        total=total_orden,
+        subtotal=total_orden,
+        total_abonado=abono_pagado,
+        saldo_pendiente=saldo_pendiente,
+        estado='PAGADA' if saldo_pendiente == 0 else 'ABONO',
         estado_entrega='POR_ENTREGAR',
         metodo_pago=pedido.metodo_pago or 'MP',
-        observaciones=f'Pedido web #{pedido.referencia}',
+        observaciones=f'Pedido web #{pedido.referencia}{obs_fab}',
         usuario_creacion='TIENDA_WEB',
     )
     db.session.add(factura)
@@ -583,28 +788,87 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
             precio_unitario=item['precio_unitario'],
             total_linea=item['subtotal'],
         ))
-        stock = Stock.query.filter_by(
-            id_colegio=pedido.id_colegio,
-            id_producto=item['id_producto'],
-            talla_individual=item['talla'],
-        ).first()
-        if stock:
-            stock.cantidad = max(0, stock.cantidad - item['cantidad'])
-
-        # Marcar reserva como completada
-        if item.get('id_reserva'):
-            reserva = Reserva.query.get(item['id_reserva'])
-            if reserva:
-                reserva.estado = 'completada'
+        # Solo descontar stock en items normales (con stock disponible)
+        if item.get('tipo_pedido') != 'fabricacion':
+            stock = Stock.query.filter_by(
+                id_colegio=pedido.id_colegio,
+                id_producto=item['id_producto'],
+                talla_individual=item['talla'],
+            ).first()
+            if stock:
+                stock.cantidad = max(0, stock.cantidad - item['cantidad'])
+            if item.get('id_reserva'):
+                reserva = Reserva.query.get(item['id_reserva'])
+                if reserva:
+                    reserva.estado = 'completada'
 
     metodo_pago = MetodoPago.query.filter_by(nombre='TRANSFERENCIA').first()
     db.session.add(Pago(
         id_factura=factura.id_factura,
-        monto=pedido.total,
+        monto=abono_pagado,
         id_metodo_pago=metodo_pago.id_metodo_pago if metodo_pago else 1,
         observacion=f'Pago online MercadoPago — {pedido.referencia}',
         fecha_pago=date.today(),
     ))
     db.session.commit()
-
     return factura
+
+
+def _crear_pedido_fabricacion_si_aplica(pedido: PedidoWeb):
+    """Si el pedido tiene items de fabricación, crea PedidoFabricacion y actualiza StockPendienteFabricacion"""
+    items = json.loads(pedido.items_json) if pedido.items_json else []
+    items_fab = [i for i in items if i.get('tipo_pedido') == 'fabricacion']
+    if not items_fab:
+        return
+
+    total_fab    = sum(i['subtotal'] for i in items_fab)
+    total_orden  = sum(i['subtotal'] for i in items)
+    abono_porc   = getattr(pedido, 'abono_porcentaje', 100) or 100
+    abono_monto  = pedido.total  # lo que ya pagó
+    saldo        = max(0, total_fab - (abono_monto - (total_orden - total_fab)))
+
+    fecha_estimada = (datetime.utcnow() + timedelta(days=60)).date()
+
+    pf = PedidoFabricacion(
+        id_pedido_web=pedido.id_pedido,
+        nombre_cliente=pedido.nombre_cliente,
+        email_cliente=pedido.email_cliente,
+        telefono_cliente=pedido.telefono_cliente,
+        id_colegio=pedido.id_colegio,
+        nombre_colegio=pedido.nombre_colegio,
+        total_orden=total_fab,
+        abono_porcentaje=abono_porc,
+        abono_monto=abono_monto,
+        saldo_pendiente=saldo,
+        items_json=json.dumps(items_fab),
+        fecha_estimada=fecha_estimada,
+        estado='en_produccion',
+    )
+    db.session.add(pf)
+    db.session.flush()
+
+    # Acumular en stock_pendiente_fabricacion
+    for item in items_fab:
+        spf = StockPendienteFabricacion.query.filter_by(
+            id_colegio=pedido.id_colegio,
+            id_producto=item['id_producto'],
+            talla=item['talla'],
+            estado='pendiente',
+        ).first()
+        if spf:
+            spf.cantidad_pendiente += item['cantidad']
+            ids_list = spf.ids_pedidos.split(',') if spf.ids_pedidos else []
+            if str(pf.id_pedido) not in ids_list:
+                ids_list.append(str(pf.id_pedido))
+            spf.ids_pedidos = ','.join(filter(None, ids_list))
+        else:
+            db.session.add(StockPendienteFabricacion(
+                id_colegio=pedido.id_colegio,
+                id_producto=item['id_producto'],
+                talla=item['talla'],
+                cantidad_pendiente=item['cantidad'],
+                ids_pedidos=str(pf.id_pedido),
+                estado='pendiente',
+            ))
+
+    db.session.commit()

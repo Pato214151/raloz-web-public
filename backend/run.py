@@ -41,6 +41,34 @@ def _job_limpiar_reservas():
 threading.Thread(target=_job_limpiar_reservas, daemon=True, name='reservas-cleanup').start()
 
 
+# ─── Migración automática de columnas nuevas ─────────────────────
+def _auto_migrate():
+    """Crea tablas nuevas y añade columnas opcionales a tablas existentes."""
+    with app.app_context():
+        from sqlalchemy import text
+        db.create_all()  # crea tablas nuevas (pedidos_fabricacion, stock_pendiente_fabricacion)
+        migraciones = [
+            # Columnas extra en pedidos_web para soporte de fabricación
+            "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS total_orden FLOAT",
+            "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS abono_porcentaje INTEGER DEFAULT 100",
+            "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS tiene_fabricacion BOOLEAN DEFAULT FALSE",
+            # Columna ABONO en facturas (por si no existe)
+            "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS total_abonado FLOAT",
+            "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS saldo_pendiente FLOAT DEFAULT 0",
+        ]
+        for sql in migraciones:
+            try:
+                db.session.execute(text(sql))
+            except Exception:
+                pass
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+_auto_migrate()
+
+
 @app.cli.command('init-db')
 def init_db():
     """Crear todas las tablas"""

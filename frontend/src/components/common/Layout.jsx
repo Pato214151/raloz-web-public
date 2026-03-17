@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   LayoutDashboard, FileText, Search, CreditCard, Package,
   TrendingUp, Users, Wallet, BookOpen, Clock, UserCog,
-  Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle, DollarSign, Box, Settings, ClipboardList, ShoppingCart
+  Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle, DollarSign, Box, Settings, ClipboardList, ShoppingCart, Scissors, Hammer
 } from 'lucide-react'
 
 const menuItems = [
@@ -13,7 +13,9 @@ const menuItems = [
   { path: '/buscar', label: 'Buscar Facturas', icon: Search, roles: ['administrador', 'vendedor', 'cajero'] },
   { path: '/pagos', label: 'Pagos', icon: CreditCard, roles: ['administrador', 'vendedor', 'cajero'] },
   { path: '/stock', label: 'Inventario', icon: Package, roles: ['administrador', 'vendedor'] },
-  { path: '/pedidos-online', label: 'Pedidos Online', icon: ShoppingCart, roles: ['administrador', 'vendedor'] },
+  { path: '/pedidos-online',    label: 'Pedidos Online',   icon: ShoppingCart, roles: ['administrador', 'vendedor'] },
+  { path: '/fabricacion',       label: 'Fabricación',      icon: Scissors,     roles: ['administrador', 'vendedor'] },
+  { path: '/fabricacion/stock', label: 'Stock Pendiente',  icon: Hammer,       roles: ['administrador', 'vendedor'] },
   { path: '/ventas', label: 'Hoja de Ventas', icon: TrendingUp, roles: ['administrador', 'vendedor'] },
   { path: '/cuentas', label: 'Cuentas por Cobrar', icon: AlertCircle, roles: ['administrador', 'vendedor'] },
   { path: '/empaque', label: 'Empaque', icon: Box, roles: ['administrador', 'vendedor'] },
