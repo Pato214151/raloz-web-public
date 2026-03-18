@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { ShoppingCart, CheckCircle, XCircle, Clock, Download, RefreshCw, Eye } from 'lucide-react'
+import { ShoppingCart, CheckCircle, XCircle, Clock, Download, RefreshCw, Eye, CreditCard } from 'lucide-react'
 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const fmtFecha = (iso) => {
@@ -23,6 +23,7 @@ export default function PedidosOnline() {
   const [filtroEstado, setFiltro]   = useState('')
   const [seleccionado, setSelected] = useState(null)
   const [descargando, setDesc]      = useState(null)
+  const [marcando, setMarcando]     = useState(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -46,6 +47,21 @@ export default function PedidosOnline() {
       setSelected(res.data.pedido)
     } catch {
       toast.error('Error cargando detalle')
+    }
+  }
+
+  const marcarPagado = async (pedido) => {
+    if (!window.confirm(`¿Marcar el pedido ${pedido.referencia} como PAGADO manualmente?\nEsto generará la factura y descontará el stock.`)) return
+    setMarcando(pedido.id_pedido)
+    try {
+      const res = await api.post(`/tienda/admin/pedidos/${pedido.id_pedido}/marcar-pagado`)
+      toast.success(`Pedido marcado como pagado. Factura: ${res.data.factura_numero || '—'}`)
+      cargar()
+      if (seleccionado?.id_pedido === pedido.id_pedido) setSelected(res.data.pedido)
+    } catch {
+      toast.error('No se pudo marcar como pagado')
+    } finally {
+      setMarcando(null)
     }
   }
 
@@ -144,6 +160,13 @@ export default function PedidosOnline() {
                         className="p-1.5 rounded hover:bg-blue-50 text-blue-500">
                         <Eye size={15} />
                       </button>
+                      {p.estado === 'pendiente' && (
+                        <button onClick={() => marcarPagado(p)} title="Marcar como pagado manualmente"
+                          disabled={marcando === p.id_pedido}
+                          className="p-1.5 rounded hover:bg-green-50 text-green-600 disabled:opacity-40">
+                          <CreditCard size={15} className={marcando === p.id_pedido ? 'animate-pulse' : ''} />
+                        </button>
+                      )}
                       {p.estado === 'pagado' && (
                         <button onClick={() => descargarPDF(p)} title="Descargar factura PDF"
                           disabled={descargando === p.id_pedido}
@@ -214,6 +237,15 @@ export default function PedidosOnline() {
                 <span className="text-lg font-bold text-orange-600">{fmt(seleccionado.total)}</span>
               </div>
 
+              {/* Botón marcar pagado */}
+              {seleccionado.estado === 'pendiente' && (
+                <button onClick={() => marcarPagado(seleccionado)}
+                  disabled={marcando === seleccionado.id_pedido}
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                  <CreditCard size={16} />
+                  {marcando === seleccionado.id_pedido ? 'Procesando...' : '✓ Marcar como pagado manualmente'}
+                </button>
+              )}
               {/* Botón PDF */}
               {seleccionado.estado === 'pagado' && (
                 <button onClick={() => descargarPDF(seleccionado)}

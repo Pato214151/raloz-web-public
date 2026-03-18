@@ -432,7 +432,10 @@ def mp_webhook():
         # Obtener detalle del pago desde MP
         url = f'{MP_API}/v1/payments/{resource_id}' if topic == 'payment' else f'{MP_API}/merchant_orders/{resource_id}'
         resp = requests.get(url, headers={'Authorization': f'Bearer {mp_token}'}, timeout=8)
+
+        logger.info('[WEBHOOK] MP status=%s resource_id=%s', resp.status_code, resource_id)
         if resp.status_code != 200:
+            logger.error('[WEBHOOK] MP rechazó consulta: %s', resp.text[:300])
             return jsonify({'ok': True}), 200
 
         pago_data = resp.json()
@@ -440,41 +443,49 @@ def mp_webhook():
         referencia = pago_data.get('external_reference', '')
         metodo = pago_data.get('payment_type_id', 'MP')
 
+        logger.info('[WEBHOOK] estado_mp=%s referencia=%s', estado_mp, referencia)
+
         if not referencia:
+            logger.warning('[WEBHOOK] Sin external_reference en resource_id=%s', resource_id)
             return jsonify({'ok': True}), 200
 
         pedido = PedidoWeb.query.filter_by(referencia=referencia).first()
         if not pedido:
+            logger.warning('[WEBHOOK] Pedido no encontrado referencia=%s', referencia)
             return jsonify({'ok': True}), 200
 
         pedido.wompi_status = estado_mp
         pedido.metodo_pago = metodo
 
         if estado_mp == 'approved' and pedido.estado == 'pendiente':
+            logger.info('[WEBHOOK] Aprobando pedido %s', pedido.id_pedido)
             pedido.estado = 'pagado'
             pedido.fecha_pago = datetime.utcnow()
+            db.session.commit()  # guardar estado pagado primero
+
             factura = None
             try:
                 factura = _crear_factura_desde_pedido(pedido)
                 pedido.id_factura = factura.id_factura
+                db.session.commit()
+                logger.info('[WEBHOOK] Factura %s creada', factura.numero_factura)
             except Exception as e:
-                logger.error('[WEBHOOK] Error creando factura: %s', str(e))
+                logger.error('[WEBHOOK] Error factura: %s', str(e), exc_info=True)
                 db.session.rollback()
 
             if factura and pedido.email_cliente:
                 try:
-                    detalles = list(factura.detalles)
-                    enviar_email_factura(pedido.email_cliente, factura, detalles)
+                    enviar_email_factura(pedido.email_cliente, factura, list(factura.detalles))
                 except Exception as e:
-                    logger.error('[WEBHOOK] Error enviando email: %s', str(e))
+                    logger.error('[WEBHOOK] Error email: %s', str(e))
 
-            # Crear PedidoFabricacion si aplica
             try:
                 _crear_pedido_fabricacion_si_aplica(pedido)
             except Exception as e:
-                logger.error('[WEBHOOK] Error creando pedido fabricacion: %s', str(e))
+                logger.error('[WEBHOOK] Error fabricacion: %s', str(e), exc_info=True)
 
         elif estado_mp in ('rejected', 'cancelled', 'refunded', 'charged_back'):
+            logger.info('[WEBHOOK] Pedido %s → fallido (%s)', pedido.id_pedido, estado_mp)
             pedido.estado = 'fallido'
             try:
                 items_pedido = json.loads(pedido.items_json) if pedido.items_json else []
@@ -483,13 +494,15 @@ def mp_webhook():
                         reserva = Reserva.query.get(item['id_reserva'])
                         if reserva and reserva.estado == 'activa':
                             reserva.estado = 'cancelada'
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error('[WEBHOOK] Error liberando reservas: %s', str(e))
+            db.session.commit()
+        else:
+            logger.info('[WEBHOOK] Estado no procesado: %s pedido=%s', estado_mp, pedido.id_pedido)
+            db.session.commit()
 
-        db.session.commit()
-
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error('[WEBHOOK] Error general: %s', str(e), exc_info=True)
 
     return jsonify({'ok': True}), 200
 
@@ -546,6 +559,46 @@ def detalle_pedido_admin(id_pedido):
             d['factura_id']     = factura.id_factura
 
     return jsonify({'pedido': d}), 200
+
+
+@tienda_bp.route('/admin/pedidos/<int:id_pedido>/marcar-pagado', methods=['POST'])
+def marcar_pedido_pagado_manual(id_pedido):
+    """Marca un pedido como pagado manualmente (cuando el webhook de MP falló). Requiere JWT."""
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    pedido = PedidoWeb.query.get_or_404(id_pedido)
+
+    if pedido.estado == 'pagado':
+        return jsonify({'error': 'El pedido ya está marcado como pagado'}), 400
+
+    pedido.estado = 'pagado'
+    pedido.fecha_pago = datetime.utcnow()
+    db.session.commit()
+
+    factura = None
+    try:
+        factura = _crear_factura_desde_pedido(pedido)
+        pedido.id_factura = factura.id_factura
+        db.session.commit()
+        logger.info('[MANUAL] Factura %s creada para pedido %s', factura.numero_factura, pedido.id_pedido)
+    except Exception as e:
+        logger.error('[MANUAL] Error creando factura: %s', str(e), exc_info=True)
+        db.session.rollback()
+
+    try:
+        _crear_pedido_fabricacion_si_aplica(pedido)
+    except Exception as e:
+        logger.error('[MANUAL] Error fabricacion: %s', str(e))
+
+    return jsonify({
+        'ok': True,
+        'pedido': pedido.to_dict(),
+        'factura_numero': factura.numero_factura if factura else None,
+    }), 200
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/factura.pdf', methods=['GET'])
