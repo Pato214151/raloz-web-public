@@ -16,12 +16,16 @@ from flask import Blueprint, request, jsonify
 logger = logging.getLogger(__name__)
 from app import db
 from app.utils.email_service import enviar_email_factura
+from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
     SerieFacturacion, Cliente, Reserva,
     PedidoFabricacion, StockPendienteFabricacion,
 )
+
+# Orden canónico de tallas individuales para mostrar en la tienda
+_ORDEN_TALLAS = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL']
 
 tienda_bp = Blueprint('tienda', __name__)
 
@@ -66,47 +70,60 @@ def catalogo_colegio(id_colegio):
             }
         precios_por_pid.setdefault(pid, {})[precio.talla_grupo] = precio.precio_unitario
 
-    # 2do paso: por cada producto retornar TODAS sus tallas (con stock 0 incluido)
+    # 2do paso: expandir talla_grupo → tallas individuales con su precio
+    # (6-8 → 6 y 8 con el mismo precio, 10-12 → 10 y 12, etc.)
     catalogo = []
     ahora = datetime.utcnow()
     for pid, meta in productos_meta.items():
         tallas_precios = precios_por_pid.get(pid, {})
-        tallas = []
 
-        for talla_grupo, precio_u in sorted(tallas_precios.items()):
-            # Precio 0 → no mostrar esa talla (precio sin configurar)
+        # Construir mapa talla_individual → precio desde los grupos configurados
+        talla_precio_map = {}
+        for talla_grupo, precio_u in tallas_precios.items():
             if not precio_u or precio_u <= 0:
                 continue
+            for talla_ind in TALLA_GRUPO_A_INDIVIDUALES.get(talla_grupo, [talla_grupo]):
+                talla_precio_map[talla_ind] = precio_u
 
-            stock_row = Stock.query.filter_by(
-                id_colegio=id_colegio,
-                id_producto=pid,
-                talla_individual=talla_grupo,
-            ).first()
-            stock_bruto = stock_row.cantidad if stock_row else 0
-
-            if stock_bruto > 0:
-                reservas_activas = db.session.query(
-                    func.coalesce(func.sum(Reserva.cantidad), 0)
-                ).filter(
-                    Reserva.id_colegio == id_colegio,
-                    Reserva.id_producto == pid,
-                    Reserva.talla == talla_grupo,
-                    Reserva.estado == 'activa',
-                    Reserva.fecha_expiracion > ahora,
-                ).scalar() or 0
-                stock_disponible = max(0, stock_bruto - reservas_activas)
-            else:
-                stock_disponible = 0
-
-            tallas.append({
-                'talla':  talla_grupo,
-                'precio': precio_u,
-                'stock':  stock_disponible,
-            })
-
-        if not tallas:
+        if not talla_precio_map:
             continue
+
+        # Batch: stock de todas las tallas individuales en una sola query
+        stocks_rows = Stock.query.filter_by(
+            id_colegio=id_colegio,
+            id_producto=pid,
+        ).filter(Stock.talla_individual.in_(list(talla_precio_map.keys()))).all()
+        stock_map = {s.talla_individual: s.cantidad for s in stocks_rows}
+
+        # Batch: reservas activas agrupadas por talla (solo tallas con stock > 0)
+        tallas_con_stock = [t for t, s in stock_map.items() if s > 0]
+        reservas_map = {}
+        if tallas_con_stock:
+            reservas_rows = db.session.query(
+                Reserva.talla,
+                func.coalesce(func.sum(Reserva.cantidad), 0).label('total'),
+            ).filter(
+                Reserva.id_colegio == id_colegio,
+                Reserva.id_producto == pid,
+                Reserva.talla.in_(tallas_con_stock),
+                Reserva.estado == 'activa',
+                Reserva.fecha_expiracion > ahora,
+            ).group_by(Reserva.talla).all()
+            reservas_map = {r.talla: int(r.total) for r in reservas_rows}
+
+        # Construir lista de tallas en orden canónico (4,6,8,10,12,14,16,S,M,L,XL)
+        tallas = []
+        for talla_ind in sorted(
+            talla_precio_map.keys(),
+            key=lambda t: _ORDEN_TALLAS.index(t) if t in _ORDEN_TALLAS else 99,
+        ):
+            stock_bruto = stock_map.get(talla_ind, 0)
+            reservas = reservas_map.get(talla_ind, 0)
+            tallas.append({
+                'talla':  talla_ind,
+                'precio': talla_precio_map[talla_ind],
+                'stock':  max(0, stock_bruto - reservas),
+            })
 
         todas_sin_stock = all(t['stock'] == 0 for t in tallas)
         catalogo.append({
