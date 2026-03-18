@@ -119,24 +119,20 @@ def productos_mas_vendidos():
 @jwt_required()
 def cuentas_por_cobrar():
     """Facturas con saldo pendiente"""
-    # Buscar facturas no anuladas que tengan saldo
+    # Filtrar directamente en DB por saldo > 0 — evita cargar todas las facturas
     facturas = Factura.query.filter(
         Factura.estado != 'ANULADA',
         Factura.estado != 'CANCELADA',
+        Factura.saldo_pendiente > 0.5,
     ).order_by(Factura.fecha_factura.desc()).all()
 
     resultado = []
     for f in facturas:
-        pagado = sum(p.valor for p in f.pagos)
-        saldo = f.total - pagado
-        # Usar saldo_pendiente de la DB si existe, sino calcular
-        saldo_real = f.saldo_pendiente if f.saldo_pendiente and f.saldo_pendiente > 0 else saldo
-        if saldo_real > 0.5:  # tolerancia de centavos
-            resultado.append({
-                **f.to_dict(),
-                'total_pagado': pagado,
-                'saldo': round(saldo_real, 2),
-            })
+        resultado.append({
+            **f.to_dict(),
+            'total_pagado': round(f.total_abonado or 0, 2),
+            'saldo': round(f.saldo_pendiente, 2),
+        })
 
     total_por_cobrar = sum(r['saldo'] for r in resultado)
 
@@ -217,8 +213,9 @@ def reporte_cuentas():
 
     facturas = query_facturas.all()
 
-    # Pagos en período
-    query_pagos = Pago.query.filter(
+    # Pagos en período — joinedload para evitar N+1 al acceder pago.factura
+    from sqlalchemy.orm import joinedload
+    query_pagos = Pago.query.options(joinedload(Pago.factura)).filter(
         Pago.fecha_pago >= fecha_desde,
         Pago.fecha_pago <= fecha_hasta
     )
@@ -365,6 +362,16 @@ def ventas_por_colegio():
         Factura.estado != 'ANULADA'
     ).group_by(Factura.id_colegio, Colegio.nombre).all()
 
+    # Pre-calcular cobrado por colegio en una sola query
+    pagos_por_colegio_raw = db.session.query(
+        Factura.id_colegio,
+        func.coalesce(func.sum(Pago.valor), 0).label('cobrado'),
+    ).join(Pago, Pago.id_factura == Factura.id_factura).filter(
+        Pago.fecha_pago >= fecha_desde,
+        Pago.fecha_pago <= fecha_hasta,
+    ).group_by(Factura.id_colegio).all()
+    pagos_por_colegio = {r.id_colegio: float(r.cobrado) for r in pagos_por_colegio_raw}
+
     por_colegio = []
     total_ventas_general = 0
     total_facturas_general = 0
@@ -377,14 +384,7 @@ def ventas_por_colegio():
         saldo_pendiente = row.saldo_total or 0
         ticket_promedio = total_ventas / cantidad_facturas if cantidad_facturas > 0 else 0
 
-        # Calcular cobrado
-        pagos_colegio = db.session.query(func.sum(Pago.valor)).join(
-            Factura, Pago.id_factura == Factura.id_factura
-        ).filter(
-            Factura.id_colegio == colegio_id,
-            Pago.fecha_pago >= fecha_desde,
-            Pago.fecha_pago <= fecha_hasta
-        ).scalar() or 0
+        pagos_colegio = pagos_por_colegio.get(colegio_id, 0.0)
 
         # Determinar estado de cobro
         if saldo_pendiente > total_ventas * 0.05:  # más de 5% sin cobrar

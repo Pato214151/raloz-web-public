@@ -11,8 +11,11 @@ from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
+import logging
 from dotenv import load_dotenv
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -189,8 +192,8 @@ def create_app(config_name=None):
                     "CREATE INDEX IF NOT EXISTS idx_movimientos_caja ON movimientos_caja(id_caja)"
                 ))
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error('[INIT] Error en migración automática: %s', str(e), exc_info=True)
 
     # ── Health check ──
     @app.route('/api/health')

@@ -64,31 +64,33 @@ def resumen_dashboard():
     # Pendientes
     pendientes = StockPendiente.query.filter_by(estado='PENDIENTE').count()
 
-    # Cuentas por cobrar
-    from app.models import Factura as F
-    facturas_pendientes = Factura.query.filter(
+    # Cuentas por cobrar — suma directa en DB sin cargar registros ni pagos
+    total_por_cobrar = db.session.query(
+        func.coalesce(func.sum(Factura.saldo_pendiente), 0)
+    ).filter(
         Factura.estado.in_(['PENDIENTE', 'ABONO'])
-    ).all()
-    total_por_cobrar = 0
-    for f in facturas_pendientes:
-        pagado = sum(p.valor for p in f.pagos)
-        total_por_cobrar += f.total - pagado
+    ).scalar() or 0
 
-    # Ventas últimos 7 días para gráfica
-    ventas_7_dias = []
-    for i in range(6, -1, -1):
-        dia = hoy - timedelta(days=i)
-        v = db.session.query(
-            func.coalesce(func.sum(Factura.total), 0),
-        ).filter(and_(
-            Factura.fecha_factura == dia,
-            Factura.estado != 'ANULADA',
-        )).first()
-        ventas_7_dias.append({
-            'fecha': dia.isoformat(),
-            'dia': dia.strftime('%a'),
-            'total': float(v[0]),
-        })
+    # Ventas últimos 7 días — una sola query con GROUP BY
+    inicio_7_dias = hoy - timedelta(days=6)
+    ventas_7_rango = db.session.query(
+        Factura.fecha_factura,
+        func.coalesce(func.sum(Factura.total), 0).label('total'),
+    ).filter(and_(
+        Factura.fecha_factura >= inicio_7_dias,
+        Factura.fecha_factura <= hoy,
+        Factura.estado != 'ANULADA',
+    )).group_by(Factura.fecha_factura).all()
+
+    ventas_por_dia = {r.fecha_factura: float(r.total) for r in ventas_7_rango}
+    ventas_7_dias = [
+        {
+            'fecha': (hoy - timedelta(days=i)).isoformat(),
+            'dia': (hoy - timedelta(days=i)).strftime('%a'),
+            'total': ventas_por_dia.get(hoy - timedelta(days=i), 0.0),
+        }
+        for i in range(6, -1, -1)
+    ]
 
     return jsonify({
         'ventas_hoy': {'facturas': ventas_hoy[0], 'total': float(ventas_hoy[1])},

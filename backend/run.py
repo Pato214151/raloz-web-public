@@ -56,6 +56,19 @@ def _auto_migrate():
             # Columna ABONO en facturas (por si no existe)
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS total_abonado FLOAT",
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS saldo_pendiente FLOAT DEFAULT 0",
+            # Columnas en series_facturacion (por si fueron creadas antes de que existieran)
+            "ALTER TABLE series_facturacion ADD COLUMN IF NOT EXISTS prefijo VARCHAR(10) DEFAULT 'FAC'",
+            "ALTER TABLE series_facturacion ADD COLUMN IF NOT EXISTS formato VARCHAR(100) DEFAULT 'FAC-{ano}-{consecutivo:06d}'",
+            "ALTER TABLE series_facturacion ADD COLUMN IF NOT EXISTS activa BOOLEAN DEFAULT TRUE",
+            # Reparar filas existentes con valores NULL
+            "UPDATE series_facturacion SET formato = 'FAC-{ano}-{consecutivo:06d}' WHERE formato IS NULL",
+            "UPDATE series_facturacion SET prefijo = 'FAC' WHERE prefijo IS NULL",
+            "UPDATE series_facturacion SET activa = TRUE WHERE activa IS NULL",
+            # Índices para consultas frecuentes en dashboard y reportes
+            "CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha_pago)",
+            "CREATE INDEX IF NOT EXISTS idx_pedidos_web_estado ON pedidos_web(estado)",
+            "CREATE INDEX IF NOT EXISTS idx_pedidos_web_referencia ON pedidos_web(referencia)",
+            "CREATE INDEX IF NOT EXISTS idx_facturas_estado_saldo ON facturas(estado, saldo_pendiente)",
         ]
         for sql in migraciones:
             try:

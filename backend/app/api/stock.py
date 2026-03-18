@@ -4,6 +4,7 @@ API de Stock / Inventario
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import Stock, Colegio, Producto
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
@@ -19,7 +20,10 @@ def listar_stock():
     producto_id = request.args.get('producto_id', type=int)
     solo_disponible = request.args.get('solo_disponible', 'false') == 'true'
 
-    query = Stock.query
+    query = Stock.query.options(
+        joinedload(Stock.producto),
+        joinedload(Stock.colegio),
+    )
 
     if colegio_id:
         query = query.filter(Stock.id_colegio == colegio_id)

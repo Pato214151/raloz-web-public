@@ -19,7 +19,7 @@ from app.utils.email_service import enviar_email_factura
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
-    SerieFacturacion, MetodoPago, Cliente, Reserva,
+    SerieFacturacion, Cliente, Reserva,
     PedidoFabricacion, StockPendienteFabricacion,
 )
 
@@ -812,7 +812,8 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
         db.session.flush()
         logger.info('[FACTURA] Serie de facturación auto-creada para el año %s', serie.ano)
     serie.consecutivo_actual += 1
-    numero = serie.formato.format(ano=serie.ano, consecutivo=serie.consecutivo_actual)
+    formato = serie.formato or 'FAC-{ano}-{consecutivo:06d}'
+    numero = formato.format(ano=serie.ano, consecutivo=serie.consecutivo_actual)
 
     cliente = Cliente.query.filter_by(email=pedido.email_cliente).first()
     if not cliente:
@@ -882,12 +883,11 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
             if reserva:
                 reserva.estado = 'completada'
 
-    metodo_pago = MetodoPago.query.filter_by(nombre='TRANSFERENCIA').first()
     db.session.add(Pago(
         id_factura=factura.id_factura,
-        monto=abono_pagado,
-        id_metodo_pago=metodo_pago.id_metodo_pago if metodo_pago else 1,
-        observacion=f'Pago online MercadoPago — {pedido.referencia}',
+        valor=abono_pagado,
+        metodo_pago=pedido.metodo_pago or 'MP',
+        usuario_registro='TIENDA_WEB',
         fecha_pago=date.today(),
     ))
     db.session.commit()

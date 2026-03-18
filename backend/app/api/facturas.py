@@ -157,6 +157,13 @@ def crear_factura():
         id_colegio = int(data['id_colegio'])
         colegio = factura.colegio
 
+        # Pre-cargar productos para evitar N+1 dentro del loop
+        ids_productos = [det['id_producto'] for det in detalles_validados]
+        productos_map = {
+            p.id_producto: p
+            for p in Producto.query.filter(Producto.id_producto.in_(ids_productos)).all()
+        }
+
         # Crear detalles
         for det in detalles_validados:
             detalle = FacturaDetalle(id_factura=factura.id_factura, **det)
@@ -173,7 +180,7 @@ def crear_factura():
                     stock.cantidad = max(0, stock.cantidad - det['cantidad'])
             else:
                 # Guardar como prenda pendiente de entrega
-                producto = Producto.query.get(det['id_producto'])
+                producto = productos_map.get(det['id_producto'])
                 prenda = PrendaPendiente(
                     id_factura=factura.id_factura,
                     numero_factura=numero,
