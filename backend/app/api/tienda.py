@@ -50,7 +50,7 @@ def listar_colegios():
 
 @tienda_bp.route('/catalogo/<int:id_colegio>', methods=['GET'])
 def catalogo_colegio(id_colegio):
-    """Retorna productos disponibles (con stock > 0) para un colegio"""
+    """Retorna TODOS los productos con precios para un colegio, con stock real por talla."""
     colegio = Colegio.query.get_or_404(id_colegio)
     precios = PrecioColegio.query.filter_by(id_colegio=id_colegio).all()
 
@@ -66,61 +66,56 @@ def catalogo_colegio(id_colegio):
             }
         precios_por_pid.setdefault(pid, {})[precio.talla_grupo] = precio.precio_unitario
 
-    # 2do paso: consultar stock UNA vez por producto y armar catálogo
+    # 2do paso: por cada producto retornar TODAS sus tallas (con stock 0 incluido)
     catalogo = []
     ahora = datetime.utcnow()
     for pid, meta in productos_meta.items():
-        stocks = Stock.query.filter_by(
-            id_colegio=id_colegio,
-            id_producto=pid
-        ).filter(Stock.cantidad > 0).all()
-
+        tallas_precios = precios_por_pid.get(pid, {})
         tallas = []
-        for s in stocks:
-            if not s.talla_individual:
+
+        for talla_grupo, precio_u in sorted(tallas_precios.items()):
+            # Precio 0 → no mostrar esa talla (precio sin configurar)
+            if not precio_u or precio_u <= 0:
                 continue
-            reservas_activas = db.session.query(
-                func.coalesce(func.sum(Reserva.cantidad), 0)
-            ).filter(
-                Reserva.id_colegio == id_colegio,
-                Reserva.id_producto == pid,
-                Reserva.talla == s.talla_individual,
-                Reserva.estado == 'activa',
-                Reserva.fecha_expiracion > ahora,
-            ).scalar() or 0
 
-            stock_disponible = max(0, s.cantidad - reservas_activas)
-            if stock_disponible > 0:
-                precio_u = precios_por_pid.get(pid, {}).get(s.talla_individual, 0)
-                tallas.append({
-                    'talla':       s.talla_individual,
-                    'precio':      precio_u,
-                    'stock':       stock_disponible,
-                    'talla_grupo': s.talla_individual,
-                })
+            stock_row = Stock.query.filter_by(
+                id_colegio=id_colegio,
+                id_producto=pid,
+                talla_individual=talla_grupo,
+            ).first()
+            stock_bruto = stock_row.cantidad if stock_row else 0
 
-        if tallas:
-            catalogo.append({
-                'id_producto': pid,
-                'nombre':      meta['nombre'],
-                'tipo':        meta['tipo'],
-                'tallas':      tallas,
-                'fabricacion': False,
+            if stock_bruto > 0:
+                reservas_activas = db.session.query(
+                    func.coalesce(func.sum(Reserva.cantidad), 0)
+                ).filter(
+                    Reserva.id_colegio == id_colegio,
+                    Reserva.id_producto == pid,
+                    Reserva.talla == talla_grupo,
+                    Reserva.estado == 'activa',
+                    Reserva.fecha_expiracion > ahora,
+                ).scalar() or 0
+                stock_disponible = max(0, stock_bruto - reservas_activas)
+            else:
+                stock_disponible = 0
+
+            tallas.append({
+                'talla':  talla_grupo,
+                'precio': precio_u,
+                'stock':  stock_disponible,
             })
-        else:
-            # Sin stock → disponible como pedido anticipado (fabricación)
-            tallas_fab = [
-                {'talla': tg, 'precio': pu, 'stock': 0}
-                for tg, pu in sorted(precios_por_pid.get(pid, {}).items())
-            ]
-            if tallas_fab:
-                catalogo.append({
-                    'id_producto': pid,
-                    'nombre':      meta['nombre'],
-                    'tipo':        meta['tipo'],
-                    'tallas':      tallas_fab,
-                    'fabricacion': True,
-                })
+
+        if not tallas:
+            continue
+
+        todas_sin_stock = all(t['stock'] == 0 for t in tallas)
+        catalogo.append({
+            'id_producto': pid,
+            'nombre':      meta['nombre'],
+            'tipo':        meta['tipo'],
+            'tallas':      tallas,
+            'fabricacion': todas_sin_stock,
+        })
 
     return jsonify({
         'colegio': {'id_colegio': colegio.id_colegio, 'nombre': colegio.nombre},
@@ -242,7 +237,12 @@ def crear_pedido():
     if abono_porcentaje not in (50, 100):
         abono_porcentaje = 100
 
-    print(f"[PEDIDO] id_colegio={data['id_colegio']} abono={abono_porcentaje}% items={[(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido','normal')) for i in items]}", flush=True)
+    # tipo_entrega: 'parcial' (recibir disponible ahora) o 'completa' (esperar todo)
+    tipo_entrega = data.get('tipo_entrega', 'completa')
+    if tipo_entrega not in ('parcial', 'completa'):
+        tipo_entrega = 'completa'
+
+    print(f"[PEDIDO] id_colegio={data['id_colegio']} abono={abono_porcentaje}% entrega={tipo_entrega} items={[(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido','normal')) for i in items]}", flush=True)
 
     colegio = Colegio.query.get(data['id_colegio'])
     if not colegio:
@@ -257,8 +257,8 @@ def crear_pedido():
         tipo_pedido = item.get('tipo_pedido', 'normal')
         id_reserva  = item.get('id_reserva')
 
-        if tipo_pedido == 'fabricacion':
-            # Pedido anticipado: no hay stock, no se necesita reserva
+        if tipo_pedido in ('fabricacion', 'mixto'):
+            # Pedido anticipado o mixto: no validar stock completo
             tiene_fabricacion = True
         elif id_reserva:
             # Reserva activa existente
@@ -330,6 +330,7 @@ def crear_pedido():
         pedido.total_orden       = total_orden
         pedido.abono_porcentaje  = abono_porcentaje
         pedido.tiene_fabricacion = tiene_fabricacion
+        pedido.tipo_entrega      = tipo_entrega
     except Exception:
         pass
     db.session.add(pedido)
@@ -727,8 +728,8 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
     """Convierte un PedidoWeb pagado en una Factura del sistema"""
     items = json.loads(pedido.items_json)
 
-    # Separar items normales de fabricación
-    items_normales = [i for i in items if i.get('tipo_pedido') != 'fabricacion']
+    # Separar items: normal/mixto (tienen algo de stock) vs fabricacion puro
+    items_normales = [i for i in items if i.get('tipo_pedido') not in ('fabricacion',)]
     items_fab      = [i for i in items if i.get('tipo_pedido') == 'fabricacion']
 
     # Totales
@@ -788,19 +789,31 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
             precio_unitario=item['precio_unitario'],
             total_linea=item['subtotal'],
         ))
-        # Solo descontar stock en items normales (con stock disponible)
-        if item.get('tipo_pedido') != 'fabricacion':
+        # Descontar stock según tipo:
+        # - normal → descuenta cantidad completa
+        # - mixto  → descuenta solo stock_disponible (el resto es fabricación)
+        # - fabricacion → no descuenta stock
+        tipo_item = item.get('tipo_pedido', 'normal')
+        if tipo_item == 'normal':
+            cant_descontar = item['cantidad']
+        elif tipo_item == 'mixto':
+            cant_descontar = int(item.get('stock_disponible', 0))
+        else:
+            cant_descontar = 0
+
+        if cant_descontar > 0:
             stock = Stock.query.filter_by(
                 id_colegio=pedido.id_colegio,
                 id_producto=item['id_producto'],
                 talla_individual=item['talla'],
             ).first()
             if stock:
-                stock.cantidad = max(0, stock.cantidad - item['cantidad'])
-            if item.get('id_reserva'):
-                reserva = Reserva.query.get(item['id_reserva'])
-                if reserva:
-                    reserva.estado = 'completada'
+                stock.cantidad = max(0, stock.cantidad - cant_descontar)
+
+        if item.get('id_reserva'):
+            reserva = Reserva.query.get(item['id_reserva'])
+            if reserva:
+                reserva.estado = 'completada'
 
     metodo_pago = MetodoPago.query.filter_by(nombre='TRANSFERENCIA').first()
     db.session.add(Pago(
@@ -815,16 +828,27 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
 
 
 def _crear_pedido_fabricacion_si_aplica(pedido: PedidoWeb):
-    """Si el pedido tiene items de fabricación, crea PedidoFabricacion y actualiza StockPendienteFabricacion"""
+    """Si el pedido tiene items de fabricación o mixtos, crea PedidoFabricacion y StockPendienteFabricacion"""
     items = json.loads(pedido.items_json) if pedido.items_json else []
-    items_fab = [i for i in items if i.get('tipo_pedido') == 'fabricacion']
+
+    # Incluir fabricacion puros Y la porción de fabricación de items mixtos
+    items_fab = []
+    for i in items:
+        tp = i.get('tipo_pedido', 'normal')
+        if tp == 'fabricacion':
+            items_fab.append(i)
+        elif tp == 'mixto':
+            cant_fab = i['cantidad'] - int(i.get('stock_disponible', 0))
+            if cant_fab > 0:
+                items_fab.append({**i, 'cantidad': cant_fab, 'subtotal': i['precio_unitario'] * cant_fab})
+
     if not items_fab:
         return
 
     total_fab    = sum(i['subtotal'] for i in items_fab)
     total_orden  = sum(i['subtotal'] for i in items)
     abono_porc   = getattr(pedido, 'abono_porcentaje', 100) or 100
-    abono_monto  = pedido.total  # lo que ya pagó
+    abono_monto  = pedido.total
     saldo        = max(0, total_fab - (abono_monto - (total_orden - total_fab)))
 
     fecha_estimada = (datetime.utcnow() + timedelta(days=60)).date()

@@ -52,6 +52,7 @@ def _auto_migrate():
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS total_orden FLOAT",
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS abono_porcentaje INTEGER DEFAULT 100",
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS tiene_fabricacion BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS tipo_entrega VARCHAR(20) DEFAULT 'completa'",
             # Columna ABONO en facturas (por si no existe)
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS total_abonado FLOAT",
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS saldo_pendiente FLOAT DEFAULT 0",
