@@ -16,7 +16,7 @@ from flask import Blueprint, request, jsonify
 logger = logging.getLogger(__name__)
 from app import db
 from app.utils.email_service import enviar_email_factura
-from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES
+from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
@@ -300,10 +300,19 @@ def crear_pedido():
             if not stock or stock.cantidad < item['cantidad']:
                 return jsonify({'error': f"Sin stock: {item.get('nombre', '')} talla {item.get('talla', '')}"}), 400
 
+        # Convertir talla individual a talla_grupo para buscar el precio correcto
+        talla_grupo = TALLA_INDIVIDUAL_A_GRUPO.get(item['talla'], item['talla'])
         precio = PrecioColegio.query.filter_by(
             id_colegio=data['id_colegio'],
             id_producto=item['id_producto'],
+            talla_grupo=talla_grupo,
         ).first()
+        if not precio:
+            # Fallback: try without talla filter (para productos sin talla como medias)
+            precio = PrecioColegio.query.filter_by(
+                id_colegio=data['id_colegio'],
+                id_producto=item['id_producto'],
+            ).first()
         if not precio:
             return jsonify({'error': f"Precio no encontrado: {item.get('nombre', '')}"}), 400
 
