@@ -117,7 +117,7 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
     header_data = [[
         # Columna izquierda — nombre empresa
         [Paragraph('RALOZ COL SAS', st_empresa),
-         Paragraph('Uniformes Escolares — Medellín, Colombia', st_slogan)],
+         Paragraph('Uniformes Escolares — Bogotá, Colombia', st_slogan)],
         # Columna derecha — número y fecha
         [Paragraph(f'FACTURA N° {num_factura}', st_titulo),
          Paragraph(f'<font color="#FFF3E0">Fecha: {fecha_str}</font>',
@@ -273,7 +273,7 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
 
     # ── PIE DE PÁGINA ─────────────────────────────────────────────
     story.append(Paragraph(
-        '¡Gracias por tu compra en RALOZ COL SAS! · Medellín, Colombia · '
+        '¡Gracias por tu compra en RALOZ COL SAS! · Bogotá, Colombia · '
         'WhatsApp: <a href="https://wa.me/573213412903">+57 321 341 2903</a>',
         st_footer,
     ))
@@ -337,7 +337,7 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
 
       <div style="background: #E65100; padding: 24px 32px; border-radius: 8px 8px 0 0;">
         <h1 style="color: white; margin: 0; font-size: 24px;">RALOZ COL SAS</h1>
-        <p style="color: #FFE0B2; margin: 4px 0 0 0; font-size: 13px;">Uniformes Escolares — Medellín</p>
+        <p style="color: #FFE0B2; margin: 4px 0 0 0; font-size: 13px;">Uniformes Escolares — Bogotá</p>
       </div>
 
       <div style="background: #FFF3E0; padding: 24px 32px;">
@@ -351,7 +351,7 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
                     border-radius: 4px; margin: 20px 0;">
           <p style="margin: 0; font-size: 14px; color: #546E7A;">
             📦 <strong>Próximo paso:</strong> Nos contactaremos contigo para coordinar la
-            <strong>entrega del pedido</strong> en Medellín.
+            <strong>entrega del pedido</strong> en Bogotá.
           </p>
         </div>
 
@@ -366,7 +366,7 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
       <div style="background: #ECEFF1; padding: 16px 32px; border-radius: 0 0 8px 8px;
                   text-align: center;">
         <p style="color: #90A4AE; font-size: 12px; margin: 0;">
-          RALOZ COL SAS · Medellín, Colombia · uniformes escolares de calidad
+          RALOZ COL SAS · Bogotá, Colombia · uniformes escolares de calidad
         </p>
       </div>
 
