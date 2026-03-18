@@ -842,6 +842,8 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
     numero = formato.format(ano=serie.ano, consecutivo=serie.consecutivo_actual)
 
     cliente = Cliente.query.filter_by(email=pedido.email_cliente).first()
+    if not cliente and pedido.documento_cliente:
+        cliente = Cliente.query.filter_by(numero_documento=pedido.documento_cliente).first()
     if not cliente:
         cliente = Cliente(
             nombre=pedido.nombre_cliente,
