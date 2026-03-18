@@ -580,13 +580,15 @@ def marcar_pedido_pagado_manual(id_pedido):
     db.session.commit()
 
     factura = None
+    error_factura = None
     try:
         factura = _crear_factura_desde_pedido(pedido)
         pedido.id_factura = factura.id_factura
         db.session.commit()
         logger.info('[MANUAL] Factura %s creada para pedido %s', factura.numero_factura, pedido.id_pedido)
     except Exception as e:
-        logger.error('[MANUAL] Error creando factura: %s', str(e), exc_info=True)
+        error_factura = str(e)
+        logger.error('[MANUAL] Error creando factura: %s', error_factura, exc_info=True)
         db.session.rollback()
 
     try:
@@ -598,6 +600,7 @@ def marcar_pedido_pagado_manual(id_pedido):
         'ok': True,
         'pedido': pedido.to_dict(),
         'factura_numero': factura.numero_factura if factura else None,
+        'error_factura': error_factura,  # None si todo OK, mensaje si falló
     }), 200
 
 
@@ -796,7 +799,18 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
 
     serie = SerieFacturacion.query.filter_by(activa=True).first()
     if not serie:
-        raise ValueError('No hay serie de facturación activa')
+        # Auto-crear serie si no existe (primera vez que se usa el sistema)
+        from datetime import datetime as _dt_now
+        serie = SerieFacturacion(
+            prefijo='FAC',
+            ano=_dt_now.utcnow().year,
+            consecutivo_actual=0,
+            formato='FAC-{ano}-{consecutivo:06d}',
+            activa=True,
+        )
+        db.session.add(serie)
+        db.session.flush()
+        logger.info('[FACTURA] Serie de facturación auto-creada para el año %s', serie.ano)
     serie.consecutivo_actual += 1
     numero = serie.formato.format(ano=serie.ano, consecutivo=serie.consecutivo_actual)
 

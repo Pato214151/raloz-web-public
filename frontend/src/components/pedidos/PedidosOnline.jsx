@@ -55,11 +55,17 @@ export default function PedidosOnline() {
     setMarcando(pedido.id_pedido)
     try {
       const res = await api.post(`/tienda/admin/pedidos/${pedido.id_pedido}/marcar-pagado`)
-      toast.success(`Pedido marcado como pagado. Factura: ${res.data.factura_numero || '—'}`)
+      if (res.data.factura_numero) {
+        toast.success(`✅ Pagado. Factura: ${res.data.factura_numero}`)
+      } else if (res.data.error_factura) {
+        toast.error(`Pedido pagado pero falló la factura: ${res.data.error_factura}`)
+      } else {
+        toast.success('Pedido marcado como pagado')
+      }
       cargar()
       if (seleccionado?.id_pedido === pedido.id_pedido) setSelected(res.data.pedido)
-    } catch {
-      toast.error('No se pudo marcar como pagado')
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'No se pudo marcar como pagado')
     } finally {
       setMarcando(null)
     }
