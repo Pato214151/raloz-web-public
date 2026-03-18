@@ -820,7 +820,7 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
             nombre=pedido.nombre_cliente,
             telefono=pedido.telefono_cliente,
             email=pedido.email_cliente,
-            documento=pedido.documento_cliente or '',
+            numero_documento=pedido.documento_cliente or '',
         )
         db.session.add(cliente)
         db.session.flush()
