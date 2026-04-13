@@ -968,6 +968,7 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
         cliente_telefono=pedido.telefono_cliente,
         cliente_email=pedido.email_cliente,
         cliente_nit=pedido.documento_cliente or '',
+        cliente_direccion=getattr(pedido, 'direccion_envio', '') or '',
         fecha_factura=date.today(),
         total=total_orden,
         subtotal=total_orden,
