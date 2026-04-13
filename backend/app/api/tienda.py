@@ -590,8 +590,28 @@ def listar_pedidos_admin():
     total  = query.count()
     pedidos = query.offset(offset).limit(limit).all()
 
+    # Enriquecer con estado_entrega de la factura asociada (bulk)
+    factura_ids = [p.id_factura for p in pedidos if p.id_factura]
+    facturas_map = {}
+    if factura_ids:
+        for f in Factura.query.filter(Factura.id_factura.in_(factura_ids)).all():
+            facturas_map[f.id_factura] = f
+
+    resultado = []
+    for p in pedidos:
+        d = p.to_dict()
+        d['id_factura'] = p.id_factura
+        if p.id_factura and p.id_factura in facturas_map:
+            f = facturas_map[p.id_factura]
+            d['estado_entrega'] = f.estado_entrega or 'POR_ENTREGAR'
+            d['factura_numero'] = f.numero_factura
+        else:
+            d['estado_entrega'] = None
+            d['factura_numero'] = None
+        resultado.append(d)
+
     return jsonify({
-        'pedidos': [p.to_dict() for p in pedidos],
+        'pedidos': resultado,
         'total':   total,
         'limit':   limit,
         'offset':  offset,
@@ -610,11 +630,16 @@ def detalle_pedido_admin(id_pedido):
     pedido = PedidoWeb.query.get_or_404(id_pedido)
     d = pedido.to_dict()
 
+    d['id_factura'] = pedido.id_factura
     if pedido.id_factura:
         factura = Factura.query.get(pedido.id_factura)
         if factura:
-            d['factura_numero'] = factura.numero_factura
-            d['factura_id']     = factura.id_factura
+            d['factura_numero']  = factura.numero_factura
+            d['factura_id']      = factura.id_factura
+            d['estado_entrega']  = factura.estado_entrega or 'POR_ENTREGAR'
+    else:
+        d['estado_entrega'] = None
+        d['factura_numero'] = None
 
     return jsonify({'pedido': d}), 200
 
@@ -659,6 +684,80 @@ def marcar_pedido_pagado_manual(id_pedido):
         'pedido': pedido.to_dict(),
         'factura_numero': factura.numero_factura if factura else None,
         'error_factura': error_factura,  # None si todo OK, mensaje si falló
+    }), 200
+
+
+@tienda_bp.route('/admin/pedidos/<int:id_pedido>/generar-factura', methods=['POST'])
+def generar_factura_pedido(id_pedido):
+    """Crea la factura para un pedido pagado que no la tiene aún (reintento tras error del webhook)."""
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    pedido = PedidoWeb.query.get_or_404(id_pedido)
+    if pedido.estado != 'pagado':
+        return jsonify({'error': 'Solo se puede generar factura para pedidos pagados'}), 400
+    if pedido.id_factura:
+        return jsonify({'error': 'Este pedido ya tiene factura'}), 400
+
+    try:
+        factura = _crear_factura_desde_pedido(pedido)
+        pedido.id_factura = factura.id_factura
+        db.session.commit()
+        logger.info('[FACTURA-MANUAL] Factura %s creada para pedido %s', factura.numero_factura, pedido.id_pedido)
+    except Exception as e:
+        db.session.rollback()
+        logger.error('[FACTURA-MANUAL] Error: %s', str(e), exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+    if pedido.email_cliente:
+        try:
+            enviar_email_factura(pedido.email_cliente, factura, list(factura.detalles))
+        except Exception as e:
+            logger.error('[FACTURA-MANUAL] Error email: %s', str(e))
+
+    return jsonify({
+        'ok': True,
+        'factura_numero': factura.numero_factura,
+        'pedido': pedido.to_dict(),
+    }), 200
+
+
+@tienda_bp.route('/admin/pedidos/<int:id_pedido>/actualizar-entrega', methods=['POST'])
+def actualizar_estado_entrega(id_pedido):
+    """Actualiza el estado de entrega de un pedido pagado (POR_ENTREGAR → EMPACADO → ENTREGADO)."""
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    pedido = PedidoWeb.query.get_or_404(id_pedido)
+    if not pedido.id_factura:
+        return jsonify({'error': 'El pedido no tiene factura aún'}), 400
+
+    data = request.get_json() or {}
+    nuevo_estado = data.get('estado_entrega', '').upper()
+    estados_validos = ['POR_ENTREGAR', 'EMPACADO', 'ENTREGADO']
+    if nuevo_estado not in estados_validos:
+        return jsonify({'error': f'Estado inválido. Use: {", ".join(estados_validos)}'}), 400
+
+    factura = Factura.query.get(pedido.id_factura)
+    if not factura:
+        return jsonify({'error': 'Factura no encontrada'}), 404
+
+    factura.estado_entrega = nuevo_estado
+    if nuevo_estado == 'ENTREGADO' and not factura.fecha_entrega:
+        from datetime import date as _date
+        factura.fecha_entrega = _date.today()
+    db.session.commit()
+
+    return jsonify({
+        'ok': True,
+        'estado_entrega': nuevo_estado,
+        'pedido': pedido.to_dict(),
     }), 200
 
 

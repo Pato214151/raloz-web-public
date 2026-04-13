@@ -57,6 +57,9 @@ def _auto_migrate():
             # Columna ABONO en facturas (por si no existe)
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS total_abonado FLOAT",
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS saldo_pendiente FLOAT DEFAULT 0",
+            # Estado de entrega en facturas (flujo: POR_ENTREGAR → EMPACADO → ENTREGADO)
+            "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS estado_entrega VARCHAR(20) DEFAULT 'POR_ENTREGAR'",
+            "UPDATE facturas SET estado_entrega = 'POR_ENTREGAR' WHERE estado_entrega IS NULL",
             # Columnas en series_facturacion (por si fueron creadas antes de que existieran)
             "ALTER TABLE series_facturacion ADD COLUMN IF NOT EXISTS prefijo VARCHAR(10) DEFAULT 'FAC'",
             "ALTER TABLE series_facturacion ADD COLUMN IF NOT EXISTS formato VARCHAR(100) DEFAULT 'FAC-{ano}-{consecutivo:06d}'",

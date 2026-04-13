@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { ShoppingCart, CheckCircle, XCircle, Clock, Download, RefreshCw, Eye, CreditCard } from 'lucide-react'
+import {
+  ShoppingCart, CheckCircle, XCircle, Clock, Download,
+  RefreshCw, Eye, CreditCard, Package, Truck, FileText,
+} from 'lucide-react'
 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 const fmtFecha = (iso) => {
@@ -9,11 +12,17 @@ const fmtFecha = (iso) => {
   return new Date(iso).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-const ESTADOS = {
+const ESTADOS_PAGO = {
   pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
   pagado:    { label: 'Pagado',    color: 'bg-green-100 text-green-800',  icon: CheckCircle },
   fallido:   { label: 'Fallido',   color: 'bg-red-100 text-red-800',     icon: XCircle },
   cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700',   icon: XCircle },
+}
+
+const ESTADOS_ENTREGA = {
+  POR_ENTREGAR: { label: 'Por entregar', color: 'bg-blue-100 text-blue-700',   icon: '📦' },
+  EMPACADO:     { label: 'Empacado',     color: 'bg-purple-100 text-purple-700', icon: '🎁' },
+  ENTREGADO:    { label: 'Entregado',    color: 'bg-green-100 text-green-700', icon: '✅' },
 }
 
 export default function PedidosOnline() {
@@ -24,6 +33,8 @@ export default function PedidosOnline() {
   const [seleccionado, setSelected] = useState(null)
   const [descargando, setDesc]      = useState(null)
   const [marcando, setMarcando]     = useState(null)
+  const [generando, setGenerando]   = useState(null)
+  const [actualizando, setActual]   = useState(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -71,6 +82,23 @@ export default function PedidosOnline() {
     }
   }
 
+  const generarFactura = async (pedido) => {
+    setGenerando(pedido.id_pedido)
+    try {
+      const res = await api.post(`/tienda/admin/pedidos/${pedido.id_pedido}/generar-factura`)
+      toast.success(`Factura ${res.data.factura_numero} generada ✅`)
+      cargar()
+      if (seleccionado?.id_pedido === pedido.id_pedido) {
+        const det = await api.get(`/tienda/admin/pedidos/${pedido.id_pedido}`)
+        setSelected(det.data.pedido)
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Error generando factura')
+    } finally {
+      setGenerando(null)
+    }
+  }
+
   const descargarPDF = async (pedido) => {
     setDesc(pedido.id_pedido)
     try {
@@ -90,12 +118,42 @@ export default function PedidosOnline() {
     }
   }
 
-  const BadgeEstado = ({ estado }) => {
-    const cfg  = ESTADOS[estado] || ESTADOS.pendiente
+  const actualizarEntrega = async (pedido, nuevoEstado) => {
+    setActual(pedido.id_pedido)
+    try {
+      await api.post(`/tienda/admin/pedidos/${pedido.id_pedido}/actualizar-entrega`, {
+        estado_entrega: nuevoEstado,
+      })
+      const labels = { EMPACADO: '🎁 Marcado como empacado', ENTREGADO: '✅ Marcado como entregado' }
+      toast.success(labels[nuevoEstado] || 'Estado actualizado')
+      cargar()
+      if (seleccionado?.id_pedido === pedido.id_pedido) {
+        const det = await api.get(`/tienda/admin/pedidos/${pedido.id_pedido}`)
+        setSelected(det.data.pedido)
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Error actualizando estado')
+    } finally {
+      setActual(null)
+    }
+  }
+
+  const BadgePago = ({ estado }) => {
+    const cfg  = ESTADOS_PAGO[estado] || ESTADOS_PAGO.pendiente
     const Icon = cfg.icon
     return (
       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
         <Icon size={12} /> {cfg.label}
+      </span>
+    )
+  }
+
+  const BadgeEntrega = ({ estado }) => {
+    if (!estado) return null
+    const cfg = ESTADOS_ENTREGA[estado] || ESTADOS_ENTREGA.POR_ENTREGAR
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
+        {cfg.icon} {cfg.label}
       </span>
     )
   }
@@ -144,7 +202,8 @@ export default function PedidosOnline() {
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Cliente</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Colegio</th>
                 <th className="text-right px-4 py-3 text-gray-600 font-medium">Total</th>
-                <th className="text-center px-4 py-3 text-gray-600 font-medium">Estado</th>
+                <th className="text-center px-4 py-3 text-gray-600 font-medium">Pago</th>
+                <th className="text-center px-4 py-3 text-gray-600 font-medium">Entrega</th>
                 <th className="text-center px-4 py-3 text-gray-600 font-medium">Acciones</th>
               </tr>
             </thead>
@@ -159,9 +218,12 @@ export default function PedidosOnline() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{p.nombre_colegio || '—'}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(p.total)}</td>
-                  <td className="px-4 py-3 text-center"><BadgeEstado estado={p.estado} /></td>
+                  <td className="px-4 py-3 text-center"><BadgePago estado={p.estado} /></td>
+                  <td className="px-4 py-3 text-center">
+                    {p.estado === 'pagado' && <BadgeEntrega estado={p.estado_entrega} />}
+                  </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-1.5">
                       <button onClick={() => verDetalle(p.id_pedido)} title="Ver detalle"
                         className="p-1.5 rounded hover:bg-blue-50 text-blue-500">
                         <Eye size={15} />
@@ -173,11 +235,32 @@ export default function PedidosOnline() {
                           <CreditCard size={15} className={marcando === p.id_pedido ? 'animate-pulse' : ''} />
                         </button>
                       )}
-                      {p.estado === 'pagado' && (
+                      {p.estado === 'pagado' && !p.id_factura && (
+                        <button onClick={() => generarFactura(p)} title="Generar factura"
+                          disabled={generando === p.id_pedido}
+                          className="p-1.5 rounded hover:bg-yellow-50 text-yellow-600 disabled:opacity-40">
+                          <FileText size={15} className={generando === p.id_pedido ? 'animate-pulse' : ''} />
+                        </button>
+                      )}
+                      {p.estado === 'pagado' && p.id_factura && (
                         <button onClick={() => descargarPDF(p)} title="Descargar factura PDF"
                           disabled={descargando === p.id_pedido}
                           className="p-1.5 rounded hover:bg-green-50 text-green-600 disabled:opacity-40">
                           <Download size={15} className={descargando === p.id_pedido ? 'animate-bounce' : ''} />
+                        </button>
+                      )}
+                      {p.estado === 'pagado' && p.estado_entrega === 'POR_ENTREGAR' && p.id_factura && (
+                        <button onClick={() => actualizarEntrega(p, 'EMPACADO')} title="Marcar empacado"
+                          disabled={actualizando === p.id_pedido}
+                          className="p-1.5 rounded hover:bg-purple-50 text-purple-600 disabled:opacity-40">
+                          <Package size={15} />
+                        </button>
+                      )}
+                      {p.estado === 'pagado' && p.estado_entrega === 'EMPACADO' && (
+                        <button onClick={() => actualizarEntrega(p, 'ENTREGADO')} title="Marcar entregado"
+                          disabled={actualizando === p.id_pedido}
+                          className="p-1.5 rounded hover:bg-green-50 text-green-700 disabled:opacity-40">
+                          <Truck size={15} />
                         </button>
                       )}
                     </div>
@@ -211,6 +294,9 @@ export default function PedidosOnline() {
                 {seleccionado.direccion_envio && (
                   <p><span className="text-gray-500">Dirección:</span> {seleccionado.direccion_envio}</p>
                 )}
+                {seleccionado.factura_numero && (
+                  <p><span className="text-gray-500">Factura:</span> <span className="font-mono font-semibold">{seleccionado.factura_numero}</span></p>
+                )}
                 {seleccionado.tiene_fabricacion && (
                   <div className="mt-2 pt-2 border-t border-orange-200 flex items-center gap-2">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
@@ -220,6 +306,14 @@ export default function PedidosOnline() {
                   </div>
                 )}
               </div>
+
+              {/* Estado de entrega */}
+              {seleccionado.estado === 'pagado' && seleccionado.estado_entrega && (
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                  <span className="text-sm text-gray-600 font-medium">Estado de entrega</span>
+                  <BadgeEntrega estado={seleccionado.estado_entrega} />
+                </div>
+              )}
 
               {/* Items */}
               <div>
@@ -256,30 +350,59 @@ export default function PedidosOnline() {
                 </table>
               </div>
 
-              {/* Total + estado */}
+              {/* Total + estado pago */}
               <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <BadgeEstado estado={seleccionado.estado} />
+                <BadgePago estado={seleccionado.estado} />
                 <span className="text-lg font-bold text-orange-600">{fmt(seleccionado.total)}</span>
               </div>
 
-              {/* Botón marcar pagado */}
-              {seleccionado.estado === 'pendiente' && (
-                <button onClick={() => marcarPagado(seleccionado)}
-                  disabled={marcando === seleccionado.id_pedido}
-                  className="w-full flex items-center justify-center gap-2 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                  <CreditCard size={16} />
-                  {marcando === seleccionado.id_pedido ? 'Procesando...' : '✓ Marcar como pagado manualmente'}
-                </button>
-              )}
-              {/* Botón PDF */}
-              {seleccionado.estado === 'pagado' && (
-                <button onClick={() => descargarPDF(seleccionado)}
-                  disabled={descargando === seleccionado.id_pedido}
-                  className="w-full flex items-center justify-center gap-2 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                  <Download size={16} />
-                  {descargando === seleccionado.id_pedido ? 'Generando PDF...' : 'Descargar Factura PDF'}
-                </button>
-              )}
+              {/* Acciones */}
+              <div className="space-y-2">
+                {seleccionado.estado === 'pendiente' && (
+                  <button onClick={() => marcarPagado(seleccionado)}
+                    disabled={marcando === seleccionado.id_pedido}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                    <CreditCard size={16} />
+                    {marcando === seleccionado.id_pedido ? 'Procesando...' : '✓ Marcar como pagado manualmente'}
+                  </button>
+                )}
+
+                {seleccionado.estado === 'pagado' && !seleccionado.id_factura && (
+                  <button onClick={() => generarFactura(seleccionado)}
+                    disabled={generando === seleccionado.id_pedido}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                    <FileText size={16} />
+                    {generando === seleccionado.id_pedido ? 'Generando...' : '📄 Generar Factura'}
+                  </button>
+                )}
+
+                {seleccionado.estado === 'pagado' && seleccionado.id_factura && (
+                  <button onClick={() => descargarPDF(seleccionado)}
+                    disabled={descargando === seleccionado.id_pedido}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                    <Download size={16} />
+                    {descargando === seleccionado.id_pedido ? 'Generando PDF...' : 'Descargar Factura PDF'}
+                  </button>
+                )}
+
+                {seleccionado.estado === 'pagado' && seleccionado.estado_entrega === 'POR_ENTREGAR' && seleccionado.id_factura && (
+                  <button onClick={() => actualizarEntrega(seleccionado, 'EMPACADO')}
+                    disabled={actualizando === seleccionado.id_pedido}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                    <Package size={16} />
+                    {actualizando === seleccionado.id_pedido ? 'Actualizando...' : '🎁 Marcar como Empacado'}
+                  </button>
+                )}
+
+                {seleccionado.estado === 'pagado' && seleccionado.estado_entrega === 'EMPACADO' && (
+                  <button onClick={() => actualizarEntrega(seleccionado, 'ENTREGADO')}
+                    disabled={actualizando === seleccionado.id_pedido}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                    <Truck size={16} />
+                    {actualizando === seleccionado.id_pedido ? 'Actualizando...' : '🚚 Marcar como Entregado'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
