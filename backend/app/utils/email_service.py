@@ -385,11 +385,14 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
     part.add_header('Content-Type', 'application/pdf', name=nombre_archivo)
     msg.attach(part)
 
-    # ── Enviar via SMTP Gmail ─────────────────────────────────────
+    # ── Enviar via SMTP Outlook/Hotmail ──────────────────────────
+    smtp_host = os.getenv('EMAIL_SMTP_HOST', 'smtp-mail.outlook.com')
+    smtp_port = int(os.getenv('EMAIL_SMTP_PORT', '587'))
     try:
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
             server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(remitente, password)
             server.send_message(msg)
         logger.info('[EMAIL] Factura %s enviada a %s', num_factura, destinatario)
