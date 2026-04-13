@@ -25,11 +25,14 @@ from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image as RLImage
 )
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 
 logger = logging.getLogger(__name__)
+
+# ─── Logo ──────────────────────────────────────────────────────────
+_LOGO_PATH = os.path.join(os.path.dirname(__file__), '..', 'static', 'logo.png')
 
 # ─── Colores de marca RALOZ ───────────────────────────────────────
 COLOR_PRIMARIO   = colors.HexColor('#E65100')   # naranja oscuro
@@ -114,11 +117,25 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
     else:
         fecha_str = date.today().strftime('%d/%m/%Y')
 
+    # Logo + nombre empresa (columna izquierda)
+    logo_cell = []
+    try:
+        if os.path.exists(_LOGO_PATH):
+            logo_img = RLImage(_LOGO_PATH, width=1.4*cm, height=1.4*cm)
+            logo_row = Table([[logo_img,
+                               [Paragraph('RALOZ COL SAS', st_empresa),
+                                Paragraph('Uniformes Escolares — Bogotá, Colombia', st_slogan)]
+                               ]], colWidths=[1.7*cm, 8*cm])
+            logo_row.setStyle(TableStyle([('VALIGN', (0,0),(-1,-1),'MIDDLE'), ('LEFTPADDING',(0,0),(-1,-1),0)]))
+            logo_cell = logo_row
+        else:
+            raise FileNotFoundError
+    except Exception:
+        logo_cell = [Paragraph('RALOZ COL SAS', st_empresa),
+                     Paragraph('Uniformes Escolares — Bogotá, Colombia', st_slogan)]
+
     header_data = [[
-        # Columna izquierda — nombre empresa
-        [Paragraph('RALOZ COL SAS', st_empresa),
-         Paragraph('Uniformes Escolares — Bogotá, Colombia', st_slogan)],
-        # Columna derecha — número y fecha
+        logo_cell,
         [Paragraph(f'FACTURA N° {num_factura}', st_titulo),
          Paragraph(f'<font color="#FFF3E0">Fecha: {fecha_str}</font>',
                    ParagraphStyle('sub', fontSize=9, textColor=colors.white,
@@ -126,12 +143,12 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
     ]]
     header_table = Table(header_data, colWidths=[10 * cm, 7 * cm])
     header_table.setStyle(TableStyle([
-        ('BACKGROUND',   (1, 0), (1, 0), COLOR_PRIMARIO),
-        ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING',   (1, 0), (1, 0), 10),
-        ('BOTTOMPADDING',(1, 0), (1, 0), 10),
-        ('LEFTPADDING',  (1, 0), (1, 0), 12),
-        ('RIGHTPADDING', (1, 0), (1, 0), 12),
+        ('BACKGROUND',    (1, 0), (1, 0), COLOR_PRIMARIO),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (1, 0), (1, 0), 10),
+        ('BOTTOMPADDING', (1, 0), (1, 0), 10),
+        ('LEFTPADDING',   (1, 0), (1, 0), 12),
+        ('RIGHTPADDING',  (1, 0), (1, 0), 12),
     ]))
     story.append(header_table)
     story.append(Spacer(1, 0.4 * cm))
@@ -257,22 +274,74 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
     story.append(total_table)
     story.append(Spacer(1, 0.6 * cm))
 
-    # ── INFO DE PAGO ──────────────────────────────────────────────
+    # ── RESUMEN FINANCIERO (abono / saldo) ────────────────────────
+    abono_pagado    = float(_v(factura, 'total_abonado', total_final) or total_final)
+    saldo_pendiente = float(_v(factura, 'saldo_pendiente', 0) or 0)
     metodo = _v(factura, 'metodo_pago', 'MercadoPago')
+
+    if saldo_pendiente > 0:
+        fin_data = [
+            [Paragraph('Abono pagado hoy:', ParagraphStyle('fl', fontSize=9, fontName='Helvetica', alignment=TA_RIGHT, textColor=COLOR_TEXTO)),
+             Paragraph(_f(abono_pagado), ParagraphStyle('fv', fontSize=9, fontName='Helvetica-Bold', alignment=TA_RIGHT, textColor=colors.HexColor('#2e7d32')))],
+            [Paragraph('Saldo pendiente al recoger:', ParagraphStyle('sl', fontSize=9, fontName='Helvetica', alignment=TA_RIGHT, textColor=COLOR_TEXTO)),
+             Paragraph(_f(saldo_pendiente), ParagraphStyle('sv', fontSize=10, fontName='Helvetica-Bold', alignment=TA_RIGHT, textColor=colors.HexColor('#c62828')))],
+        ]
+        fin_table = Table(fin_data, colWidths=[12*cm, 5*cm])
+        fin_table.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, -1), COLOR_ACENTO),
+            ('TOPPADDING',    (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 10),
+            ('LINEABOVE',     (0, 0), (-1, 0), 0.5, COLOR_SECUNDARIO),
+        ]))
+        story.append(fin_table)
+        story.append(Spacer(1, 0.3*cm))
+
+    # ── INFO DE PAGO ──────────────────────────────────────────────
     referencia = _v(factura, 'observaciones', '').replace('Pedido web #', '')
     story.append(Paragraph(
         f'Método de pago: <b>{metodo}</b> &nbsp;&nbsp;|&nbsp;&nbsp; Referencia: <b>{referencia}</b>',
         ParagraphStyle('pago', fontSize=8, textColor=COLOR_GRIS, fontName='Helvetica',
                        alignment=TA_CENTER),
     ))
-    story.append(Spacer(1, 0.8 * cm))
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=COLOR_GRIS_CLARO))
+    story.append(Spacer(1, 0.3 * cm))
+
+    # ── TÉRMINOS Y POLÍTICA DE PRIVACIDAD ─────────────────────────
+    st_terms = ParagraphStyle('terms', fontSize=6.5, textColor=COLOR_GRIS,
+                               fontName='Helvetica', spaceAfter=2, leading=9)
+    story.append(Paragraph('<b>Términos y condiciones aceptados al realizar la compra:</b>', st_terms))
+    story.append(Paragraph(
+        '1. Al realizar su pedido, el cliente acepta que RALOZ COL SAS procese sus datos personales '
+        '(nombre, email, teléfono) con el único fin de gestionar y entregar su pedido, conforme a la '
+        'Ley 1581 de 2012 (Habeas Data) de Colombia.',
+        st_terms,
+    ))
+    story.append(Paragraph(
+        '2. Los pedidos por fabricación tienen un tiempo estimado de producción de 15 a 30 días hábiles. '
+        'El saldo pendiente debe cancelarse al momento de la entrega.',
+        st_terms,
+    ))
+    story.append(Paragraph(
+        '3. No se aceptan devoluciones en prendas de fabricación especial (uniformes con logos bordados). '
+        'Para cambios de talla en productos de stock, contáctenos dentro de los 5 días hábiles siguientes a la entrega.',
+        st_terms,
+    ))
+    story.append(Paragraph(
+        '4. Este comprobante fue generado automáticamente y tiene plena validez como soporte de compra. '
+        'Consérvelo para cualquier reclamación o garantía.',
+        st_terms,
+    ))
+    story.append(Spacer(1, 0.4 * cm))
     story.append(HRFlowable(width='100%', thickness=0.5, color=COLOR_GRIS_CLARO))
     story.append(Spacer(1, 0.3 * cm))
 
     # ── PIE DE PÁGINA ─────────────────────────────────────────────
     story.append(Paragraph(
         '¡Gracias por tu compra en RALOZ COL SAS! · Bogotá, Colombia · '
-        'WhatsApp: <a href="https://wa.me/573213412903">+57 321 341 2903</a>',
+        'WhatsApp: <a href="https://wa.me/573213412903">+57 321 341 2903</a> · '
+        'ralozcol@outlook.com',
         st_footer,
     ))
     story.append(Paragraph(

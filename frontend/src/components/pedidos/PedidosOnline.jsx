@@ -3,7 +3,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   ShoppingCart, CheckCircle, XCircle, Clock, Download,
-  RefreshCw, Eye, CreditCard, Package, Truck, FileText,
+  RefreshCw, Eye, CreditCard, Package, Truck, FileText, Mail,
 } from 'lucide-react'
 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
@@ -35,6 +35,7 @@ export default function PedidosOnline() {
   const [marcando, setMarcando]     = useState(null)
   const [generando, setGenerando]   = useState(null)
   const [actualizando, setActual]   = useState(null)
+  const [enviando, setEnviando]     = useState(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -115,6 +116,18 @@ export default function PedidosOnline() {
       toast.error('No hay factura para este pedido aún')
     } finally {
       setDesc(null)
+    }
+  }
+
+  const reenviarEmail = async (pedido) => {
+    setEnviando(pedido.id_pedido)
+    try {
+      const res = await api.post(`/tienda/admin/pedidos/${pedido.id_pedido}/reenviar-email`)
+      toast.success(res.data.mensaje || 'Email enviado ✅')
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Error enviando email')
+    } finally {
+      setEnviando(null)
     }
   }
 
@@ -377,12 +390,21 @@ export default function PedidosOnline() {
                 )}
 
                 {seleccionado.estado === 'pagado' && seleccionado.id_factura && (
-                  <button onClick={() => descargarPDF(seleccionado)}
-                    disabled={descargando === seleccionado.id_pedido}
-                    className="w-full flex items-center justify-center gap-2 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                    <Download size={16} />
-                    {descargando === seleccionado.id_pedido ? 'Generando PDF...' : 'Descargar Factura PDF'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => descargarPDF(seleccionado)}
+                      disabled={descargando === seleccionado.id_pedido}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                      <Download size={16} />
+                      {descargando === seleccionado.id_pedido ? 'Generando...' : 'Descargar PDF'}
+                    </button>
+                    <button onClick={() => reenviarEmail(seleccionado)}
+                      disabled={enviando === seleccionado.id_pedido}
+                      title="Reenviar email de confirmación al cliente"
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                      <Mail size={16} />
+                      {enviando === seleccionado.id_pedido ? '...' : 'Email'}
+                    </button>
+                  </div>
                 )}
 
                 {seleccionado.estado === 'pagado' && seleccionado.estado_entrega === 'POR_ENTREGAR' && seleccionado.id_factura && (

@@ -725,6 +725,34 @@ def generar_factura_pedido(id_pedido):
     }), 200
 
 
+@tienda_bp.route('/admin/pedidos/<int:id_pedido>/reenviar-email', methods=['POST'])
+def reenviar_email_pedido(id_pedido):
+    """Reenvía el email de confirmación con la factura PDF al cliente."""
+    from flask_jwt_extended import verify_jwt_in_request
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({'error': 'No autorizado'}), 401
+
+    pedido = PedidoWeb.query.get_or_404(id_pedido)
+    if not pedido.id_factura:
+        return jsonify({'error': 'El pedido no tiene factura aún. Genera la factura primero.'}), 400
+    if not pedido.email_cliente:
+        return jsonify({'error': 'El pedido no tiene email de cliente registrado.'}), 400
+
+    factura  = Factura.query.get_or_404(pedido.id_factura)
+    detalles = list(factura.detalles)
+    try:
+        ok = enviar_email_factura(pedido.email_cliente, factura, detalles)
+        if ok:
+            return jsonify({'ok': True, 'mensaje': f'Email enviado a {pedido.email_cliente}'}), 200
+        else:
+            return jsonify({'error': 'No se pudo enviar el email. Verifica las credenciales SMTP en Render.'}), 500
+    except Exception as e:
+        logger.error('[REENVIAR-EMAIL] Error: %s', str(e), exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/actualizar-entrega', methods=['POST'])
 def actualizar_estado_entrega(id_pedido):
     """Actualiza el estado de entrega de un pedido pagado (POR_ENTREGAR → EMPACADO → ENTREGADO)."""
