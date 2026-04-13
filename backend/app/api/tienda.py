@@ -838,7 +838,7 @@ def marcar_pedido_fabricacion_listo(id_pedido):
         return jsonify({'error': 'El pedido ya fue entregado'}), 400
     pf.estado = 'listo_para_entrega'
     db.session.commit()
-    return jsonify({'ok': True, 'estado': pf.estado}), 200
+    return jsonify({'ok': True, 'estado': pf.estado, 'pedido': pf.to_dict()}), 200
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-entregado', methods=['POST'])
@@ -848,7 +848,7 @@ def marcar_pedido_fabricacion_entregado(id_pedido):
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
     pf.estado = 'entregado'
     db.session.commit()
-    return jsonify({'ok': True, 'estado': pf.estado}), 200
+    return jsonify({'ok': True, 'estado': pf.estado, 'pedido': pf.to_dict()}), 200
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-notificado', methods=['POST'])
