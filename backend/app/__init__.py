@@ -142,6 +142,11 @@ def create_app(config_name=None):
     app.register_blueprint(tienda_bp, url_prefix='/api/tienda')
 
     # ── Migraciones automáticas al arrancar ──
+    # pool_pre_ping ya está activo; connect_args agrega timeout de red explícito
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('connect_args', {}).update({
+        'connect_timeout': 10,  # máx 10 s esperando conexión TCP a Supabase
+    })
+
     with app.app_context():
         try:
             from sqlalchemy import text

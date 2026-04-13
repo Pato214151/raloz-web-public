@@ -53,6 +53,7 @@ def _auto_migrate():
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS abono_porcentaje INTEGER DEFAULT 100",
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS tiene_fabricacion BOOLEAN DEFAULT FALSE",
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS tipo_entrega VARCHAR(20) DEFAULT 'completa'",
+            "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS direccion_envio VARCHAR(300)",
             # Columna ABONO en facturas (por si no existe)
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS total_abonado FLOAT",
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS saldo_pendiente FLOAT DEFAULT 0",
@@ -69,6 +70,8 @@ def _auto_migrate():
             "CREATE INDEX IF NOT EXISTS idx_pedidos_web_estado ON pedidos_web(estado)",
             "CREATE INDEX IF NOT EXISTS idx_pedidos_web_referencia ON pedidos_web(referencia)",
             "CREATE INDEX IF NOT EXISTS idx_facturas_estado_saldo ON facturas(estado, saldo_pendiente)",
+            # Dirección en pedidos_fabricacion
+            "ALTER TABLE pedidos_fabricacion ADD COLUMN IF NOT EXISTS direccion_envio VARCHAR(300)",
         ]
         for sql in migraciones:
             try:
@@ -80,7 +83,36 @@ def _auto_migrate():
         except Exception:
             db.session.rollback()
 
-_auto_migrate()
+
+def _auto_migrate_con_retry(intentos=5, espera_inicial=3):
+    """
+    Llama a _auto_migrate() con reintentos en caso de fallo transitorio de BD
+    (DNS failure, cold start de Supabase/Render, timeout de red).
+    Si todos los intentos fallan, loguea el error pero NO deja caer la app.
+    """
+    import math
+    for intento in range(1, intentos + 1):
+        try:
+            _auto_migrate()
+            if intento > 1:
+                logger.info('[STARTUP] Migración exitosa en intento %d', intento)
+            return
+        except Exception as e:
+            espera = espera_inicial * math.pow(2, intento - 1)  # 3, 6, 12, 24, 48 s
+            if intento < intentos:
+                logger.warning(
+                    '[STARTUP] Error de BD en intento %d/%d (%s). Reintentando en %.0f s...',
+                    intento, intentos, str(e)[:120], espera
+                )
+                time.sleep(espera)
+            else:
+                logger.error(
+                    '[STARTUP] No se pudo conectar a la BD después de %d intentos. '
+                    'La app arrancará sin migraciones automáticas: %s',
+                    intentos, str(e)
+                )
+
+_auto_migrate_con_retry()
 
 
 @app.cli.command('init-db')
