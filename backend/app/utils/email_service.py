@@ -11,8 +11,10 @@ Variables de entorno requeridas:
 """
 
 import os
+import base64
 import logging
 import smtplib
+import requests as _requests
 from io import BytesIO
 from datetime import date
 from email.mime.multipart import MIMEMultipart
@@ -452,24 +454,52 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
     part.add_header('Content-Type', 'application/pdf', name=nombre_archivo)
     msg.attach(part)
 
-    # ── Enviar via SMTP Outlook/Hotmail ──────────────────────────
-    smtp_host = os.getenv('EMAIL_SMTP_HOST', 'smtp-mail.outlook.com')
-    smtp_port = int(os.getenv('EMAIL_SMTP_PORT', '587'))
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(remitente, password)
-            server.send_message(msg)
-        logger.info('[EMAIL] Factura %s enviada a %s', num_factura, destinatario)
-        return True
-    except smtplib.SMTPAuthenticationError:
-        logger.error('[EMAIL] Error de autenticación — verifica EMAIL_REMITENTE y EMAIL_PASSWORD')
-        return False
-    except smtplib.SMTPException as e:
-        logger.error('[EMAIL] Error SMTP: %s', str(e))
-        return False
-    except Exception as e:
-        logger.error('[EMAIL] Error inesperado: %s', str(e))
-        return False
+    # ── Enviar: Brevo HTTP API (producción) o SMTP (local) ────────
+    brevo_key = os.getenv('BREVO_API_KEY', '').strip()
+
+    if brevo_key:
+        # ── Brevo Transactional Email API (no SMTP, funciona en Render) ──
+        pdf_b64 = base64.b64encode(pdf_buffer.read()).decode('utf-8')
+        payload = {
+            'sender':      {'name': nombre_rem, 'email': remitente},
+            'to':          [{'email': destinatario}],
+            'replyTo':     {'email': remitente},
+            'subject':     f'Tu compra en RALOZ COL SAS — Factura {num_factura}',
+            'htmlContent': cuerpo_html,
+            'attachment':  [{'name': f'Factura-{num_factura}.pdf', 'content': pdf_b64}],
+        }
+        try:
+            resp = _requests.post(
+                'https://api.brevo.com/v3/smtp/email',
+                headers={'api-key': brevo_key, 'Content-Type': 'application/json'},
+                json=payload,
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                logger.info('[EMAIL-BREVO] Factura %s enviada a %s', num_factura, destinatario)
+                return True
+            else:
+                logger.error('[EMAIL-BREVO] Error %s: %s', resp.status_code, resp.text[:300])
+                return False
+        except Exception as e:
+            logger.error('[EMAIL-BREVO] Excepción: %s', str(e))
+            return False
+    else:
+        # ── Fallback SMTP (desarrollo local) ─────────────────────────
+        smtp_host = os.getenv('EMAIL_SMTP_HOST', 'smtp-mail.outlook.com')
+        smtp_port = int(os.getenv('EMAIL_SMTP_PORT', '587'))
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(remitente, password)
+                server.send_message(msg)
+            logger.info('[EMAIL-SMTP] Factura %s enviada a %s', num_factura, destinatario)
+            return True
+        except smtplib.SMTPAuthenticationError:
+            logger.error('[EMAIL-SMTP] Error de autenticación')
+            return False
+        except Exception as e:
+            logger.error('[EMAIL-SMTP] Error inesperado: %s', str(e))
+            return False
