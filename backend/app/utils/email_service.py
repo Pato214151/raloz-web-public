@@ -132,7 +132,6 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
         ('BOTTOMPADDING',(1, 0), (1, 0), 10),
         ('LEFTPADDING',  (1, 0), (1, 0), 12),
         ('RIGHTPADDING', (1, 0), (1, 0), 12),
-        ('ROUNDEDCORNERS', (1, 0), (1, 0), [4, 4, 4, 4]),
     ]))
     story.append(header_table)
     story.append(Spacer(1, 0.4 * cm))
@@ -212,8 +211,7 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
 
         bg = COLOR_GRIS_CLARO if i % 2 == 0 else colors.white
         rows.append([
-            Paragraph(str(i),          ParagraphStyle('n', **{**st_td.__dict__,
-                                        'parent': st_td.parent})),
+            Paragraph(str(i),          ParagraphStyle(f'n{i}', parent=st_td)),
             Paragraph(nombre_prod,     st_td_l),
             Paragraph(talla,           st_td),
             Paragraph(str(cantidad),   st_td),
