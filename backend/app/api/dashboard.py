@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from app.utils.decorators import get_current_identity
 from app import db
-from app.models import Factura, Pago, Gasto, StockPendiente
+from app.models import Factura, Pago, Gasto, StockPendiente, PedidoFabricacion
 from sqlalchemy import func, and_
 from datetime import date, timedelta
 
@@ -61,8 +61,20 @@ def resumen_dashboard():
         Gasto.fecha <= hoy,
     )).first()
 
-    # Pendientes
+    # Pendientes de stock (POS presencial)
     pendientes = StockPendiente.query.filter_by(estado='PENDIENTE').count()
+
+    # Pedidos web por entregar
+    pedidos_web_pendientes = Factura.query.filter(
+        Factura.canal == 'WEB',
+        Factura.estado_entrega.in_(['POR_ENTREGAR', 'EMPACADO']),
+        Factura.estado != 'ANULADA',
+    ).count()
+
+    # Fabricación en curso
+    fabricacion_en_curso = PedidoFabricacion.query.filter(
+        PedidoFabricacion.estado.in_(['en_produccion', 'listo_para_entrega'])
+    ).count()
 
     # Cuentas por cobrar — suma directa en DB sin cargar registros ni pagos
     total_por_cobrar = db.session.query(
@@ -99,6 +111,8 @@ def resumen_dashboard():
         'cobros_mes': float(cobros_mes[0]),
         'gastos_mes': float(gastos_mes[0]),
         'pendientes_entrega': pendientes,
+        'pedidos_web_pendientes': pedidos_web_pendientes,
+        'fabricacion_en_curso': fabricacion_en_curso,
         'total_por_cobrar': total_por_cobrar,
         'ventas_7_dias': ventas_7_dias,
     }), 200

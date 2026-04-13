@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
-import { DollarSign, FileText, CreditCard, Clock, TrendingUp, AlertCircle } from 'lucide-react'
+import { DollarSign, CreditCard, TrendingUp, AlertCircle, ShoppingCart, Scissors } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 function KPICard({ icon: Icon, label, value, sub, color = 'blue' }) {
@@ -70,7 +70,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <KPICard
           icon={DollarSign}
           label="Ventas Hoy"
@@ -95,8 +95,22 @@ export default function Dashboard() {
           icon={AlertCircle}
           label="Por Cobrar"
           value={formatMoney(data?.total_por_cobrar)}
-          sub={`${data?.pendientes_entrega || 0} pendientes entrega`}
+          sub={`${data?.pendientes_entrega || 0} pendientes stock`}
           color="red"
+        />
+        <KPICard
+          icon={ShoppingCart}
+          label="Pedidos Web"
+          value={data?.pedidos_web_pendientes ?? 0}
+          sub="por entregar"
+          color="blue"
+        />
+        <KPICard
+          icon={Scissors}
+          label="Fabricación"
+          value={data?.fabricacion_en_curso ?? 0}
+          sub="pedidos activos"
+          color="yellow"
         />
       </div>
 
