@@ -208,6 +208,17 @@ export default function PedidosOnline() {
                 <p><span className="text-gray-500">Email:</span> {seleccionado.email_cliente}</p>
                 <p><span className="text-gray-500">Teléfono:</span> {seleccionado.telefono_cliente || '—'}</p>
                 <p><span className="text-gray-500">Colegio:</span> {seleccionado.nombre_colegio || '—'}</p>
+                {seleccionado.direccion_envio && (
+                  <p><span className="text-gray-500">Dirección:</span> {seleccionado.direccion_envio}</p>
+                )}
+                {seleccionado.tiene_fabricacion && (
+                  <div className="mt-2 pt-2 border-t border-orange-200 flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
+                      🏭 Incluye fabricación
+                    </span>
+                    <span className="text-xs text-gray-500">Ver en pestaña Fabricación</span>
+                  </div>
+                )}
               </div>
 
               {/* Items */}
@@ -219,7 +230,7 @@ export default function PedidosOnline() {
                       <th className="text-left pb-1">Producto</th>
                       <th className="text-center pb-1">Talla</th>
                       <th className="text-center pb-1">Cant.</th>
-                      <th className="text-right pb-1">Precio</th>
+                      <th className="text-center pb-1">Tipo</th>
                       <th className="text-right pb-1">Subtotal</th>
                     </tr>
                   </thead>
@@ -229,7 +240,15 @@ export default function PedidosOnline() {
                         <td className="py-1.5 text-gray-800">{item.nombre}</td>
                         <td className="py-1.5 text-center text-gray-600">{item.talla}</td>
                         <td className="py-1.5 text-center text-gray-600">{item.cantidad}</td>
-                        <td className="py-1.5 text-right text-gray-600">{fmt(item.precio_unitario)}</td>
+                        <td className="py-1.5 text-center">
+                          {item.tipo_pedido === 'fabricacion' ? (
+                            <span className="text-xs text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded">🏭 Fab.</span>
+                          ) : item.tipo_pedido === 'mixto' ? (
+                            <span className="text-xs text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">Mixto</span>
+                          ) : (
+                            <span className="text-xs text-green-700 bg-green-50 px-1.5 py-0.5 rounded">Stock</span>
+                          )}
+                        </td>
                         <td className="py-1.5 text-right font-medium">{fmt(item.subtotal)}</td>
                       </tr>
                     ))}

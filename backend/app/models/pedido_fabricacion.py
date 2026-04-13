@@ -12,6 +12,7 @@ class PedidoFabricacion(db.Model):
     nombre_cliente   = db.Column(db.String(200), nullable=False)
     email_cliente    = db.Column(db.String(200))
     telefono_cliente = db.Column(db.String(50))
+    direccion_envio  = db.Column(db.String(300), nullable=True)
     id_colegio       = db.Column(db.Integer, db.ForeignKey('colegios.id_colegio'))
     nombre_colegio   = db.Column(db.String(200))
 
@@ -49,6 +50,8 @@ class PedidoFabricacion(db.Model):
             'nombre_cliente':   self.nombre_cliente,
             'email_cliente':    self.email_cliente,
             'telefono_cliente': self.telefono_cliente,
+            'direccion_envio':  self.direccion_envio or '',
+            'id_colegio':       self.id_colegio,
             'nombre_colegio':   self.nombre_colegio,
             'total_orden':      self.total_orden,
             'abono_porcentaje': self.abono_porcentaje,

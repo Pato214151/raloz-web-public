@@ -13,6 +13,7 @@ class PedidoWeb(db.Model):
     email_cliente = db.Column(db.String(200), nullable=False)
     telefono_cliente = db.Column(db.String(50))
     documento_cliente = db.Column(db.String(50))
+    direccion_envio = db.Column(db.String(300), nullable=True)
 
     # Colegio
     id_colegio = db.Column(db.Integer, db.ForeignKey('colegios.id_colegio'))
@@ -44,6 +45,7 @@ class PedidoWeb(db.Model):
             'nombre_cliente': self.nombre_cliente,
             'email_cliente': self.email_cliente,
             'telefono_cliente': self.telefono_cliente,
+            'direccion_envio': self.direccion_envio or '',
             'nombre_colegio': self.nombre_colegio,
             'items': json.loads(self.items_json) if self.items_json else [],
             'total': self.total,

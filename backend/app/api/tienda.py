@@ -240,7 +240,7 @@ def crear_pedido():
     """Crea un pedido web y retorna el link de pago de MercadoPago"""
     data = request.get_json()
 
-    requeridos = ['nombre_cliente', 'email_cliente', 'telefono_cliente', 'id_colegio', 'items']
+    requeridos = ['nombre_cliente', 'email_cliente', 'telefono_cliente', 'items']
     for campo in requeridos:
         if not data.get(campo):
             return jsonify({'error': f'Campo requerido: {campo}'}), 400
@@ -259,11 +259,17 @@ def crear_pedido():
     if tipo_entrega not in ('parcial', 'completa'):
         tipo_entrega = 'completa'
 
-    print(f"[PEDIDO] id_colegio={data['id_colegio']} abono={abono_porcentaje}% entrega={tipo_entrega} items={[(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido','normal')) for i in items]}", flush=True)
+    # id_colegio es opcional: null para pedidos de relojes u otras categorías generales
+    id_colegio_raw = data.get('id_colegio')
+    colegio = None
+    nombre_colegio_str = 'Tienda General'
+    if id_colegio_raw:
+        colegio = Colegio.query.get(id_colegio_raw)
+        if not colegio:
+            return jsonify({'error': 'Colegio no encontrado'}), 404
+        nombre_colegio_str = colegio.nombre
 
-    colegio = Colegio.query.get(data['id_colegio'])
-    if not colegio:
-        return jsonify({'error': 'Colegio no encontrado'}), 404
+    print(f"[PEDIDO] id_colegio={id_colegio_raw} colegio={nombre_colegio_str} abono={abono_porcentaje}% entrega={tipo_entrega} items={[(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido','normal')) for i in items]}", flush=True)
 
     total_orden = 0
     items_validados = []
@@ -273,6 +279,27 @@ def crear_pedido():
     for item in items:
         tipo_pedido = item.get('tipo_pedido', 'normal')
         id_reserva  = item.get('id_reserva')
+        categoria   = item.get('categoria', '')
+
+        # Para items sin colegio (relojes, etc.) usar el precio enviado por el frontend
+        if not id_colegio_raw or categoria == 'relojes':
+            precio_unitario = float(item.get('unit_price') or item.get('precio', 0))
+            if not precio_unitario:
+                return jsonify({'error': f"Precio inválido: {item.get('nombre', '')}"}), 400
+            subtotal_item = precio_unitario * item['cantidad']
+            total_orden  += subtotal_item
+            items_validados.append({
+                'id_producto':     item['id_producto'],
+                'nombre':          item.get('nombre', ''),
+                'talla':           item['talla'],
+                'cantidad':        item['cantidad'],
+                'precio_unitario': precio_unitario,
+                'subtotal':        subtotal_item,
+                'id_reserva':      None,
+                'tipo_pedido':     tipo_pedido,
+                'categoria':       categoria,
+            })
+            continue
 
         if tipo_pedido in ('fabricacion', 'mixto'):
             # Pedido anticipado o mixto: no validar stock completo
@@ -292,7 +319,7 @@ def crear_pedido():
         else:
             # Sin reserva: validar stock directo
             stock = Stock.query.filter_by(
-                id_colegio=data['id_colegio'],
+                id_colegio=id_colegio_raw,
                 id_producto=item['id_producto'],
                 talla_individual=item['talla']
             ).first()
@@ -303,27 +330,28 @@ def crear_pedido():
         # Convertir talla individual a talla_grupo para buscar el precio correcto
         talla_grupo = TALLA_INDIVIDUAL_A_GRUPO.get(item['talla'], item['talla'])
         precio = PrecioColegio.query.filter_by(
-            id_colegio=data['id_colegio'],
+            id_colegio=id_colegio_raw,
             id_producto=item['id_producto'],
             talla_grupo=talla_grupo,
         ).first()
         if not precio:
             # Fallback: try without talla filter (para productos sin talla como medias)
             precio = PrecioColegio.query.filter_by(
-                id_colegio=data['id_colegio'],
+                id_colegio=id_colegio_raw,
                 id_producto=item['id_producto'],
             ).first()
         if not precio:
             return jsonify({'error': f"Precio no encontrado: {item.get('nombre', '')}"}), 400
 
-        subtotal_item = precio.precio_unitario * item['cantidad']
+        precio_unitario = precio.precio_unitario
+        subtotal_item = precio_unitario * item['cantidad']
         total_orden  += subtotal_item
         items_validados.append({
             'id_producto':     item['id_producto'],
             'nombre':          item.get('nombre', ''),
             'talla':           item['talla'],
             'cantidad':        item['cantidad'],
-            'precio_unitario': precio.precio_unitario,
+            'precio_unitario': precio_unitario,
             'subtotal':        subtotal_item,
             'id_reserva':      id_reserva,
             'tipo_pedido':     tipo_pedido,
@@ -345,12 +373,16 @@ def crear_pedido():
         email_cliente=data['email_cliente'],
         telefono_cliente=data['telefono_cliente'],
         documento_cliente=data.get('documento_cliente', ''),
-        id_colegio=colegio.id_colegio,
-        nombre_colegio=colegio.nombre,
+        id_colegio=colegio.id_colegio if colegio else None,
+        nombre_colegio=nombre_colegio_str,
         items_json=json.dumps(items_validados),
         total=total_cobrar,   # lo que se cobra ahora
         estado='pendiente',
     )
+    try:
+        pedido.direccion_envio = data.get('direccion_envio', '') or ''
+    except Exception:
+        pass
     # Columnas opcionales (presentes tras migración)
     try:
         pedido.total_orden       = total_orden
@@ -720,6 +752,80 @@ def marcar_pedido_fabricacion_entregado(id_pedido):
     return jsonify({'ok': True, 'estado': pf.estado}), 200
 
 
+@tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-notificado', methods=['POST'])
+def marcar_pedido_fabricacion_notificado(id_pedido):
+    """Marca que el cliente fue notificado por WhatsApp"""
+    err = _jwt_required()
+    if err: return err
+    pf = PedidoFabricacion.query.get_or_404(id_pedido)
+    pf.notificado = True
+    db.session.commit()
+    return jsonify({'ok': True, 'notificado': True}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/registrar-saldo', methods=['POST'])
+def registrar_saldo_fabricacion(id_pedido):
+    """Registra el pago del saldo pendiente de un pedido de fabricación"""
+    err = _jwt_required()
+    if err: return err
+
+    data   = request.get_json() or {}
+    monto  = float(data.get('monto', 0))
+    metodo = data.get('metodo', 'efectivo')
+
+    if monto <= 0:
+        return jsonify({'error': 'El monto debe ser mayor a 0'}), 400
+
+    pf = PedidoFabricacion.query.get_or_404(id_pedido)
+
+    if pf.saldo_pendiente <= 0:
+        return jsonify({'error': 'Este pedido no tiene saldo pendiente'}), 400
+
+    monto = min(monto, pf.saldo_pendiente)
+    pf.saldo_pendiente = round(max(0, pf.saldo_pendiente - monto), 2)
+    pf.abono_monto     = round(pf.abono_monto + monto, 2)
+
+    # Actualizar factura y pedido_web asociados
+    pedido_web = PedidoWeb.query.get(pf.id_pedido_web) if pf.id_pedido_web else None
+    if pedido_web and pedido_web.id_factura:
+        factura = Factura.query.get(pedido_web.id_factura)
+        if factura:
+            factura.saldo_pendiente = max(0, (factura.saldo_pendiente or 0) - monto)
+            factura.total_abonado   = (factura.total_abonado or 0) + monto
+            if factura.saldo_pendiente <= 0:
+                factura.estado = 'PAGADA'
+                if pedido_web:
+                    pedido_web.estado = 'pagado'
+            # Registrar el pago
+            db.session.add(Pago(
+                id_factura=factura.id_factura,
+                valor=monto,
+                metodo_pago=metodo.upper(),
+                usuario_registro='POS',
+                fecha_pago=date.today(),
+            ))
+
+    db.session.commit()
+    return jsonify({'ok': True, 'pedido': pf.to_dict()}), 200
+
+
+@tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/actualizar-fecha', methods=['POST'])
+def actualizar_fecha_fabricacion(id_pedido):
+    """Actualiza la fecha estimada de entrega"""
+    err = _jwt_required()
+    if err: return err
+    data = request.get_json() or {}
+    fecha_str = data.get('fecha_estimada', '')
+    pf = PedidoFabricacion.query.get_or_404(id_pedido)
+    if fecha_str:
+        try:
+            pf.fecha_estimada = date.fromisoformat(fecha_str)
+        except ValueError:
+            return jsonify({'error': 'Formato de fecha inválido (YYYY-MM-DD)'}), 400
+    db.session.commit()
+    return jsonify({'ok': True, 'fecha_estimada': pf.fecha_estimada.isoformat() if pf.fecha_estimada else None}), 200
+
+
 @tienda_bp.route('/admin/fabricacion/stock-pendiente', methods=['GET'])
 def listar_stock_pendiente():
     err = _jwt_required()
@@ -963,6 +1069,10 @@ def _crear_pedido_fabricacion_si_aplica(pedido: PedidoWeb):
         fecha_estimada=fecha_estimada,
         estado='en_produccion',
     )
+    try:
+        pf.direccion_envio = getattr(pedido, 'direccion_envio', '') or ''
+    except Exception:
+        pass
     db.session.add(pf)
     db.session.flush()
 
