@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useAuth } from '../../context/AuthContext'
+import api from '../../services/api'
+import toast from 'react-hot-toast'
 import { Hammer, RefreshCw, PlusCircle } from 'lucide-react'
-
-const API = import.meta.env.VITE_API_URL || 'https://raloz-web.onrender.com/api'
 
 function formatCant(n) { return n === 1 ? '1 unidad' : `${n} unidades` }
 
 export default function StockPendienteFab() {
-  const { token }                   = useAuth()
   const [items, setItems]           = useState([])
   const [loading, setLoading]       = useState(false)
   const [modal, setModal]           = useState(null)   // item seleccionado para registrar fab
@@ -18,17 +16,14 @@ export default function StockPendienteFab() {
   const cargar = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/tienda/admin/fabricacion/stock-pendiente`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const d = await res.json()
-        setItems(d.items || [])
-      }
+      const res = await api.get('/tienda/admin/fabricacion/stock-pendiente')
+      setItems(res.data.items || [])
+    } catch {
+      toast.error('Error cargando stock pendiente')
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -42,16 +37,15 @@ export default function StockPendienteFab() {
     if (!modal || cantFab <= 0) return
     setGuardando(true)
     try {
-      const res = await fetch(`${API}/tienda/admin/fabricacion/stock-pendiente/registrar`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_pendiente: modal.id_pendiente, cantidad_fabricada: cantFab }),
+      await api.post('/tienda/admin/fabricacion/stock-pendiente/registrar', {
+        id_pendiente: modal.id_pendiente,
+        cantidad_fabricada: cantFab,
       })
-      if (res.ok) {
-        setMsgOk(`✓ Se registraron ${cantFab} unidades. Stock actualizado.`)
-        await cargar()
-        setTimeout(() => setModal(null), 2000)
-      }
+      setMsgOk(`✓ Se registraron ${cantFab} unidades. Stock actualizado.`)
+      await cargar()
+      setTimeout(() => setModal(null), 2000)
+    } catch {
+      toast.error('Error al registrar fabricación')
     } finally {
       setGuardando(false)
     }

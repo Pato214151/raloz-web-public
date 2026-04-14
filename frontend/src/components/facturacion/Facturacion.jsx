@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
@@ -9,6 +10,7 @@ const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFER
 const DOMINIOS_EMAIL = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'outlook.es', 'live.com']
 
 export default function Facturacion() {
+  const navigate = useNavigate()
   const [colegios, setColegios] = useState([])
   const [productos, setProductos] = useState([])
   const [preciosColegio, setPreciosColegio] = useState({})
@@ -137,7 +139,7 @@ export default function Facturacion() {
       if (!detalles[i].talla_individual) { toast.error(`Línea ${i + 1}: Selecciona una talla`); return }
       if (detalles[i].precio_unitario <= 0) { toast.error(`Línea ${i + 1}: El precio debe ser mayor a 0`); return }
     }
-    if (abono > subtotal) { toast.error('El abono no puede ser mayor al total'); return }
+    if (abono > totalConDomicilio) { toast.error('El abono no puede ser mayor al total'); return }
 
     setSaving(true)
     try {
@@ -483,7 +485,7 @@ export default function Facturacion() {
               <button
                 onClick={() => {
                   setShowPostSave(false)
-                  window.location.href = '/empaque'
+                  navigate('/empaque')
                 }}
                 className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-6 rounded-lg"
               >
