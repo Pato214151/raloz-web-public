@@ -459,6 +459,7 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
 
     if brevo_key:
         # ── Brevo Transactional Email API (no SMTP, funciona en Render) ──
+        pdf_buffer.seek(0)
         pdf_b64 = base64.b64encode(pdf_buffer.read()).decode('utf-8')
         payload = {
             'sender':      {'name': nombre_rem, 'email': remitente},
