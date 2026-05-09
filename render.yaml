@@ -32,4 +32,12 @@ services:
         sync: false
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_REMITENTE
+        sync: false
+      - key: EMAIL_NOMBRE
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
 
