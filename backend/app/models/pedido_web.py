@@ -23,7 +23,11 @@ class PedidoWeb(db.Model):
     items_json = db.Column(db.Text, nullable=False)
 
     # Totales
-    total = db.Column(db.Float, nullable=False)
+    total = db.Column(db.Float, nullable=False)          # monto cobrado ahora (50% o 100%)
+    total_orden = db.Column(db.Float)                    # valor real completo del pedido
+    abono_porcentaje = db.Column(db.Integer, default=100)
+    tiene_fabricacion = db.Column(db.Boolean, default=False)
+    tipo_entrega = db.Column(db.String(20), default='completa')
 
     # Pago
     estado = db.Column(db.String(50), default='pendiente')  # pendiente, pagado, fallido, cancelado

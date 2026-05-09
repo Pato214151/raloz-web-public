@@ -8,6 +8,7 @@ import os
 import json
 import uuid
 import logging
+import threading
 import requests
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
@@ -277,84 +278,74 @@ def crear_pedido():
     ahora = datetime.utcnow()
 
     for item in items:
-        tipo_pedido = item.get('tipo_pedido', 'normal')
-        id_reserva  = item.get('id_reserva')
-        categoria   = item.get('categoria', '')
+        id_reserva = item.get('id_reserva')
+        categoria  = item.get('categoria', '')
+        cantidad   = int(item.get('cantidad', 1))
 
-        # Para items sin colegio (relojes, etc.) usar el precio enviado por el frontend
+        # ── Productos sin colegio (relojes, etc.) ──────────────────────────
+        # El precio viene del frontend porque no hay PrecioColegio para ellos.
         if not id_colegio_raw or categoria == 'relojes':
             precio_unitario = float(item.get('unit_price') or item.get('precio', 0))
             if not precio_unitario:
                 return jsonify({'error': f"Precio inválido: {item.get('nombre', '')}"}), 400
-            subtotal_item = precio_unitario * item['cantidad']
+            subtotal_item = precio_unitario * cantidad
             total_orden  += subtotal_item
             items_validados.append({
                 'id_producto':     item['id_producto'],
                 'nombre':          item.get('nombre', ''),
-                'talla':           item['talla'],
-                'cantidad':        item['cantidad'],
+                'talla':           item.get('talla', ''),
+                'cantidad':        cantidad,
                 'precio_unitario': precio_unitario,
                 'subtotal':        subtotal_item,
                 'id_reserva':      None,
-                'tipo_pedido':     tipo_pedido,
+                'tipo_pedido':     'general',
+                'stock_disponible': cantidad,
                 'categoria':       categoria,
             })
             continue
 
+        # ── Clasificación server-side (backend decide el tipo, no el frontend) ──
+        tipo_pedido, stock_disponible = _clasificar_item(
+            id_colegio_raw, item['id_producto'], item.get('talla', ''),
+            cantidad, id_reserva, ahora,
+        )
         if tipo_pedido in ('fabricacion', 'mixto'):
-            # Pedido anticipado o mixto: no validar stock completo
             tiene_fabricacion = True
-        elif id_reserva:
-            # Reserva activa existente
-            reserva = Reserva.query.get(id_reserva)
-            if not reserva or reserva.estado != 'activa' or reserva.fecha_expiracion < ahora:
-                return jsonify({
-                    'error': f"La reserva de {item.get('nombre', '')} talla {item.get('talla', '')} "
-                             f"expiró. Vuelve a agregar el producto al carrito."
-                }), 409
-            if reserva.cantidad < item['cantidad']:
-                return jsonify({
-                    'error': f"La cantidad reservada de {item.get('nombre', '')} es insuficiente."
-                }), 409
-        else:
-            # Sin reserva: validar stock directo
-            stock = Stock.query.filter_by(
-                id_colegio=id_colegio_raw,
-                id_producto=item['id_producto'],
-                talla_individual=item['talla']
-            ).first()
-            print(f"[STOCK] id_producto={item['id_producto']} talla={repr(item['talla'])} → cantidad={stock.cantidad if stock else 'N/A'}", flush=True)
-            if not stock or stock.cantidad < item['cantidad']:
-                return jsonify({'error': f"Sin stock: {item.get('nombre', '')} talla {item.get('talla', '')}"}), 400
 
-        # Convertir talla individual a talla_grupo para buscar el precio correcto
-        talla_grupo = TALLA_INDIVIDUAL_A_GRUPO.get(item['talla'], item['talla'])
-        precio = PrecioColegio.query.filter_by(
-            id_colegio=id_colegio_raw,
-            id_producto=item['id_producto'],
-            talla_grupo=talla_grupo,
-        ).first()
-        if not precio:
-            # Fallback: try without talla filter (para productos sin talla como medias)
-            precio = PrecioColegio.query.filter_by(
+        logger.info(
+            '[PEDIDO] producto=%s talla=%s tipo=%s stock_disp=%s',
+            item['id_producto'], item.get('talla'), tipo_pedido, stock_disponible,
+        )
+
+        # ── Precio autoritativo desde PrecioColegio (backend) ──────────────
+        talla_grupo = TALLA_INDIVIDUAL_A_GRUPO.get(item.get('talla', ''), item.get('talla', ''))
+        precio = (
+            PrecioColegio.query.filter_by(
+                id_colegio=id_colegio_raw,
+                id_producto=item['id_producto'],
+                talla_grupo=talla_grupo,
+            ).first()
+            or PrecioColegio.query.filter_by(
                 id_colegio=id_colegio_raw,
                 id_producto=item['id_producto'],
             ).first()
+        )
         if not precio:
             return jsonify({'error': f"Precio no encontrado: {item.get('nombre', '')}"}), 400
 
         precio_unitario = precio.precio_unitario
-        subtotal_item = precio_unitario * item['cantidad']
-        total_orden  += subtotal_item
+        subtotal_item   = precio_unitario * cantidad
+        total_orden    += subtotal_item
         items_validados.append({
-            'id_producto':     item['id_producto'],
-            'nombre':          item.get('nombre', ''),
-            'talla':           item['talla'],
-            'cantidad':        item['cantidad'],
-            'precio_unitario': precio_unitario,
-            'subtotal':        subtotal_item,
-            'id_reserva':      id_reserva,
-            'tipo_pedido':     tipo_pedido,
+            'id_producto':      item['id_producto'],
+            'nombre':           item.get('nombre', ''),
+            'talla':            item.get('talla', ''),
+            'cantidad':         cantidad,
+            'precio_unitario':  precio_unitario,
+            'subtotal':         subtotal_item,
+            'id_reserva':       id_reserva,
+            'tipo_pedido':      tipo_pedido,
+            'stock_disponible': stock_disponible,
         })
 
     # Monto a cobrar ahora (puede ser 50% si es pedido con abono)
@@ -366,31 +357,23 @@ def crear_pedido():
 
     referencia = f"RALOZ-{uuid.uuid4().hex[:12].upper()}"
 
-    # Crear pedido en DB
     pedido = PedidoWeb(
         referencia=referencia,
         nombre_cliente=data['nombre_cliente'],
         email_cliente=data['email_cliente'],
         telefono_cliente=data['telefono_cliente'],
         documento_cliente=data.get('documento_cliente', ''),
+        direccion_envio=data.get('direccion_envio', '') or '',
         id_colegio=colegio.id_colegio if colegio else None,
         nombre_colegio=nombre_colegio_str,
         items_json=json.dumps(items_validados),
-        total=total_cobrar,   # lo que se cobra ahora
+        total=total_cobrar,
+        total_orden=total_orden,
+        abono_porcentaje=abono_porcentaje,
+        tiene_fabricacion=tiene_fabricacion,
+        tipo_entrega='completa',  # siempre: todo junto cuando esté listo
         estado='pendiente',
     )
-    try:
-        pedido.direccion_envio = data.get('direccion_envio', '') or ''
-    except Exception:
-        pass
-    # Columnas opcionales (presentes tras migración)
-    try:
-        pedido.total_orden       = total_orden
-        pedido.abono_porcentaje  = abono_porcentaje
-        pedido.tiene_fabricacion = tiene_fabricacion
-        pedido.tipo_entrega      = tipo_entrega
-    except Exception:
-        pass
     db.session.add(pedido)
     db.session.commit()
 
@@ -405,9 +388,18 @@ def crear_pedido():
     if mp_token:
         try:
             nombre_partes = data['nombre_cliente'].split(' ', 1)
-            preference_data = {
-                'external_reference': referencia,
-                'items': [
+            # Cuando es abono del 50%, enviamos un item único con el monto correcto.
+            # Si enviamos los items completos, MP cobraría el total_orden, no el 50%.
+            if tiene_fabricacion and abono_porcentaje == 50:
+                mp_items = [{
+                    'id': 'ABONO_50',
+                    'title': f'Abono 50% — Pedido {referencia}',
+                    'quantity': 1,
+                    'unit_price': float(total_cobrar),
+                    'currency_id': 'COP',
+                }]
+            else:
+                mp_items = [
                     {
                         'id': str(i['id_producto']),
                         'title': f"{i['nombre']} — Talla {i['talla']}",
@@ -416,7 +408,11 @@ def crear_pedido():
                         'currency_id': 'COP',
                     }
                     for i in items_validados
-                ],
+                ]
+
+            preference_data = {
+                'external_reference': referencia,
+                'items': mp_items,
                 'payer': {
                     'name': nombre_partes[0],
                     'surname': nombre_partes[1] if len(nombre_partes) > 1 else '',
@@ -512,6 +508,11 @@ def mp_webhook():
             logger.warning('[WEBHOOK] Pedido no encontrado referencia=%s', referencia)
             return jsonify({'ok': True}), 200
 
+        # Idempotencia: si ya está pagado no reprocesar (MP puede reintentar el webhook)
+        if pedido.estado == 'pagado' and estado_mp == 'approved':
+            logger.info('[WEBHOOK] Pedido %s ya procesado, ignorando reintento', pedido.id_pedido)
+            return jsonify({'ok': True}), 200
+
         pedido.wompi_status = estado_mp
         pedido.metodo_pago = metodo
 
@@ -519,7 +520,7 @@ def mp_webhook():
             logger.info('[WEBHOOK] Aprobando pedido %s', pedido.id_pedido)
             pedido.estado = 'pagado'
             pedido.fecha_pago = datetime.utcnow()
-            db.session.commit()  # guardar estado pagado primero
+            db.session.commit()
 
             factura = None
             try:
@@ -531,11 +532,9 @@ def mp_webhook():
                 logger.error('[WEBHOOK] Error factura: %s', str(e), exc_info=True)
                 db.session.rollback()
 
+            # Email en hilo separado: no bloquea la respuesta al webhook
             if factura and pedido.email_cliente:
-                try:
-                    enviar_email_factura(pedido.email_cliente, factura, list(factura.detalles))
-                except Exception as e:
-                    logger.error('[WEBHOOK] Error email: %s', str(e))
+                _lanzar_email_async(pedido.email_cliente, factura.id_factura)
 
             try:
                 _crear_pedido_fabricacion_si_aplica(pedido)
@@ -1038,6 +1037,72 @@ def consultar_pedido(referencia):
 # ══════════════════════════════════════════════════════════════
 # HELPERS PRIVADOS
 # ══════════════════════════════════════════════════════════════
+
+def _clasificar_item(id_colegio, id_producto, talla, cantidad, id_reserva, ahora):
+    """
+    Clasifica un item server-side ignorando lo que envíe el frontend.
+    Retorna (tipo_pedido, stock_disponible_para_deducir).
+
+    Tipos:
+      'normal'      → todo el stock disponible (reserva válida o stock libre)
+      'mixto'       → parte de la cantidad tiene stock, el resto va a fabricación
+      'fabricacion' → sin stock, va directo a fabricación
+    """
+    # Reserva válida que cubre la cantidad solicitada → normal
+    if id_reserva:
+        reserva = Reserva.query.get(id_reserva)
+        if reserva and reserva.estado == 'activa' and reserva.fecha_expiracion >= ahora:
+            if reserva.cantidad >= cantidad:
+                return 'normal', cantidad
+            # Reserva cubre menos de lo pedido → mixto
+            return 'mixto', reserva.cantidad
+
+    # Sin reserva válida: verificar stock fresco en la DB
+    stock = Stock.query.filter_by(
+        id_colegio=id_colegio,
+        id_producto=id_producto,
+        talla_individual=talla,
+    ).first()
+    stock_bruto = stock.cantidad if stock else 0
+
+    reservas_activas = db.session.query(
+        func.coalesce(func.sum(Reserva.cantidad), 0)
+    ).filter(
+        Reserva.id_colegio == id_colegio,
+        Reserva.id_producto == id_producto,
+        Reserva.talla == talla,
+        Reserva.estado == 'activa',
+        Reserva.fecha_expiracion > ahora,
+    ).scalar() or 0
+
+    stock_disp = max(0, stock_bruto - reservas_activas)
+
+    if stock_disp >= cantidad:
+        return 'normal', cantidad
+    elif stock_disp > 0:
+        return 'mixto', stock_disp
+    else:
+        return 'fabricacion', 0
+
+
+def _lanzar_email_async(email_cliente, factura_id):
+    """Envía el email de factura en un hilo daemon para no bloquear el webhook."""
+    from flask import current_app
+    app = current_app._get_current_object()
+
+    def _run():
+        with app.app_context():
+            try:
+                factura = Factura.query.get(factura_id)
+                if factura:
+                    detalles = list(factura.detalles)
+                    enviar_email_factura(email_cliente, factura, detalles)
+                    logger.info('[EMAIL-ASYNC] Enviado a %s (factura %s)', email_cliente, factura_id)
+            except Exception as exc:
+                logger.error('[EMAIL-ASYNC] Error: %s', str(exc))
+
+    threading.Thread(target=_run, daemon=True).start()
+
 
 def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
     """Convierte un PedidoWeb pagado en una Factura del sistema"""

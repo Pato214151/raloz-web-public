@@ -230,7 +230,15 @@ export default function PedidosOnline() {
                     <div className="text-xs text-gray-500">{p.email_cliente}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{p.nombre_colegio || '—'}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(p.total)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="font-semibold text-gray-800">{fmt(p.total_orden || p.total)}</span>
+                    {p.tiene_fabricacion && (
+                      <span className="ml-1 text-xs text-orange-600" title="Incluye fabricación">🏭</span>
+                    )}
+                    {p.abono_porcentaje === 50 && (
+                      <div className="text-xs text-amber-600 font-normal">Cobrado: {fmt(p.total)}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center"><BadgePago estado={p.estado} /></td>
                   <td className="px-4 py-3 text-center">
                     {p.estado === 'pagado' && <BadgeEntrega estado={p.estado_entrega} />}
@@ -364,9 +372,29 @@ export default function PedidosOnline() {
               </div>
 
               {/* Total + estado pago */}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <BadgePago estado={seleccionado.estado} />
-                <span className="text-lg font-bold text-orange-600">{fmt(seleccionado.total)}</span>
+              <div className="pt-2 border-t border-gray-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <BadgePago estado={seleccionado.estado} />
+                  <span className="text-lg font-bold text-orange-600">
+                    {fmt(seleccionado.total_orden || seleccionado.total)}
+                  </span>
+                </div>
+                {seleccionado.abono_porcentaje === 50 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs space-y-0.5">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Total pedido</span>
+                      <span className="font-semibold">{fmt(seleccionado.total_orden)}</span>
+                    </div>
+                    <div className="flex justify-between text-amber-700">
+                      <span>Cobrado ahora (50%)</span>
+                      <span className="font-semibold">{fmt(seleccionado.total)}</span>
+                    </div>
+                    <div className="flex justify-between text-red-600">
+                      <span>Saldo pendiente</span>
+                      <span className="font-semibold">{fmt((seleccionado.total_orden || 0) - (seleccionado.total || 0))}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Acciones */}
