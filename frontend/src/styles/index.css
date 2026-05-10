@@ -2,47 +2,137 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base ───────────────────────────────────────────────────────── */
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
+
+  /* Scrollbar global — delgado y discreto */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 transparent; /* slate-700 sobre fondo transparente */
+  }
+  *::-webkit-scrollbar          { width: 5px; height: 5px; }
+  *::-webkit-scrollbar-track    { background: transparent; }
+  *::-webkit-scrollbar-thumb    { background: #cbd5e1; border-radius: 99px; } /* slate-300 */
+  *::-webkit-scrollbar-thumb:hover { background: #94a3b8; }                  /* slate-400 */
+
+  /* Scrollbar del sidebar — aún más sutil (fondo oscuro) */
+  aside *::-webkit-scrollbar-thumb       { background: #334155; } /* slate-700 */
+  aside *::-webkit-scrollbar-thumb:hover { background: #475569; } /* slate-600 */
 }
 
+/* ── Componentes reutilizables ──────────────────────────────────── */
 @layer components {
+
+  /* Botones */
   .btn-primary {
-    @apply bg-raloz-600 hover:bg-raloz-700 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-raloz-600 hover:bg-raloz-700 text-white px-4 py-2 rounded-lg font-medium text-sm
+           transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-raloz-500 focus-visible:ring-offset-1;
   }
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium
-           transition-colors duration-200;
+    @apply bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm
+           border border-gray-200 hover:border-gray-300
+           transition-colors duration-150
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1;
   }
   .btn-danger {
-    @apply bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors duration-200;
+    @apply bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium text-sm
+           transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-success {
-    @apply bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium
-           transition-colors duration-200;
+    @apply bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium text-sm
+           transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }
+  .btn-ghost {
+    @apply text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-medium
+           transition-colors duration-150;
+  }
+
+  /* Input */
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-raloz-500
-           focus:border-transparent outline-none transition-all duration-200;
+    @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white
+           focus:ring-2 focus:ring-raloz-500 focus:border-transparent
+           outline-none transition-all duration-150
+           placeholder:text-gray-400
+           disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed;
   }
+
+  /* Card */
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-5;
   }
-  .badge-pendiente {
-    @apply bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-xs font-medium;
+  .card-header {
+    @apply flex items-center justify-between gap-3 mb-4 pb-3 border-b border-gray-100;
   }
-  .badge-pagada {
-    @apply bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium;
+  .card-title {
+    @apply text-sm font-semibold text-gray-800;
   }
-  .badge-anulada {
-    @apply bg-red-100 text-red-800 px-2 py-0.5 rounded-full text-xs font-medium;
+
+  /* Etiqueta de sección (p.ej. "HOY", "PENDIENTES") */
+  .section-label {
+    @apply text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-0.5;
   }
-  .badge-abono {
-    @apply bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs font-medium;
+
+  /* Badges de estado */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold;
   }
+  .badge-pendiente  { @apply bg-amber-100   text-amber-800;   }
+  .badge-pagada     { @apply bg-emerald-100 text-emerald-800; }
+  .badge-anulada    { @apply bg-red-100     text-red-700;     }
+  .badge-abono      { @apply bg-blue-100    text-blue-800;    }
+  .badge-proceso    { @apply bg-violet-100  text-violet-800;  }
+  .badge-listo      { @apply bg-teal-100    text-teal-800;    }
+  .badge-entregado  { @apply bg-gray-100    text-gray-600;    }
+
+  /* ── Tabla estándar ── */
+  .table-wrap {
+    @apply overflow-x-auto rounded-xl border border-gray-100 shadow-sm;
+  }
+  .table-std {
+    @apply w-full text-sm border-collapse;
+  }
+  .table-std thead tr {
+    @apply bg-gray-50 border-b border-gray-100;
+  }
+  .table-std thead th {
+    @apply text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap;
+  }
+  .table-std tbody tr {
+    @apply border-b border-gray-50 hover:bg-gray-50/70 transition-colors;
+  }
+  .table-std tbody tr:last-child {
+    @apply border-b-0;
+  }
+  .table-std tbody td {
+    @apply px-4 py-3 text-gray-700 align-middle;
+  }
+  .table-std tfoot tr {
+    @apply bg-gray-50 border-t border-gray-200;
+  }
+  .table-std tfoot td {
+    @apply px-4 py-3 font-semibold text-gray-800;
+  }
+
+  /* ── Skeleton / loading pulse ── */
+  .skeleton {
+    @apply bg-gray-100 rounded-lg animate-pulse;
+  }
+  .skeleton-text  { @apply skeleton h-4; }
+  .skeleton-title { @apply skeleton h-6; }
+  .skeleton-card  { @apply skeleton h-24 rounded-xl; }
+
+  /* ── Estado vacío ── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-2 py-12 text-center;
+  }
+  .empty-state-icon {
+    @apply w-12 h-12 bg-gray-100 text-gray-400 rounded-xl flex items-center justify-center mb-1;
+  }
+  .empty-state-title { @apply text-sm font-semibold text-gray-600; }
+  .empty-state-sub   { @apply text-xs text-gray-400; }
 }
