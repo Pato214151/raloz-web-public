@@ -14,7 +14,7 @@ reportes_bp = Blueprint('reportes', __name__)
 
 
 @reportes_bp.route('/ventas', methods=['GET'])
-@jwt_required()
+@rol_requerido('administrador')
 def reporte_ventas():
     """Reporte de ventas por período"""
     from app.utils.validators import validate_date
@@ -86,7 +86,7 @@ def reporte_ventas():
 
 
 @reportes_bp.route('/productos-mas-vendidos', methods=['GET'])
-@jwt_required()
+@rol_requerido('administrador')
 def productos_mas_vendidos():
     """Top productos más vendidos"""
     from app.models import Producto
@@ -144,7 +144,7 @@ def cuentas_por_cobrar():
 
 
 @reportes_bp.route('/cuentas', methods=['GET'])
-@jwt_required()
+@rol_requerido('administrador')
 def reporte_cuentas():
     """
     Reporte detallado de cuentas (ingresos y egresos).
@@ -302,7 +302,7 @@ def reporte_cuentas():
 
 
 @reportes_bp.route('/ventas-por-colegio', methods=['GET'])
-@jwt_required()
+@rol_requerido('administrador')
 def ventas_por_colegio():
     """
     Reporte de ventas agrupadas por colegio.
