@@ -774,7 +774,7 @@ def generar_factura_pedido(id_pedido):
     except Exception as e:
         db.session.rollback()
         logger.error('[FACTURA-MANUAL] Error: %s', str(e), exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'No se pudo generar la factura'}), 500
 
     if pedido.email_cliente:
         try:
@@ -814,7 +814,7 @@ def reenviar_email_pedido(id_pedido):
             return jsonify({'error': 'No se pudo enviar el email. Verifica las credenciales SMTP en Render.'}), 500
     except Exception as e:
         logger.error('[REENVIAR-EMAIL] Error: %s', str(e), exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'No se pudo reenviar el email'}), 500
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/actualizar-entrega', methods=['POST'])

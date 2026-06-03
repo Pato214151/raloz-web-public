@@ -181,7 +181,7 @@ def editar_pago(id_pago):
 
     except (ValueError, TypeError) as e:
         db.session.rollback()
-        return jsonify({'error': f'Error en datos: {str(e)}'}), 400
+        return jsonify({'error': 'Datos inválidos en la solicitud'}), 400
 
 
 @pagos_bp.route('/<int:id_pago>', methods=['DELETE'])

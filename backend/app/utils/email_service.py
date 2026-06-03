@@ -553,6 +553,13 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
         logger.warning('[EMAIL] Credenciales no configuradas — EMAIL_REMITENTE o EMAIL_PASSWORD vacíos')
         return False
 
+    # Sanitizar el destinatario (controlado por el cliente) para evitar
+    # inyección de cabeceras de email (CR/LF) y validar formato básico.
+    destinatario = (destinatario or '').replace('\r', '').replace('\n', '').strip()
+    if '@' not in destinatario or ' ' in destinatario or len(destinatario) > 254:
+        logger.warning('[EMAIL] Destinatario inválido, no se envía: %r', destinatario)
+        return False
+
     def _v(obj, campo, default='—'):
         if isinstance(obj, dict):
             return obj.get(campo) or default

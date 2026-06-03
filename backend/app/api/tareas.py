@@ -168,7 +168,7 @@ def crear_tarea():
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': f'Error al guardar tarea: {str(e)}'}), 500
+        return jsonify({'error': 'No se pudo guardar la tarea'}), 500
 
     return jsonify(tarea.to_dict()), 201
 
