@@ -59,13 +59,24 @@ def create_app(config_name=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
-    # CORS — lee CORS_ORIGINS del env (separados por coma) o permite todo
-    _cors_raw = os.getenv('CORS_ORIGINS', '*')
-    if _cors_raw.strip() == '*':
-        cors_origins = '*'
-    else:
+    # CORS — orígenes permitidos. Por seguridad NUNCA usamos '*' junto con
+    # supports_credentials (es inválido y peligroso). Si CORS_ORIGINS no está
+    # configurado, caemos a una lista segura conocida.
+    _cors_defaults = [
+        "https://ralozcol-web.pages.dev",   # tienda pública (Cloudflare)
+        "https://raloz-web.onrender.com",   # panel admin (mismo backend)
+        "http://localhost:5173",            # frontend dev (Vite)
+        "http://localhost:3000",
+        "http://localhost:8080",            # tienda local
+    ]
+    _cors_raw = os.getenv('CORS_ORIGINS', '').strip()
+    if _cors_raw and _cors_raw != '*':
         cors_origins = [o.strip().rstrip('/') for o in _cors_raw.split(',') if o.strip()]
-        cors_origins += ["http://localhost:5173", "http://localhost:3000"]
+        for d in _cors_defaults:
+            if d not in cors_origins:
+                cors_origins.append(d)
+    else:
+        cors_origins = _cors_defaults
     CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True)
 
     # ── Security Headers ──
@@ -75,6 +86,8 @@ def create_app(config_name=None):
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # HSTS: fuerza HTTPS en el navegador (Render sirve siempre por HTTPS)
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         return response
 
     # ── JWT Error Handlers (sin hooks, sin callbacks) ──
@@ -108,14 +121,12 @@ def create_app(config_name=None):
     from app.api.reportes import reportes_bp
     from app.api.usuarios import usuarios_bp
     from app.api.dashboard import dashboard_bp
-    from app.api.migracion import migracion_bp
     from app.api.prendas_pendientes import prendas_bp
     from app.api.precios import precios_bp
     from app.api.empaque import empaque_bp
     from app.api.ventas import ventas_bp
     from app.api.metodos_pago import metodos_pago_bp
     from app.api.tareas import tareas_bp
-    from app.api.public import public_bp
     from app.api.tienda import tienda_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -131,14 +142,12 @@ def create_app(config_name=None):
     app.register_blueprint(reportes_bp, url_prefix='/api/reportes')
     app.register_blueprint(usuarios_bp, url_prefix='/api/usuarios')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
-    app.register_blueprint(migracion_bp, url_prefix='/api/migracion')
     app.register_blueprint(prendas_bp, url_prefix='/api/prendas')
     app.register_blueprint(precios_bp, url_prefix='/api/precios')
     app.register_blueprint(empaque_bp, url_prefix='/api/empaque')
     app.register_blueprint(ventas_bp, url_prefix='/api/ventas')
     app.register_blueprint(metodos_pago_bp, url_prefix='/api/metodos-pago')
     app.register_blueprint(tareas_bp, url_prefix='/api/tareas')
-    app.register_blueprint(public_bp, url_prefix='/api/public')
     app.register_blueprint(tienda_bp, url_prefix='/api/tienda')
 
     # ── Migraciones automáticas al arrancar ──

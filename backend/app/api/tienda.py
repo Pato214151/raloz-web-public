@@ -17,9 +17,10 @@ from sqlalchemy import func
 from flask import Blueprint, request, jsonify
 
 logger = logging.getLogger(__name__)
-from app import db
+from app import db, limiter
 from app.utils.email_service import enviar_email_factura
 from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
+from app.utils.whatsapp_notify import notificar_whatsapp
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
@@ -150,6 +151,7 @@ def catalogo_colegio(id_colegio):
 # ══════════════════════════════════════════════════════════════
 
 @tienda_bp.route('/reservar', methods=['POST'])
+@limiter.limit("20 per minute")  # evita que se agote el stock con reservas masivas
 def reservar_producto():
     """Reserva temporalmente un producto por 15 minutos para el carrito."""
     data = request.get_json() or {}
@@ -241,6 +243,7 @@ def reservar_producto():
 # ══════════════════════════════════════════════════════════════
 
 @tienda_bp.route('/pedido', methods=['POST'])
+@limiter.limit("10 per minute")  # evita creación masiva de pedidos falsos
 def crear_pedido():
     """Crea un pedido web y retorna el link de pago de MercadoPago"""
     data = request.get_json()
@@ -586,6 +589,14 @@ def mp_webhook():
             if factura and pedido.email_cliente:
                 _lanzar_email_async(pedido.email_cliente, factura.id_factura)
 
+            # Aviso por WhatsApp: "tu orden se está preparando" (no bloquea)
+            if pedido.telefono_cliente:
+                notificar_whatsapp(pedido.telefono_cliente, 'pago_confirmado', {
+                    'nombre': pedido.nombre_cliente,
+                    'referencia': pedido.referencia,
+                    'total': f"${int(pedido.total):,}".replace(',', '.'),
+                })
+
             try:
                 _crear_pedido_fabricacion_si_aplica(pedido)
                 # MEJORA #3: commit de los pedidos de fabricación
@@ -835,6 +846,17 @@ def actualizar_estado_entrega(id_pedido):
         factura.fecha_entrega = _date.today()
     db.session.commit()
 
+    # Aviso por WhatsApp según el nuevo estado (no bloquea)
+    if pedido.telefono_cliente:
+        if nuevo_estado == 'EMPACADO':
+            notificar_whatsapp(pedido.telefono_cliente, 'pedido_listo', {
+                'nombre': pedido.nombre_cliente, 'referencia': pedido.referencia,
+            })
+        elif nuevo_estado == 'ENTREGADO':
+            notificar_whatsapp(pedido.telefono_cliente, 'entregado', {
+                'nombre': pedido.nombre_cliente, 'referencia': pedido.referencia,
+            })
+
     return jsonify({
         'ok': True,
         'estado_entrega': nuevo_estado,
@@ -1003,6 +1025,14 @@ def actualizar_fecha_fabricacion(id_pedido):
         except ValueError:
             return jsonify({'error': 'Formato de fecha inválido (YYYY-MM-DD)'}), 400
     db.session.commit()
+
+    # Aviso por WhatsApp al cliente con la fecha estimada (no bloquea)
+    if pf.telefono_cliente and pf.fecha_estimada:
+        notificar_whatsapp(pf.telefono_cliente, 'fecha_entrega', {
+            'nombre': pf.nombre_cliente,
+            'fecha': pf.fecha_estimada.strftime('%d/%m/%Y'),
+        })
+
     return jsonify({'ok': True, 'fecha_estimada': pf.fecha_estimada.isoformat() if pf.fecha_estimada else None}), 200
 
 

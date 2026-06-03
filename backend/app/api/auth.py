@@ -190,8 +190,8 @@ def cambiar_password():
     if not password_actual or not password_nuevo:
         return jsonify({'error': 'Ambas contraseñas requeridas'}), 400
 
-    if len(password_nuevo) < 6:
-        return jsonify({'error': 'La nueva contraseña debe tener mínimo 6 caracteres'}), 400
+    if len(password_nuevo) < 8:
+        return jsonify({'error': 'La nueva contraseña debe tener mínimo 8 caracteres'}), 400
 
     usuario = Usuario.query.filter_by(id_usuario=identity['id_usuario']).first()
     if not usuario:

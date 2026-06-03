@@ -237,4 +237,9 @@ def seed():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import os
+    # debug SOLO si FLASK_DEBUG=1 explícitamente. Nunca activar en producción:
+    # con debug=True se expone la consola interactiva de Werkzeug (ejecución de
+    # código remoto). En producción se usa gunicorn, no este bloque.
+    debug = os.getenv('FLASK_DEBUG', '0') == '1'
+    app.run(debug=debug, host='127.0.0.1', port=5000)
