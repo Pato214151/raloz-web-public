@@ -22,6 +22,7 @@ from app.models.pedido_web import PedidoWeb
 from app.models.reserva import Reserva
 from app.models.pedido_fabricacion import PedidoFabricacion
 from app.models.stock_pendiente_fabricacion import StockPendienteFabricacion
+from app.models.token_revocado import TokenRevocado
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -29,5 +30,5 @@ __all__ = [
     'Auditoria', 'SerieFacturacion', 'MetodoPago', 'Cliente',
     'CajaDiaria', 'MovimientoCaja', 'PrendaPendiente',
     'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb', 'Reserva',
-    'PedidoFabricacion', 'StockPendienteFabricacion',
+    'PedidoFabricacion', 'StockPendienteFabricacion', 'TokenRevocado',
 ]

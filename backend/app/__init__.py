@@ -107,6 +107,15 @@ def create_app(config_name=None):
     def revoked_token_callback(jwt_header, jwt_payload):
         return jsonify({'error': 'Token revocado', 'code': 'token_revoked'}), 401
 
+    # ── Lista negra: ¿este token fue revocado (logout)? ──
+    @jwt.token_in_blocklist_loader
+    def token_revocado_loader(jwt_header, jwt_payload):
+        from app.models.token_revocado import TokenRevocado
+        jti = jwt_payload.get('jti')
+        if not jti:
+            return False
+        return db.session.query(TokenRevocado.id).filter_by(jti=jti).first() is not None
+
     # ── Registrar Blueprints ──
     from app.api.auth import auth_bp
     from app.api.facturas import facturas_bp

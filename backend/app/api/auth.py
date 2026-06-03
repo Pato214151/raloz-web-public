@@ -176,6 +176,40 @@ def me():
     return jsonify({'usuario': usuario.to_dict()}), 200
 
 
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required(verify_type=False)  # acepta token de acceso o de refresco
+def logout():
+    """Cierra sesión revocando el token actual (y el refresh si se envía)."""
+    from app.models.token_revocado import TokenRevocado
+    from datetime import datetime as _dt
+
+    def _revocar(jti, exp_ts):
+        if not jti:
+            return
+        if db.session.query(TokenRevocado.id).filter_by(jti=jti).first():
+            return  # ya estaba revocado
+        expira = _dt.utcfromtimestamp(exp_ts) if exp_ts else None
+        db.session.add(TokenRevocado(jti=jti, expira=expira))
+
+    # Revoca el token presentado en el header
+    claims = get_jwt()
+    _revocar(claims.get('jti'), claims.get('exp'))
+
+    # Si el cliente manda el refresh_token, lo revoca también
+    data = request.get_json(silent=True) or {}
+    refresh = data.get('refresh_token')
+    if refresh:
+        try:
+            from flask_jwt_extended import decode_token
+            rt = decode_token(refresh)
+            _revocar(rt.get('jti'), rt.get('exp'))
+        except Exception:
+            pass  # token inválido/expirado → nada que revocar
+
+    db.session.commit()
+    return jsonify({'message': 'Sesión cerrada'}), 200
+
+
 @auth_bp.route('/cambiar-password', methods=['POST'])
 @jwt_required()
 @limiter.limit("5 per minute")

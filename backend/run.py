@@ -30,6 +30,12 @@ def _job_limpiar_reservas():
                     Reserva.estado == 'activa',
                     Reserva.fecha_expiracion < datetime.utcnow(),
                 ).update({'estado': 'expirada'})
+                # Limpiar tokens revocados que ya expiraron (la lista negra ya no
+                # los necesita: un token vencido se rechaza por sí solo).
+                TokenRevocado.query.filter(
+                    TokenRevocado.expira.isnot(None),
+                    TokenRevocado.expira < datetime.utcnow(),
+                ).delete(synchronize_session=False)
                 db.session.commit()
                 if actualizadas:
                     logger.info('[RESERVAS-JOB] %d reserva(s) marcadas como expirada', actualizadas)

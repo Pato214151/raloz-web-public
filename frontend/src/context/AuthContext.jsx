@@ -45,6 +45,13 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    // Revoca los tokens en el backend (best-effort; no bloquea el cierre).
+    // Se envía mientras el access_token sigue en localStorage para que el
+    // interceptor adjunte el header Authorization.
+    const refresh_token = localStorage.getItem('refresh_token')
+    if (localStorage.getItem('access_token')) {
+      api.post('/auth/logout', { refresh_token }).catch(() => {})
+    }
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('usuario')
