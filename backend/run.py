@@ -41,12 +41,49 @@ def _job_limpiar_reservas():
 threading.Thread(target=_job_limpiar_reservas, daemon=True, name='reservas-cleanup').start()
 
 
+# ─── MEJORA #4: Job: cancelación de pedidos abandonados (cada 5 min) ──
+def _job_cancelar_pedidos_abandonados():
+    """
+    Hilo daemon que cada 5 minutos marca como 'cancelado' los pedidos
+    que siguen en estado 'pendiente' después de 24 horas sin pago.
+    """
+    time.sleep(30)  # espera inicial
+    from datetime import timedelta as td
+    while True:
+        try:
+            with app.app_context():
+                corte = datetime.utcnow() - td(hours=24)
+                cancelados = PedidoWeb.query.filter(
+                    PedidoWeb.estado == 'pendiente',
+                    PedidoWeb.fecha_creacion < corte,
+                ).update({'estado': 'cancelado'})
+                db.session.commit()
+                if cancelados:
+                    logger.info('[PEDIDOS-JOB] %d pedido(s) cancelados por abandono (>24h)', cancelados)
+        except Exception as e:
+            logger.error('[PEDIDOS-JOB] Error: %s', str(e))
+        time.sleep(300)  # cada 5 minutos
+
+
+threading.Thread(target=_job_cancelar_pedidos_abandonados, daemon=True, name='pedidos-abandonados-cleanup').start()
+
+
 # ─── Migración automática de columnas nuevas ─────────────────────
 def _auto_migrate():
     """Crea tablas nuevas y añade columnas opcionales a tablas existentes."""
     with app.app_context():
         from sqlalchemy import text
         db.create_all()  # crea tablas nuevas (pedidos_fabricacion, stock_pendiente_fabricacion)
+
+        # MEJORA #7: Renombrar columna wompi_transaction_id → mp_preference_id
+        try:
+            db.session.execute(text(
+                "ALTER TABLE pedidos_web RENAME COLUMN wompi_transaction_id TO mp_preference_id"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()  # ya renombrada o no existe, seguir
+
         migraciones = [
             # Columnas extra en pedidos_web para soporte de fabricación
             "ALTER TABLE pedidos_web ADD COLUMN IF NOT EXISTS total_orden FLOAT",

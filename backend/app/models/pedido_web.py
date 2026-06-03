@@ -32,7 +32,9 @@ class PedidoWeb(db.Model):
     # Pago
     estado = db.Column(db.String(50), default='pendiente')  # pendiente, pagado, fallido, cancelado
     metodo_pago = db.Column(db.String(100))
-    wompi_transaction_id = db.Column(db.String(200))
+    # MEJORA #7: Renombrado de wompi_transaction_id → mp_preference_id
+    # (columna renombrada via migración automática en run.py)
+    mp_preference_id = db.Column(db.String(200))
     wompi_status = db.Column(db.String(100))
 
     # Relación con factura (cuando se confirma el pago)

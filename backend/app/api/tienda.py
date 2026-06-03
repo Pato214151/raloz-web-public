@@ -7,6 +7,8 @@ Pagos procesados por MercadoPago (persona natural)
 import os
 import json
 import uuid
+import hmac
+import hashlib
 import logging
 import threading
 import requests
@@ -142,7 +144,9 @@ def catalogo_colegio(id_colegio):
 
 
 # ══════════════════════════════════════════════════════════════
-# RESERVAR — reserva temporal de stock (15 minutos)
+# RESERVAR — reserva temporal de stock
+# MEJORA #6: Cambiado de 15 → 30 minutos para dar más tiempo
+# al cliente en el checkout (especialmente en móvil).
 # ══════════════════════════════════════════════════════════════
 
 @tienda_bp.route('/reservar', methods=['POST'])
@@ -210,7 +214,7 @@ def reservar_producto():
             return jsonify({'error': 'Sin stock disponible para esta talla'}), 409
         return jsonify({'error': f'Solo quedan {stock_disponible} unidades disponibles'}), 409
 
-    nueva_expiracion = ahora + timedelta(minutes=15)
+    nueva_expiracion = ahora + timedelta(minutes=30)
 
     if reserva_propia:
         # Sumar cantidad y renovar expiración
@@ -371,7 +375,8 @@ def crear_pedido():
         total_orden=total_orden,
         abono_porcentaje=abono_porcentaje,
         tiene_fabricacion=tiene_fabricacion,
-        tipo_entrega='completa',  # siempre: todo junto cuando esté listo
+        # MEJORA #5: respetar el tipo_entrega que envía el frontend
+        tipo_entrega=tipo_entrega,
         estado='pendiente',
     )
     db.session.add(pedido)
@@ -442,7 +447,8 @@ def crear_pedido():
             if resp.status_code in (200, 201):
                 mp_data = resp.json()
                 pago_url = mp_data.get('init_point')
-                pedido.wompi_transaction_id = mp_data.get('id')
+                # MEJORA #7: usar mp_preference_id en vez de wompi_transaction_id
+                pedido.mp_preference_id = mp_data.get('id')
                 db.session.commit()
             else:
                 logger.error('[MP] Preferencia rechazada %s: %s', resp.status_code, resp.text)
@@ -468,6 +474,46 @@ def crear_pedido():
 # WEBHOOK MERCADOPAGO — confirmación de pago
 # ══════════════════════════════════════════════════════════════
 
+def _validar_firma_mp(data_id: str) -> bool:
+    """
+    MEJORA #2: Validar firma X-Signature de MercadoPago.
+    MP envía: X-Signature: ts=<timestamp>,v1=<hmac_sha256>
+    donde el mensaje firmado es: "ts=<ts>|data.id=<data_id>"
+    Si MP_WEBHOOK_SECRET no está configurado, se omite la validación
+    (backward compatible).
+    """
+    secreto = os.getenv('MP_WEBHOOK_SECRET', '')
+    if not secreto:
+        logger.warning('[WEBHOOK] MP_WEBHOOK_SECRET no configurado — saltando validación de firma')
+        return True
+
+    x_sig = request.headers.get('X-Signature', '')
+    if not x_sig:
+        logger.warning('[WEBHOOK] X-Signature ausente — rechazando')
+        return False
+
+    partes = {}
+    for par in x_sig.split(','):
+        if '=' in par:
+            k, v = par.split('=', 1)
+            partes[k.strip()] = v.strip()
+
+    ts  = partes.get('ts', '')
+    v1  = partes.get('v1', '')
+    if not ts or not v1:
+        logger.warning('[WEBHOOK] X-Signature mal formada: %s', x_sig)
+        return False
+
+    mensaje = f"ts={ts}|data.id={data_id}"
+    esperado = hmac.new(secreto.encode(), mensaje.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(esperado, v1):
+        logger.warning('[WEBHOOK] Firma inválida: esperada=%s recibida=%s', esperado, v1)
+        return False
+
+    return True
+
+
 @tienda_bp.route('/mp/webhook', methods=['POST'])
 def mp_webhook():
     """Recibe notificaciones de MercadoPago y procesa pagos aprobados"""
@@ -477,6 +523,10 @@ def mp_webhook():
 
     if topic not in ('payment', 'merchant_order'):
         return jsonify({'ok': True}), 200
+
+    # MEJORA #2: Validar firma antes de procesar
+    if not _validar_firma_mp(resource_id or ''):
+        return jsonify({'error': 'Firma inválida'}), 401
 
     mp_token = os.getenv('MP_ACCESS_TOKEN', '')
     if not mp_token or not resource_id:
@@ -538,8 +588,12 @@ def mp_webhook():
 
             try:
                 _crear_pedido_fabricacion_si_aplica(pedido)
+                # MEJORA #3: commit de los pedidos de fabricación
+                # (antes quedaban sin persistir porque no había commit después)
+                db.session.commit()
             except Exception as e:
                 logger.error('[WEBHOOK] Error fabricacion: %s', str(e), exc_info=True)
+                db.session.rollback()
 
         elif estado_mp in ('rejected', 'cancelled', 'refunded', 'charged_back'):
             logger.info('[WEBHOOK] Pedido %s → fallido (%s)', pedido.id_pedido, estado_mp)
@@ -1175,6 +1229,17 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
     db.session.add(factura)
     db.session.flush()
 
+    # ═══════════════════════════════════════════════════════════════
+    # MEJORA #1: SELECT FOR UPDATE para evitar race conditions
+    #   cuando dos pagos concurrentes intentan descontar el mismo stock.
+    # MEJORA #3: Re-verificar stock real al momento del webhook
+    #   (entre la creación del pedido y el pago pudieron agotarse).
+    #   Si falta stock, se reclasifica dinámicamente a fabricación
+    #   y se actualiza pedido.items_json para que el admin panel lo refleje.
+    # ═══════════════════════════════════════════════════════════════
+    items_actualizados = []
+    hubo_cambio_stock = False
+
     for item in items:
         db.session.add(FacturaDetalle(
             id_factura=factura.id_factura,
@@ -1184,31 +1249,51 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
             precio_unitario=item['precio_unitario'],
             total_linea=item['subtotal'],
         ))
-        # Descontar stock según tipo:
-        # - normal → descuenta cantidad completa
-        # - mixto  → descuenta solo stock_disponible (el resto es fabricación)
-        # - fabricacion → no descuenta stock
-        tipo_item = item.get('tipo_pedido', 'normal')
-        if tipo_item == 'normal':
-            cant_descontar = item['cantidad']
-        elif tipo_item == 'mixto':
-            cant_descontar = int(item.get('stock_disponible', 0))
-        else:
-            cant_descontar = 0
 
-        if cant_descontar > 0:
-            stock = Stock.query.filter_by(
-                id_colegio=pedido.id_colegio,
-                id_producto=item['id_producto'],
-                talla_individual=item['talla'],
-            ).first()
-            if stock:
-                stock.cantidad = max(0, stock.cantidad - cant_descontar)
+        tipo_item      = item.get('tipo_pedido', 'normal')
+        cantidad       = item['cantidad']
+        stock_esperado = cantidad if tipo_item == 'normal' else int(item.get('stock_disponible', 0))
+
+        # FOR UPDATE: bloquea la fila para que otra transacción no la modifique
+        stock = Stock.query.with_for_update().filter_by(
+            id_colegio=pedido.id_colegio,
+            id_producto=item['id_producto'],
+            talla_individual=item['talla'],
+        ).first()
+
+        stock_real = stock.cantidad if stock else 0
+
+        # Re-verificar cuánto podemos descontar realmente
+        cant_descontar = min(stock_esperado, stock_real)
+
+        if stock and cant_descontar > 0:
+            stock.cantidad -= cant_descontar
+
+        # Si el stock real es menor al esperado → fabricación para la diferencia
+        item_actualizado = dict(item)
+        if cant_descontar < cantidad:
+            hubo_cambio_stock = True
+            faltante = cantidad - cant_descontar
+            item_actualizado['tipo_pedido'] = 'mixto' if cant_descontar > 0 else 'fabricacion'
+            item_actualizado['stock_disponible'] = cant_descontar
+            item_actualizado['stock_real_al_pagar'] = stock_real
+            logger.warning(
+                '[STOCK-RACE] Producto %s talla %s: esperado=%d real=%d → fabricación=%d',
+                item['id_producto'], item['talla'], cantidad, stock_real, faltante
+            )
+        items_actualizados.append(item_actualizado)
 
         if item.get('id_reserva'):
             reserva = Reserva.query.get(item['id_reserva'])
             if reserva:
                 reserva.estado = 'completada'
+
+    # Si hubo cambios de stock, persistir items_json actualizado
+    # para que _crear_pedido_fabricacion_si_aplica() lo vea correctamente
+    if hubo_cambio_stock:
+        pedido.items_json = json.dumps(items_actualizados)
+        pedido.tiene_fabricacion = True
+        db.session.flush()
 
     db.session.add(Pago(
         id_factura=factura.id_factura,
