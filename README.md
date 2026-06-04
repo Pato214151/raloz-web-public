@@ -4,6 +4,10 @@
 > **Versión:** 1.0.0-beta  
 > **Stack:** Flask (Python) + React (Vite) + PostgreSQL (Supabase) + Cloudflare Pages
 
+> 📐 **Documentación técnica / Technical docs:**
+> [Arquitectura (ES)](docs/ARQUITECTURA.md) · [Architecture (EN)](docs/ARCHITECTURE.md)
+> — diagramas de arquitectura, modelo de datos, flujos de negocio y seguridad.
+
 ---
 
 ## ¿Qué es esto?
