@@ -7,6 +7,7 @@
 > 📐 **Documentación técnica / Technical docs:**
 > [Arquitectura (ES)](docs/ARQUITECTURA.md) · [Architecture (EN)](docs/ARCHITECTURE.md)
 > — diagramas de arquitectura, modelo de datos, flujos de negocio y seguridad.
+> 📄 Versión descargable (PDF): [Español](docs/RALOZ_Arquitectura_ES.pdf) · [English](docs/RALOZ_Architecture_EN.pdf)
 
 ---
 
