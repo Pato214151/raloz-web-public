@@ -1,5 +1,19 @@
 # RALOZ COL SAS — Sistema de Gestión y Tienda Online
 
+![Python](https://img.shields.io/badge/Backend-Flask%20(Python)-3776AB?logo=python&logoColor=white)
+![React](https://img.shields.io/badge/Admin-React%20%2B%20Vite-61DAFB?logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL%20(Supabase)-4169E1?logo=postgresql&logoColor=white)
+![Payments](https://img.shields.io/badge/Pagos-MercadoPago-00B1EA?logo=mercadopago&logoColor=white)
+![Deploy](https://img.shields.io/badge/Deploy-Render%20%7C%20Cloudflare-46E3B7?logo=cloudflare&logoColor=white)
+![Code](https://img.shields.io/badge/Code-~23k%20LOC-success)
+
+**Plataforma full-stack de e-commerce, en producción**, para un negocio real de
+uniformes escolares en Bogotá: tienda pública, panel administrativo/POS, pasarela
+de pagos, facturación electrónica, bot de WhatsApp y una auditoría de seguridad
+documentada. *Full-stack e-commerce platform running in production.*
+
+🛒 [Tienda en vivo](https://ralozcol-web.pages.dev) · 🖥️ [Panel admin](https://raloz-web.onrender.com) · 📐 [Arquitectura](docs/ARQUITECTURA.md) · 💼 [Resumen para CV/LinkedIn](docs/PORTFOLIO.md)
+
 > **Empresa:** RALOZ COL SAS · Uniformes Escolares · Bogotá, Colombia  
 > **Versión:** 1.0.0-beta  
 > **Stack:** Flask (Python) + React (Vite) + PostgreSQL (Supabase) + Cloudflare Pages
