@@ -27,3 +27,7 @@ frontend/dist/
 
 # SQLite local
 *.db
+
+# Respaldos de la base de datos (contienen datos reales de clientes)
+backups/
+*.sql.bak
