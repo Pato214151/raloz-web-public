@@ -23,6 +23,7 @@ from app.utils.email_service import enviar_email_factura
 from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.whatsapp_notify import notificar_whatsapp
 from app.utils.validators import sanitize_string, validate_email
+from app.utils.decorators import registrar_auditoria
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
@@ -938,6 +939,8 @@ def marcar_pedido_pagado_manual(id_pedido):
     except Exception as e:
         logger.error('[MANUAL] Error fabricacion: %s', str(e))
 
+    registrar_auditoria('pedidos_web', pedido.id_pedido, 'PAGO_MANUAL',
+                        f'Pedido {pedido.referencia} marcado como pagado manualmente')
     return jsonify({
         'ok': True,
         'pedido': pedido.to_dict(),
@@ -1161,6 +1164,9 @@ def marcar_pedido_fabricacion_listo(id_pedido):
                 datos['pago_url'] = pago_url
         notificar_whatsapp(pf.telefono_cliente, 'pedido_listo', datos)
 
+    registrar_auditoria('pedidos_fabricacion', pf.id_pedido, 'MARCAR_LISTO',
+                        f'Pedido {referencia or pf.id_pedido} listo para entrega'
+                        + (f'; saldo pendiente ${int(saldo)}' if saldo > 0 else ''))
     return jsonify({'ok': True, 'estado': pf.estado, 'pago_url': pago_url, 'pedido': pf.to_dict()}), 200
 
 
@@ -1171,6 +1177,8 @@ def marcar_pedido_fabricacion_entregado(id_pedido):
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
     pf.estado = 'entregado'
     db.session.commit()
+    registrar_auditoria('pedidos_fabricacion', pf.id_pedido, 'MARCAR_ENTREGADO',
+                        f'Pedido de fabricación {pf.id_pedido} marcado como entregado')
     return jsonify({'ok': True, 'estado': pf.estado, 'pedido': pf.to_dict()}), 200
 
 
@@ -1228,6 +1236,8 @@ def registrar_saldo_fabricacion(id_pedido):
             ))
 
     db.session.commit()
+    registrar_auditoria('pedidos_fabricacion', pf.id_pedido, 'REGISTRAR_SALDO',
+                        f'Saldo pagado ${monto:.0f} ({metodo}); restante ${pf.saldo_pendiente:.0f}')
     return jsonify({'ok': True, 'pedido': pf.to_dict()}), 200
 
 
