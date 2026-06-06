@@ -68,9 +68,15 @@ def listar_facturas():
 @facturas_bp.route('/<int:id_factura>', methods=['GET'])
 @jwt_required()
 def obtener_factura(id_factura):
-    """Obtener factura con detalles y pagos"""
+    """Obtener factura con detalles, pagos y prendas pendientes de entrega"""
     factura = Factura.query.get_or_404(id_factura)
-    return jsonify({'factura': factura.to_dict_full()}), 200
+    data = factura.to_dict_full()
+    data['prendas_pendientes'] = [
+        p.to_dict() for p in PrendaPendiente.query
+        .filter_by(id_factura=id_factura)
+        .order_by(PrendaPendiente.estado.desc()).all()
+    ]
+    return jsonify({'factura': data}), 200
 
 
 @facturas_bp.route('', methods=['POST'])

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X } from 'lucide-react'
+import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X, PackageCheck } from 'lucide-react'
 
 const ESTADOS = [
   { value: '', label: 'Todos' },
@@ -112,6 +112,17 @@ export default function BuscarFacturas() {
       setSelected(res.data.factura)
     } catch {
       toast.error('Error cargando detalle')
+    }
+  }
+
+  // === ENTREGAR PRENDA PENDIENTE (desde el mismo detalle de la factura) ===
+  const entregarPrenda = async (idPendiente) => {
+    try {
+      await api.post(`/prendas/${idPendiente}/entregar`)
+      toast.success('Prenda marcada como entregada')
+      verDetalle(selected.id_factura)
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Error al entregar')
     }
   }
 
@@ -535,6 +546,38 @@ export default function BuscarFacturas() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Prendas pendientes de entrega (de esta misma factura) */}
+              {selected.prendas_pendientes?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                    <PackageCheck size={15} className="text-amber-500" />
+                    Pendientes de entrega ({selected.prendas_pendientes.filter(p => p.estado === 'PENDIENTE').length})
+                  </h4>
+                  <div className="space-y-1">
+                    {selected.prendas_pendientes.map(p => (
+                      <div key={p.id_pendiente}
+                        className={`flex items-center justify-between text-sm py-2 px-3 rounded ${p.estado === 'PENDIENTE' ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                        <div>
+                          <span className="font-medium text-gray-700">{p.producto_nombre}</span>
+                          <span className="ml-2 text-xs text-gray-500">Talla {p.talla} · x{p.cantidad}</span>
+                          {p.estado !== 'PENDIENTE' && (
+                            <span className="ml-2 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                              Entregado{p.fecha_entrega ? ` ${p.fecha_entrega}` : ''}
+                            </span>
+                          )}
+                        </div>
+                        {p.estado === 'PENDIENTE' && selected.estado !== 'ANULADA' && (
+                          <button onClick={() => entregarPrenda(p.id_pendiente)}
+                            className="text-xs bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700 flex items-center gap-1">
+                            <PackageCheck size={13} /> Entregar
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
