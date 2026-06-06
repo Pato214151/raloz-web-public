@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from app.utils.decorators import get_current_identity
 from app import db
-from app.models import Factura, Pago, Gasto, StockPendiente, PedidoFabricacion
+from app.models import Factura, Pago, Gasto, StockPendiente, PedidoFabricacion, PrendaPendiente, CajaDiaria
 from sqlalchemy import func, and_
 from datetime import date, timedelta
 
@@ -61,8 +61,17 @@ def resumen_dashboard():
         Gasto.fecha <= hoy,
     )).first()
 
-    # Pendientes de stock (POS presencial)
-    pendientes = StockPendiente.query.filter_by(estado='PENDIENTE').count()
+    # Prendas pendientes de entrega (ventas POS con entrega no inmediata)
+    pendientes = PrendaPendiente.query.filter_by(estado='PENDIENTE').count()
+
+    # Estado de la caja del día
+    caja = CajaDiaria.query.filter_by(estado='ABIERTA').first()
+    caja_info = {
+        'abierta': bool(caja),
+        'monto_esperado': float(caja.monto_esperado or 0) if caja else 0,
+        'total_ventas': float(caja.total_ventas or 0) if caja else 0,
+        'total_gastos': float(caja.total_gastos or 0) if caja else 0,
+    }
 
     # Pedidos web por entregar
     pedidos_web_pendientes = Factura.query.filter(
@@ -115,4 +124,5 @@ def resumen_dashboard():
         'fabricacion_en_curso': fabricacion_en_curso,
         'total_por_cobrar': total_por_cobrar,
         'ventas_7_dias': ventas_7_dias,
+        'caja': caja_info,
     }), 200

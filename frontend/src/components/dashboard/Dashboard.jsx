@@ -5,7 +5,7 @@ import api from '../../services/api'
 import {
   DollarSign, CreditCard, TrendingUp, TrendingDown, AlertCircle,
   ShoppingCart, Scissors, RefreshCw, FileText, Search, Package,
-  PackageCheck, Wallet, ArrowRight,
+  PackageCheck, Wallet, ArrowRight, BookOpen,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -150,7 +150,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900">
-            Hola, {usuario?.usuario}
+            {(() => { const h = new Date().getHours(); return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches' })()}, {usuario?.usuario}
           </h2>
           <p className="text-sm text-gray-400 capitalize">
             {new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -166,6 +166,38 @@ export default function Dashboard() {
           {hora ? `Act. ${hora}` : 'Actualizar'}
         </button>
       </div>
+
+      {/* ── Caja del día ── */}
+      {(rol === 'administrador' || rol === 'cajero') && data?.caja && (
+        <div
+          onClick={() => navigate('/caja')}
+          className={`rounded-xl p-4 flex items-center justify-between cursor-pointer shadow-sm hover:shadow-md transition-all text-white ${
+            data.caja.abierta
+              ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
+              : 'bg-gradient-to-r from-slate-700 to-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <BookOpen size={20} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold flex items-center gap-2">
+                Caja {data.caja.abierta ? 'abierta' : 'cerrada'}
+                <span className={`w-2 h-2 rounded-full ${data.caja.abierta ? 'bg-emerald-200 animate-pulse' : 'bg-slate-400'}`} />
+              </p>
+              <p className="text-xs text-white/80 truncate">
+                {data.caja.abierta
+                  ? `Esperado en caja: ${fmt(data.caja.monto_esperado)}`
+                  : 'Ábrela para empezar el día'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-sm font-medium flex-shrink-0">
+            {data.caja.abierta ? 'Ver / cerrar' : 'Abrir caja'} <ArrowRight size={15} />
+          </div>
+        </div>
+      )}
 
       {/* ── Accesos rápidos ── */}
       {accesos.length > 0 && (
@@ -213,15 +245,23 @@ export default function Dashboard() {
       {/* ── KPIs: Pendientes ── */}
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-0.5">Pendientes</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KPICard
             icon={AlertCircle}
             label="Por cobrar"
             value={fmt(data?.total_por_cobrar)}
-            sub={data?.pendientes_entrega ? `${data.pendientes_entrega} pendientes entrega` : undefined}
             color="red"
             onClick={() => navigate('/cuentas')}
             showAlert={(data?.total_por_cobrar || 0) > 0}
+          />
+          <KPICard
+            icon={Package}
+            label="Por entregar"
+            value={data?.pendientes_entrega ?? 0}
+            sub="prendas"
+            color="orange"
+            onClick={() => navigate('/pendientes')}
+            showAlert={(data?.pendientes_entrega || 0) > 0}
           />
           <KPICard
             icon={ShoppingCart}
