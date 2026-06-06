@@ -6,8 +6,9 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import Stock, Colegio, Producto
+from app.models import Stock, Colegio, Producto, MovimientoInventario
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
+from app.utils.inventario import registrar_movimiento
 
 stock_bp = Blueprint('stock', __name__)
 
@@ -123,31 +124,20 @@ def actualizar_stock():
     except (ValueError, TypeError):
         return jsonify({'error': 'Cantidad inválida'}), 400
 
-    stock = Stock.query.filter_by(
-        id_colegio=id_colegio,
-        id_producto=id_producto,
-        talla_individual=talla,
-    ).first()
-
     producto = Producto.query.get(id_producto)
     colegio = Colegio.query.get(id_colegio)
     prod_nombre = producto.nombre if producto else f'Prod#{id_producto}'
     col_nombre = colegio.nombre if colegio else f'Col#{id_colegio}'
 
-    if stock:
-        stock.cantidad = cantidad
-    else:
-        stock = Stock(
-            id_colegio=id_colegio,
-            id_producto=id_producto,
-            talla_individual=talla,
-            cantidad=cantidad,
-        )
-        db.session.add(stock)
-
+    # AJUSTE: fija el stock en `cantidad` y lo deja en el kardex
+    stock, _mov = registrar_movimiento(
+        id_colegio, id_producto, talla, 'AJUSTE', cantidad,
+        usuario=identity['usuario'],
+        motivo='Ajuste manual' + (f' — {observaciones}' if observaciones else ''),
+    )
     db.session.commit()
 
-    comentario = f'{prod_nombre} | Talla {talla} | {col_nombre} | {cantidad} uds'
+    comentario = f'{prod_nombre} | Talla {talla} | {col_nombre} | ajustado a {cantidad} uds'
     if observaciones:
         comentario += f' | Obs: {observaciones}'
     registrar_auditoria('stock', stock.id_stock, 'ACTUALIZAR', comentario)
@@ -245,3 +235,82 @@ def actualizar_stock_masivo():
 
     db.session.commit()
     return jsonify({'message': f'{actualizados} items actualizados'}), 200
+
+
+@stock_bp.route('/entrada', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def registrar_entrada():
+    """Registra una ENTRADA de mercancía: SUMA al stock (no reemplaza) y deja kardex."""
+    data = request.get_json() or {}
+    identity = get_current_identity()
+
+    try:
+        id_colegio = int(data.get('id_colegio'))
+        id_producto = int(data.get('id_producto'))
+        cantidad = int(data.get('cantidad'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'id_colegio, id_producto y cantidad deben ser números'}), 400
+
+    talla = (data.get('talla_individual') or '').strip()
+    motivo = (data.get('motivo') or 'Recepción de mercancía').strip()
+
+    if not all([id_colegio, id_producto, talla]) or cantidad <= 0:
+        return jsonify({'error': 'Datos incompletos o cantidad inválida (debe ser > 0)'}), 400
+
+    producto = Producto.query.get(id_producto)
+    colegio = Colegio.query.get(id_colegio)
+    if not producto or not colegio:
+        return jsonify({'error': 'Producto o colegio no encontrado'}), 404
+
+    stock, _mov = registrar_movimiento(
+        id_colegio, id_producto, talla, 'ENTRADA', cantidad,
+        usuario=identity['usuario'], motivo=motivo,
+    )
+    db.session.commit()
+
+    registrar_auditoria('stock', stock.id_stock, 'ENTRADA',
+                        f'{producto.nombre} | Talla {talla} | {colegio.nombre} | '
+                        f'+{cantidad} uds (total {stock.cantidad})')
+
+    d = stock.to_dict()
+    d['producto_nombre'] = producto.nombre
+    d['colegio_nombre'] = colegio.nombre
+    return jsonify({'message': f'Entrada registrada: +{cantidad}', 'stock': d}), 200
+
+
+@stock_bp.route('/movimientos', methods=['GET'])
+@jwt_required()
+def listar_movimientos_inventario():
+    """Kardex: historial de movimientos de inventario (entradas/salidas/ajustes)."""
+    colegio_id = request.args.get('colegio_id', type=int)
+    producto_id = request.args.get('producto_id', type=int)
+    talla = request.args.get('talla', type=str)
+    tipo = request.args.get('tipo', type=str)
+    limite = min(request.args.get('limite', default=200, type=int), 1000)
+
+    q = MovimientoInventario.query
+    if colegio_id:
+        q = q.filter(MovimientoInventario.id_colegio == colegio_id)
+    if producto_id:
+        q = q.filter(MovimientoInventario.id_producto == producto_id)
+    if talla:
+        q = q.filter(MovimientoInventario.talla_individual == talla)
+    if tipo:
+        q = q.filter(MovimientoInventario.tipo == tipo.upper())
+
+    movs = q.order_by(MovimientoInventario.fecha.desc()).limit(limite).all()
+
+    prod_ids = {m.id_producto for m in movs}
+    col_ids = {m.id_colegio for m in movs}
+    prods = {p.id_producto: p.nombre for p in Producto.query.filter(Producto.id_producto.in_(prod_ids)).all()} if prod_ids else {}
+    cols = {c.id_colegio: c.nombre for c in Colegio.query.filter(Colegio.id_colegio.in_(col_ids)).all()} if col_ids else {}
+
+    resultado = []
+    for m in movs:
+        d = m.to_dict()
+        d['producto_nombre'] = prods.get(m.id_producto)
+        d['colegio_nombre'] = cols.get(m.id_colegio)
+        resultado.append(d)
+
+    return jsonify({'movimientos': resultado}), 200

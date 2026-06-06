@@ -56,7 +56,7 @@ export default function StockView() {
 
   // Modal agregar
   const [showAdd, setShowAdd] = useState(false)
-  const [newStock, setNewStock] = useState({ producto_id: '', talla: '', cantidad: '', observaciones: '' })
+  const [newStock, setNewStock] = useState({ producto_id: '', talla: '', cantidad: '', observaciones: '', modo: 'entrada' })
 
   // ── Actividad ──
   const [actividad, setActividad]           = useState([])
@@ -154,17 +154,31 @@ export default function StockView() {
     if (!newStock.producto_id || !newStock.talla || newStock.cantidad === '') {
       toast.error('Completa todos los campos'); return
     }
+    const esEntrada = (newStock.modo || 'entrada') === 'entrada'
     try {
-      await api.post('/stock', {
-        id_colegio:      colegioSel.id_colegio,
-        id_producto:     newStock.producto_id,
-        talla_individual: newStock.talla,
-        cantidad:        parseInt(newStock.cantidad),
-        observaciones:   newStock.observaciones,
-      })
-      toast.success('Stock agregado')
+      if (esEntrada) {
+        // ENTRADA: suma al stock (cuando llega mercancía) y queda en el kardex
+        await api.post('/stock/entrada', {
+          id_colegio:       colegioSel.id_colegio,
+          id_producto:      newStock.producto_id,
+          talla_individual: newStock.talla,
+          cantidad:         parseInt(newStock.cantidad),
+          motivo:           newStock.observaciones || 'Recepción de mercancía',
+        })
+        toast.success(`Entrada registrada: +${newStock.cantidad}`)
+      } else {
+        // AJUSTE: fija el valor exacto (corrección de inventario)
+        await api.post('/stock', {
+          id_colegio:       colegioSel.id_colegio,
+          id_producto:      newStock.producto_id,
+          talla_individual: newStock.talla,
+          cantidad:         parseInt(newStock.cantidad),
+          observaciones:    newStock.observaciones,
+        })
+        toast.success('Stock ajustado')
+      }
       setShowAdd(false)
-      setNewStock({ producto_id: '', talla: '', cantidad: '', observaciones: '' })
+      setNewStock({ producto_id: '', talla: '', cantidad: '', observaciones: '', modo: 'entrada' })
       cargarStock(colegioSel.id_colegio)
       const r = await api.get('/stock/resumen')
       setResumen(r.data.resumen || [])
@@ -488,9 +502,26 @@ export default function StockView() {
           <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <Plus size={18} className="text-raloz-600" />
-              Agregar Stock — {colegioSel.nombre}
+              {(newStock.modo || 'entrada') === 'entrada' ? 'Registrar entrada' : 'Ajustar stock'} — {colegioSel.nombre}
             </h3>
             <form onSubmit={agregarStock} className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button"
+                  onClick={() => setNewStock({ ...newStock, modo: 'entrada' })}
+                  className={`py-2 rounded-lg text-sm font-medium border ${(newStock.modo || 'entrada') === 'entrada' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'}`}>
+                  📥 Entrada (suma)
+                </button>
+                <button type="button"
+                  onClick={() => setNewStock({ ...newStock, modo: 'ajuste' })}
+                  className={`py-2 rounded-lg text-sm font-medium border ${newStock.modo === 'ajuste' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-300'}`}>
+                  ✏️ Ajuste (fija)
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 -mt-2">
+                {(newStock.modo || 'entrada') === 'entrada'
+                  ? 'Llegó mercancía: se SUMA a lo que ya hay.'
+                  : 'Corrección: fija el stock en el valor exacto que escribas.'}
+              </p>
               <div>
                 <label className="block text-sm font-medium mb-1">Producto *</label>
                 <select required value={newStock.producto_id}
@@ -515,8 +546,10 @@ export default function StockView() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Cantidad *</label>
-                <input type="number" required min="0" value={newStock.cantidad}
+                <label className="block text-sm font-medium mb-1">
+                  {(newStock.modo || 'entrada') === 'entrada' ? '¿Cuántas llegaron? *' : 'Cantidad exacta *'}
+                </label>
+                <input type="number" required min={(newStock.modo || 'entrada') === 'entrada' ? '1' : '0'} value={newStock.cantidad}
                   onChange={e => setNewStock({ ...newStock, cantidad: e.target.value })}
                   className="input-field w-full" placeholder="0" />
               </div>
@@ -528,9 +561,11 @@ export default function StockView() {
               </div>
               <div className="flex gap-3 justify-end pt-2 border-t">
                 <button type="button"
-                  onClick={() => { setShowAdd(false); setNewStock({ producto_id: '', talla: '', cantidad: '', observaciones: '' }) }}
+                  onClick={() => { setShowAdd(false); setNewStock({ producto_id: '', talla: '', cantidad: '', observaciones: '', modo: 'entrada' }) }}
                   className="btn-secondary">Cancelar</button>
-                <button type="submit" className="btn-primary">Agregar</button>
+                <button type="submit" className="btn-primary">
+                  {(newStock.modo || 'entrada') === 'entrada' ? 'Registrar entrada' : 'Guardar ajuste'}
+                </button>
               </div>
             </form>
           </div>

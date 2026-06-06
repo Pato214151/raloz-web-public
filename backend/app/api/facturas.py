@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente, Pago, PrendaPendiente, Producto
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
+from app.utils.inventario import registrar_movimiento
 from app.utils.validators import sanitize_string, validate_date, validate_positive_number, validate_required_fields
 from datetime import datetime, date
 
@@ -170,14 +171,12 @@ def crear_factura():
             db.session.add(detalle)
 
             if entrega_inmediata:
-                # Descontar del inventario
-                stock = Stock.query.filter_by(
-                    id_colegio=id_colegio,
-                    id_producto=det['id_producto'],
-                    talla_individual=det['talla_individual']
-                ).first()
-                if stock:
-                    stock.cantidad = max(0, stock.cantidad - det['cantidad'])
+                # Descontar del inventario → SALIDA registrada en el kardex
+                registrar_movimiento(
+                    id_colegio, det['id_producto'], det['talla_individual'],
+                    'SALIDA', det['cantidad'],
+                    usuario=identity['usuario'], motivo='Venta', referencia=numero,
+                )
             else:
                 # Guardar como prenda pendiente de entrega
                 producto = productos_map.get(det['id_producto'])
