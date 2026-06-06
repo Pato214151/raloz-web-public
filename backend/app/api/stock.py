@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.models import Stock, Colegio, Producto, MovimientoInventario
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
-from app.utils.inventario import registrar_movimiento
+from app.utils.inventario import registrar_movimiento, construir_catalogo_colegio
 
 stock_bp = Blueprint('stock', __name__)
 
@@ -314,3 +314,28 @@ def listar_movimientos_inventario():
         resultado.append(d)
 
     return jsonify({'movimientos': resultado}), 200
+
+
+@stock_bp.route('/catalogo', methods=['GET'])
+@jwt_required()
+def catalogo_colegio():
+    """
+    Catálogo COMPLETO de un colegio: todas las prendas que vende (según
+    precios_colegio) con su stock por talla — INCLUIDAS las que están en 0.
+    Así se ve todo lo del colegio, no solo lo que tiene existencias.
+    """
+    colegio_id = request.args.get('colegio_id', type=int)
+    if not colegio_id:
+        return jsonify({'error': 'colegio_id requerido'}), 400
+    colegio = Colegio.query.get(colegio_id)
+    if not colegio:
+        return jsonify({'error': 'Colegio no encontrado'}), 404
+
+    catalogo = construir_catalogo_colegio(colegio_id)
+
+    return jsonify({
+        'colegio': colegio.nombre,
+        'id_colegio': colegio_id,
+        'catalogo': catalogo,
+        'total_unidades': sum(c['total'] for c in catalogo),
+    }), 200

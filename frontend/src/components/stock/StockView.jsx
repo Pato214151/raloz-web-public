@@ -45,6 +45,7 @@ export default function StockView() {
   const [colegios, setColegios]     = useState([])
   const [resumen, setResumen]       = useState([])
   const [stock, setStock]           = useState([])
+  const [catalogo, setCatalogo]     = useState([])
   const [productos, setProductos]   = useState([])
   const [loading, setLoading]       = useState(true)
   const [loadingStock, setLoadingStock] = useState(false)
@@ -96,8 +97,12 @@ export default function StockView() {
   async function cargarStock(colegioId) {
     setLoadingStock(true)
     try {
-      const res = await api.get('/stock', { params: { colegio_id: colegioId } })
-      setStock(res.data.stock || [])
+      const [resStock, resCat] = await Promise.all([
+        api.get('/stock', { params: { colegio_id: colegioId } }),
+        api.get('/stock/catalogo', { params: { colegio_id: colegioId } }),
+      ])
+      setStock(resStock.data.stock || [])
+      setCatalogo(resCat.data.catalogo || [])
     } catch {
       toast.error('Error cargando stock')
     } finally {
@@ -191,20 +196,46 @@ export default function StockView() {
   const prodSeleccionado = productos.find(p => String(p.id_producto) === String(newStock.producto_id))
   const tallasModal = prodSeleccionado?.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
 
-  // Agrupar stock por producto
+  // Lookup de stock real para edición/eliminación inline (por producto+talla → id_stock)
+  const stockLookup = {}
+  stock.forEach(s => { stockLookup[`${s.id_producto}-${s.talla_individual}`] = s })
+
+  // Inventario armado desde el CATÁLOGO completo → muestra TODAS las prendas que
+  // vende el colegio con sus tallas, incluidas las que están en 0.
   const porProducto = {}
+  catalogo.forEach(prod => {
+    const key = prod.producto_nombre
+    porProducto[key] = {
+      tipo: prod.producto_tipo,
+      items: prod.tallas.map(t => {
+        const sk = stockLookup[`${prod.id_producto}-${t.talla}`]
+        return {
+          id_stock: sk ? sk.id_stock : null,
+          id_producto: prod.id_producto,
+          talla_individual: t.talla,
+          cantidad: t.cantidad,
+        }
+      }),
+    }
+  })
+
+  // Red de seguridad: si hay stock que no está en el catálogo (talla sin precio),
+  // igual se muestra para no esconder existencias reales.
   stock.forEach(s => {
     const key = s.producto_nombre || `Producto ${s.id_producto}`
-    if (!porProducto[key]) porProducto[key] = { items: [], tipo: s.producto_tipo }
-    porProducto[key].items.push(s)
+    if (!porProducto[key]) porProducto[key] = { tipo: s.producto_tipo, items: [] }
+    if (!porProducto[key].items.some(it => it.talla_individual === s.talla_individual)) {
+      porProducto[key].items.push({
+        id_stock: s.id_stock, id_producto: s.id_producto,
+        talla_individual: s.talla_individual, cantidad: s.cantidad,
+      })
+    }
   })
-  Object.values(porProducto).forEach(g =>
-    g.items.sort((a, b) => sortTallas(a.talla_individual, b.talla_individual))
-  )
 
-  const totalUnidades = stock.reduce((s, x) => s + x.cantidad, 0)
-  const bajoStock = stock.filter(s => s.cantidad > 0 && s.cantidad < 5).length
-  const sinStock  = stock.filter(s => s.cantidad === 0).length
+  const allItems = Object.values(porProducto).flatMap(g => g.items)
+  const totalUnidades = allItems.reduce((s, x) => s + x.cantidad, 0)
+  const bajoStock = allItems.filter(x => x.cantidad > 0 && x.cantidad < 5).length
+  const sinStock  = allItems.filter(x => x.cantidad === 0).length
 
   function imprimir() {
     if (!stock.length) return
@@ -355,9 +386,10 @@ export default function StockView() {
                 ) : Object.keys(porProducto).length === 0 ? (
                   <div className="card text-center py-12">
                     <Package className="mx-auto text-gray-300 mb-3" size={44} />
-                    <p className="text-gray-500">No hay stock registrado para este colegio</p>
+                    <p className="text-gray-500">Este colegio no tiene prendas configuradas (sin precios)</p>
+                    <p className="text-gray-400 text-xs mt-1">Configura los precios del colegio para que sus prendas aparezcan aquí.</p>
                     <button onClick={() => setShowAdd(true)} className="btn-primary mt-3 text-sm">
-                      Agregar stock
+                      Agregar stock manual
                     </button>
                   </div>
                 ) : (
@@ -377,8 +409,8 @@ export default function StockView() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {grupo.items.map(s => (
-                            <div key={s.id_stock} className="relative group">
-                              {editKey === s.id_stock ? (
+                            <div key={`${s.id_producto}-${s.talla_individual}`} className="relative group">
+                              {s.id_stock && editKey === s.id_stock ? (
                                 <div className="bg-white border-2 border-raloz-400 rounded-xl p-2 flex flex-col items-center gap-1 w-20">
                                   <span className="text-xs text-gray-500 font-medium">{s.talla_individual}</span>
                                   <input type="number" min="0" value={editVal}
@@ -400,15 +432,18 @@ export default function StockView() {
                                 </div>
                               ) : (
                                 <div
-                                  onClick={() => { setEditKey(s.id_stock); setEditVal(s.cantidad.toString()); setEditObs('') }}
-                                  title="Clic para editar"
+                                  onClick={() => {
+                                    if (s.id_stock) { setEditKey(s.id_stock); setEditVal(s.cantidad.toString()); setEditObs('') }
+                                    else { setNewStock({ producto_id: String(s.id_producto), talla: s.talla_individual, cantidad: '', observaciones: '', modo: 'entrada' }); setShowAdd(true) }
+                                  }}
+                                  title={s.id_stock ? 'Clic para editar' : 'Sin stock — clic para registrar entrada'}
                                   className={`cursor-pointer flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 font-bold text-sm transition-all hover:scale-105 hover:shadow-sm ${tallaCaja(s.cantidad)}`}>
                                   <span className="text-xs font-normal opacity-70">{s.talla_individual}</span>
                                   <span className="text-lg leading-tight">{s.cantidad}</span>
                                 </div>
                               )}
-                              {/* Botón eliminar */}
-                              {editKey !== s.id_stock && (
+                              {/* Botón eliminar (solo si la talla ya tiene registro de stock) */}
+                              {s.id_stock && editKey !== s.id_stock && (
                                 <button
                                   onClick={() => eliminar(s.id_stock, nombreProd, s.talla_individual)}
                                   className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full hover:bg-red-600"
@@ -420,7 +455,7 @@ export default function StockView() {
                           ))}
                           {/* Botón agregar talla extra para este producto */}
                           <button
-                            onClick={() => { setNewStock({ producto_id: String(grupo.items[0].id_producto), talla: '', cantidad: '', observaciones: '' }); setShowAdd(true) }}
+                            onClick={() => { setNewStock({ producto_id: String(grupo.items[0].id_producto), talla: '', cantidad: '', observaciones: '', modo: 'entrada' }); setShowAdd(true) }}
                             className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 text-gray-400 hover:border-raloz-400 hover:text-raloz-500 flex items-center justify-center transition-colors"
                             title="Agregar talla">
                             <Plus size={18} />
