@@ -244,11 +244,15 @@ export default function StockView() {
     }
   })
 
-  // Red de seguridad: si hay stock que no está en el catálogo (talla sin precio),
-  // igual se muestra para no esconder existencias reales.
+  // Prendas SIN precio en este colegio (descontinuadas / stock viejo): solo se
+  // muestran si TIENEN unidades, y marcadas como "sin precio" para que no se
+  // confundan con las del catálogo (evita ver prendas "repetidas").
+  const idsConPrecio = new Set(catalogo.map(p => p.id_producto))
   stock.forEach(s => {
+    if ((s.cantidad || 0) <= 0) return            // orfanas vacías: no mostrar
+    if (idsConPrecio.has(s.id_producto)) return    // ya está en el catálogo: no duplicar
     const key = s.producto_nombre || `Producto ${s.id_producto}`
-    if (!porProducto[key]) porProducto[key] = { tipo: s.producto_tipo, items: [] }
+    if (!porProducto[key]) porProducto[key] = { tipo: s.producto_tipo, sinPrecio: true, items: [] }
     if (!porProducto[key].items.some(it => it.talla_individual === s.talla_individual)) {
       porProducto[key].items.push({
         id_stock: s.id_stock, id_producto: s.id_producto,
@@ -432,6 +436,9 @@ export default function StockView() {
                             <p className="font-semibold text-gray-800">{nombreProd}</p>
                             {grupo.tipo === 'medias' && (
                               <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">medias</span>
+                            )}
+                            {grupo.sinPrecio && (
+                              <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full" title="Esta prenda no tiene precio en este colegio (stock viejo / descontinuada)">sin precio</span>
                             )}
                           </div>
                           <p className="text-xs text-gray-400">
