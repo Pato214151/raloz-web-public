@@ -142,43 +142,42 @@ export default function Facturacion() {
     if (abono > totalConDomicilio) { toast.error('El abono no puede ser mayor al total'); return }
 
     setSaving(true)
-    try {
-      // Combinar email
-      const clienteEmail = form.cliente_email_user.trim()
-        ? `${form.cliente_email_user.trim()}@${form.cliente_email_domain}`
-        : ''
 
-      const payload = {
-        id_colegio: form.id_colegio,
-        cliente_nombre: form.cliente_nombre,
-        cliente_telefono: form.cliente_telefono,
-        cliente_email: clienteEmail,
-        cliente_direccion: form.cliente_direccion,
-        cliente_nit: form.cliente_nit,
-        genero_estudiante: form.genero_estudiante,
-        fecha_factura: form.fecha_factura,
-        metodo_pago: form.metodo_pago,
-        entrega_inmediata: form.entrega_inmediata,
-        observaciones: form.observaciones,
-        numero_factura: form.numero_factura.trim() || undefined,
-        domicilio: valorDomicilio,
-        descuento: descuento,
-        abono: abono,
-        detalles: detalles.map(d => ({
-          id_producto: parseInt(d.id_producto),
-          talla_individual: d.talla_individual,
-          cantidad: parseInt(d.cantidad),
-          precio_unitario: parseFloat(d.precio_unitario),
-        })),
-      }
-      const res = await api.post('/facturas', payload)
+    // Combinar email
+    const clienteEmail = form.cliente_email_user.trim()
+      ? `${form.cliente_email_user.trim()}@${form.cliente_email_domain}`
+      : ''
+
+    const basePayload = {
+      id_colegio: form.id_colegio,
+      cliente_nombre: form.cliente_nombre,
+      cliente_telefono: form.cliente_telefono,
+      cliente_email: clienteEmail,
+      cliente_direccion: form.cliente_direccion,
+      cliente_nit: form.cliente_nit,
+      genero_estudiante: form.genero_estudiante,
+      fecha_factura: form.fecha_factura,
+      metodo_pago: form.metodo_pago,
+      entrega_inmediata: form.entrega_inmediata,
+      observaciones: form.observaciones,
+      numero_factura: form.numero_factura.trim() || undefined,
+      domicilio: valorDomicilio,
+      descuento: descuento,
+      abono: abono,
+      detalles: detalles.map(d => ({
+        id_producto: parseInt(d.id_producto),
+        talla_individual: d.talla_individual,
+        cantidad: parseInt(d.cantidad),
+        precio_unitario: parseFloat(d.precio_unitario),
+      })),
+    }
+
+    const doPost = async (permitirSobreventa) => {
+      const res = await api.post('/facturas', { ...basePayload, permitir_sobreventa: permitirSobreventa })
       const facturaCreada = res.data.factura
       toast.success(`Factura ${facturaCreada.numero_factura} creada exitosamente`)
-
       setLastFacturaId(facturaCreada.id_factura)
       setShowPostSave(true)
-
-      // Reset form
       setDetalles([])
       setForm(f => ({
         ...f,
@@ -187,8 +186,27 @@ export default function Facturacion() {
         genero_estudiante: '', observaciones: '', numero_factura: '',
         domicilio: false, valor_domicilio: '',
       }))
+    }
+
+    try {
+      await doPost(false)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al crear factura')
+      // Sin stock suficiente para entrega inmediata: ofrecer facturar igual
+      if (err.response?.status === 409 && err.response?.data?.code === 'sin_stock_suficiente') {
+        const faltantes = err.response.data.faltantes || []
+        const lista = faltantes
+          .map(x => `• ${x.producto} talla ${x.talla}: pides ${x.pedido}, hay ${x.disponible}`)
+          .join('\n')
+        if (window.confirm(`⚠️ No hay stock suficiente:\n\n${lista}\n\n¿Facturar de todos modos? (el stock quedará en 0)`)) {
+          try {
+            await doPost(true)
+          } catch (e2) {
+            toast.error(e2.response?.data?.error || 'Error al crear factura')
+          }
+        }
+      } else {
+        toast.error(err.response?.data?.error || 'Error al crear factura')
+      }
     } finally {
       setSaving(false)
     }

@@ -5,9 +5,11 @@ API de Facturación
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente, Pago, PrendaPendiente, Producto
+from app.models import (Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente,
+                        Pago, PrendaPendiente, Producto, PrecioColegio, CajaDiaria, MovimientoCaja)
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
 from app.utils.inventario import registrar_movimiento
+from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.validators import sanitize_string, validate_date, validate_positive_number, validate_required_fields
 from datetime import datetime, date
 
@@ -94,34 +96,88 @@ def crear_factura():
                 return jsonify({'error': f'Ya existe una factura con el número {numero_custom}'}), 409
             numero = numero_custom
         else:
-            serie = SerieFacturacion.query.filter_by(activa=True).first()
+            # with_for_update: bloquea la fila de la serie para que dos ventas
+            # simultáneas (2 workers) no tomen el mismo consecutivo.
+            serie = SerieFacturacion.query.filter_by(activa=True).with_for_update().first()
             if not serie:
                 ano_actual = datetime.now().year
                 serie = SerieFacturacion(ano=ano_actual, consecutivo_actual=0)
                 db.session.add(serie)
+                db.session.flush()
             serie.consecutivo_actual += 1
             numero = f"FAC-{serie.ano}-{serie.consecutivo_actual:06d}"
 
-        # Calcular total
+        # Precios autoritativos del colegio: el SERVIDOR define el precio
+        # (los descuentos van por el campo 'descuento', no alterando el precio).
+        precios_db = {
+            (p.id_producto, p.talla_grupo): p.precio_unitario
+            for p in PrecioColegio.query.filter_by(id_colegio=int(data['id_colegio'])).all()
+        }
+
         total = 0
         detalles_validados = []
+        overrides = []
 
         for item in data['detalles']:
             cantidad = int(item.get('cantidad', 0))
-            precio = float(item.get('precio_unitario', 0))
+            precio_cliente = float(item.get('precio_unitario', 0))
+            id_prod = int(item['id_producto'])
+            talla = sanitize_string(item.get('talla_individual', ''), 20)
+            grupo = TALLA_INDIVIDUAL_A_GRUPO.get(talla, talla)
+
+            precio_db = precios_db.get((id_prod, grupo))
+            if precio_db and precio_db > 0:
+                precio = precio_db  # precio oficial de la BD
+                if abs(precio_cliente - precio_db) > 0.5:
+                    overrides.append(f'{id_prod}/{talla}: {precio_cliente:.0f}->{precio_db:.0f}')
+            else:
+                precio = precio_cliente  # sin precio en BD: se usa el enviado y queda auditado
+                if precio > 0:
+                    overrides.append(f'{id_prod}/{talla}: manual ${precio_cliente:.0f}')
+
             if cantidad <= 0 or precio <= 0:
                 return jsonify({'error': 'Cantidad y precio deben ser positivos'}), 400
 
             total_linea = cantidad * precio
             total += total_linea
-
             detalles_validados.append({
-                'id_producto': int(item['id_producto']),
-                'talla_individual': sanitize_string(item.get('talla_individual', ''), 20),
+                'id_producto': id_prod,
+                'talla_individual': talla,
                 'cantidad': cantidad,
                 'precio_unitario': precio,
                 'total_linea': total_linea,
             })
+
+        # Pre-cargar productos para evitar N+1 (se usa en varios puntos)
+        ids_productos = [det['id_producto'] for det in detalles_validados]
+        productos_map = {
+            p.id_producto: p
+            for p in Producto.query.filter(Producto.id_producto.in_(ids_productos)).all()
+        }
+
+        # Anti-sobreventa: si es entrega inmediata, verificar que haya stock.
+        # El cajero puede forzar la venta enviando permitir_sobreventa=true.
+        if bool(data.get('entrega_inmediata', False)) and not bool(data.get('permitir_sobreventa', False)):
+            _id_col = int(data['id_colegio'])
+            faltantes = []
+            for det in detalles_validados:
+                st = Stock.query.filter_by(
+                    id_colegio=_id_col, id_producto=det['id_producto'],
+                    talla_individual=det['talla_individual']).first()
+                disp = st.cantidad if st else 0
+                if disp < det['cantidad']:
+                    prod = productos_map.get(det['id_producto'])
+                    faltantes.append({
+                        'producto': prod.nombre if prod else f"#{det['id_producto']}",
+                        'talla': det['talla_individual'],
+                        'pedido': det['cantidad'], 'disponible': disp,
+                    })
+            if faltantes:
+                return jsonify({
+                    'error': 'No hay stock suficiente para entrega inmediata',
+                    'code': 'sin_stock_suficiente',
+                    'faltantes': faltantes,
+                }), 409
 
         fecha_factura = validate_date(data.get('fecha_factura', '')) or date.today()
         abono = float(data.get('abono', 0))
@@ -157,13 +213,6 @@ def crear_factura():
         entrega_inmediata = bool(data.get('entrega_inmediata', False))
         id_colegio = int(data['id_colegio'])
         colegio = factura.colegio
-
-        # Pre-cargar productos para evitar N+1 dentro del loop
-        ids_productos = [det['id_producto'] for det in detalles_validados]
-        productos_map = {
-            p.id_producto: p
-            for p in Producto.query.filter(Producto.id_producto.in_(ids_productos)).all()
-        }
 
         # Crear detalles
         for det in detalles_validados:
@@ -208,8 +257,26 @@ def crear_factura():
             )
             db.session.add(pago)
 
+        # Conciliación con caja: si el abono entra en EFECTIVO y hay caja abierta,
+        # se registra el ingreso para que la caja cuadre sola al cerrar.
+        metodo = sanitize_string(data.get('metodo_pago', 'EFECTIVO'), 50)
+        if abono > 0 and metodo.upper() == 'EFECTIVO':
+            caja = CajaDiaria.query.filter_by(estado='ABIERTA').first()
+            if caja:
+                ingreso = min(abono, total_con_domicilio)
+                db.session.add(MovimientoCaja(
+                    id_caja=caja.id_caja, tipo='INGRESO',
+                    concepto=f'Venta {numero}', valor=ingreso,
+                    metodo_pago='EFECTIVO', usuario=identity['usuario'],
+                    fecha_hora=datetime.utcnow(),
+                ))
+                caja.total_ventas = (caja.total_ventas or 0) + ingreso
+                caja.monto_esperado = (caja.monto_inicial or 0) + (caja.total_ventas or 0) - (caja.total_gastos or 0)
+
         db.session.commit()
         registrar_auditoria('facturas', factura.id_factura, 'CREAR', f'Factura {numero}')
+        if overrides:
+            registrar_auditoria('facturas', factura.id_factura, 'PRECIO_OVERRIDE', '; '.join(overrides[:20]))
 
         return jsonify({
             'message': 'Factura creada exitosamente',
