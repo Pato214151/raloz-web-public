@@ -130,9 +130,16 @@ def historial_cliente(id_cliente):
     """Historial de compras de un cliente"""
     cliente = Cliente.query.get_or_404(id_cliente)
 
-    facturas = Factura.query.filter(
-        Factura.cliente_nombre == cliente.nombre
-    ).order_by(Factura.fecha_factura.desc()).limit(50).all()
+    # Buscar por teléfono (robusto); si el cliente no tiene, caer al nombre exacto.
+    if cliente.telefono:
+        filtro = (Factura.cliente_telefono == cliente.telefono)
+        if cliente.nombre:
+            filtro = filtro | (Factura.cliente_nombre == cliente.nombre)
+    else:
+        filtro = (Factura.cliente_nombre == cliente.nombre)
+
+    facturas = Factura.query.filter(filtro).order_by(
+        Factura.fecha_factura.desc()).limit(50).all()
 
     total_compras = sum(f.total for f in facturas)
     total_pagado = sum(f.total_abonado or 0 for f in facturas)

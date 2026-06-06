@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
 from app.models import (Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente,
-                        Pago, PrendaPendiente, Producto, PrecioColegio, CajaDiaria, MovimientoCaja)
+                        Pago, PrendaPendiente, Producto, PrecioColegio, CajaDiaria, MovimientoCaja, Cliente)
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
 from app.utils.inventario import registrar_movimiento
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
@@ -14,6 +14,31 @@ from app.utils.validators import sanitize_string, validate_date, validate_positi
 from datetime import datetime, date
 
 facturas_bp = Blueprint('facturas', __name__)
+
+
+def _upsert_cliente_venta(factura, id_colegio, total, abono, fecha):
+    """Crea o actualiza el Cliente (keyed por teléfono) tras una venta, para
+    que cada comprador quede registrado con sus totales. Se llama DESPUÉS del
+    commit de la factura y con su propio try/except: nunca debe romper la venta."""
+    tel = (factura.cliente_telefono or '').strip()
+    if not tel:
+        return
+    cli = Cliente.query.filter_by(telefono=tel).first()
+    if not cli:
+        cli = Cliente(nombre=factura.cliente_nombre or 'Cliente', telefono=tel, activo=True)
+        db.session.add(cli)
+    if factura.cliente_nombre:
+        cli.nombre = factura.cliente_nombre
+    if factura.cliente_email:
+        cli.email = factura.cliente_email
+    if factura.cliente_direccion:
+        cli.direccion = factura.cliente_direccion
+    cli.id_colegio = id_colegio
+    cli.cantidad_facturas = (cli.cantidad_facturas or 0) + 1
+    cli.total_compras = (cli.total_compras or 0) + (total or 0)
+    cli.total_pagado = (cli.total_pagado or 0) + (min(abono, total) if abono > 0 else 0)
+    cli.ultima_compra = fecha
+    cli.fecha_actualizacion = datetime.utcnow()
 
 
 @facturas_bp.route('', methods=['GET'])
@@ -283,6 +308,13 @@ def crear_factura():
         registrar_auditoria('facturas', factura.id_factura, 'CREAR', f'Factura {numero}')
         if overrides:
             registrar_auditoria('facturas', factura.id_factura, 'PRECIO_OVERRIDE', '; '.join(overrides[:20]))
+
+        # Cliente 360: registrar/actualizar el cliente (aislado, no afecta la venta)
+        try:
+            _upsert_cliente_venta(factura, int(data['id_colegio']), total_con_domicilio, abono, fecha_factura)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
         return jsonify({
             'message': 'Factura creada exitosamente',
