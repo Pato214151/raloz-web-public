@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Users, Plus, Search, Edit, X, Eye, Printer, Download, RefreshCw } from 'lucide-react'
@@ -6,6 +7,7 @@ import { Users, Plus, Search, Edit, X, Eye, Printer, Download, RefreshCw } from 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
 export default function Clientes() {
+  const navigate = useNavigate()
   const [clientes, setClientes] = useState([])
   const [buscar, setBuscar] = useState('')
   const [loading, setLoading] = useState(true)
@@ -402,7 +404,10 @@ export default function Clientes() {
                   </tr></thead>
                   <tbody>
                     {historialCompras.map(f => (
-                      <tr key={f.id_factura} className="border-b border-gray-50 hover:bg-gray-50">
+                      <tr key={f.id_factura}
+                        onClick={() => navigate(`/buscar?ver=${f.id_factura}`)}
+                        className="border-b border-gray-50 hover:bg-raloz-50 cursor-pointer"
+                        title="Abrir factura">
                         <td className="px-3 py-2 font-medium text-raloz-600">{f.numero_factura}</td>
                         <td className="px-3 py-2 text-gray-600">{f.fecha}</td>
                         <td className="px-3 py-2 text-right">{fmt(f.total)}</td>

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 
 export default function CuentasPorCobrar() {
+  const navigate = useNavigate()
   const [cuentas, setCuentas] = useState([])
   const [totalPorCobrar, setTotalPorCobrar] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -79,11 +81,15 @@ export default function CuentasPorCobrar() {
               <th className="text-right py-3 px-2">Pagado</th>
               <th className="text-right py-3 px-2">Saldo</th>
               <th className="text-left py-3 px-2 hidden md:table-cell">Entrega</th>
+              <th className="text-right py-3 px-2"></th>
             </tr>
           </thead>
           <tbody>
             {filtradas.map(c => (
-              <tr key={c.id_factura} className="border-b border-gray-100 hover:bg-gray-50">
+              <tr key={c.id_factura}
+                onClick={() => navigate(`/buscar?ver=${c.id_factura}`)}
+                className="border-b border-gray-100 hover:bg-raloz-50 cursor-pointer"
+                title="Abrir factura para cobrar">
                 <td className="py-2 px-2 font-medium text-raloz-700">{c.numero_factura}</td>
                 <td className="py-2 px-2">{c.cliente_nombre}</td>
                 <td className="py-2 px-2 hidden md:table-cell text-gray-500">{c.cliente_telefono || '-'}</td>
@@ -99,6 +105,9 @@ export default function CuentasPorCobrar() {
                   }`}>
                     {c.estado_entrega || 'POR_ENTREGAR'}
                   </span>
+                </td>
+                <td className="py-2 px-2 text-right">
+                  <span className="text-xs font-medium text-raloz-600 whitespace-nowrap">Cobrar →</span>
                 </td>
               </tr>
             ))}

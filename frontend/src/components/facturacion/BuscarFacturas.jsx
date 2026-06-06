@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -50,6 +51,7 @@ export default function BuscarFacturas() {
 
   // Print ref
   const printRef = useRef()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     Promise.all([
@@ -62,6 +64,12 @@ export default function BuscarFacturas() {
     // Cargar todas las facturas al abrir
     handleSearch(1)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Abrir directamente una factura si llegamos con ?ver=<id> (desde otras pantallas)
+  useEffect(() => {
+    const ver = searchParams.get('ver')
+    if (ver) verDetalle(parseInt(ver))
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = async (pageNum = 1) => {
     setLoading(true)
