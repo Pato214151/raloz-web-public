@@ -6,6 +6,7 @@ Pagos procesados por MercadoPago (persona natural)
 
 import os
 import json
+import time
 import uuid
 import hmac
 import hashlib
@@ -21,6 +22,7 @@ from app import db, limiter
 from app.utils.email_service import enviar_email_factura
 from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.whatsapp_notify import notificar_whatsapp
+from app.utils.validators import sanitize_string, validate_email
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, FacturaDetalle, Pago,
@@ -252,6 +254,15 @@ def crear_pedido():
     for campo in requeridos:
         if not data.get(campo):
             return jsonify({'error': f'Campo requerido: {campo}'}), 400
+
+    # Sanitizar datos del cliente (van al PDF y a WhatsApp) — anti-inyección
+    data['nombre_cliente']    = sanitize_string(data.get('nombre_cliente'), 200)
+    data['documento_cliente'] = sanitize_string(data.get('documento_cliente'), 50)
+    data['direccion_envio']   = sanitize_string(data.get('direccion_envio'), 300)
+    data['telefono_cliente']  = sanitize_string(data.get('telefono_cliente'), 50)
+    data['email_cliente']     = sanitize_string(data.get('email_cliente'), 200)
+    if not validate_email(data['email_cliente']):
+        return jsonify({'error': 'Correo electrónico inválido'}), 400
 
     items = data['items']
     if not items or not isinstance(items, list):
@@ -700,65 +711,80 @@ def mp_webhook():
     if not mp_token or not resource_id:
         return jsonify({'ok': True}), 200
 
+    # ── Consultar el detalle del pago en MP (con 1 reintento ante fallo transitorio) ──
+    url = f'{MP_API}/v1/payments/{resource_id}' if topic == 'payment' else f'{MP_API}/merchant_orders/{resource_id}'
+    pago_data = None
+    for intento in range(2):
+        try:
+            resp = requests.get(url, headers={'Authorization': f'Bearer {mp_token}'}, timeout=8)
+            if resp.status_code == 200:
+                pago_data = resp.json()
+                break
+            logger.error('[WEBHOOK] MP status=%s: %s', resp.status_code, resp.text[:200])
+        except Exception as e:
+            logger.warning('[WEBHOOK] Fallo consulta MP (intento %d): %s', intento + 1, e)
+        if intento == 0:
+            time.sleep(1)
+
+    if pago_data is None:
+        # No pudimos confirmar el pago → devolver 500 para que MercadoPago REINTENTE el webhook
+        # (así no se pierde el pago por un fallo transitorio de red/MP).
+        logger.error('[WEBHOOK] No se pudo consultar MP (resource=%s); se pide reintento', resource_id)
+        _avisar_admin(f'No pude confirmar un pago en MercadoPago (resource {resource_id}). '
+                      f'MP reintentará automáticamente; si el aviso se repite, revisar.')
+        return jsonify({'error': 'mp_unavailable'}), 500
+
+    estado_mp  = pago_data.get('status', '')
+    referencia = pago_data.get('external_reference', '')
+    metodo     = pago_data.get('payment_type_id', 'MP')
+    logger.info('[WEBHOOK] estado_mp=%s referencia=%s', estado_mp, referencia)
+
+    if not referencia:
+        return jsonify({'ok': True}), 200
+
+    # ── Pago del SALDO restante (la referencia termina en -SALDO) ──
+    if referencia.endswith('-SALDO'):
+        return _procesar_pago_saldo(referencia, estado_mp, pago_data)
+
+    pedido = PedidoWeb.query.filter_by(referencia=referencia).first()
+    if not pedido:
+        logger.warning('[WEBHOOK] Pedido no encontrado referencia=%s', referencia)
+        return jsonify({'ok': True}), 200
+
     try:
-        # Obtener detalle del pago desde MP
-        url = f'{MP_API}/v1/payments/{resource_id}' if topic == 'payment' else f'{MP_API}/merchant_orders/{resource_id}'
-        resp = requests.get(url, headers={'Authorization': f'Bearer {mp_token}'}, timeout=8)
-
-        logger.info('[WEBHOOK] MP status=%s resource_id=%s', resp.status_code, resource_id)
-        if resp.status_code != 200:
-            logger.error('[WEBHOOK] MP rechazó consulta: %s', resp.text[:300])
-            return jsonify({'ok': True}), 200
-
-        pago_data = resp.json()
-        estado_mp = pago_data.get('status', '')
-        referencia = pago_data.get('external_reference', '')
-        metodo = pago_data.get('payment_type_id', 'MP')
-
-        logger.info('[WEBHOOK] estado_mp=%s referencia=%s', estado_mp, referencia)
-
-        if not referencia:
-            logger.warning('[WEBHOOK] Sin external_reference en resource_id=%s', resource_id)
-            return jsonify({'ok': True}), 200
-
-        # ── Pago del SALDO restante (la referencia termina en -SALDO) ──
-        if referencia.endswith('-SALDO'):
-            return _procesar_pago_saldo(referencia, estado_mp, pago_data)
-
-        pedido = PedidoWeb.query.filter_by(referencia=referencia).first()
-        if not pedido:
-            logger.warning('[WEBHOOK] Pedido no encontrado referencia=%s', referencia)
-            return jsonify({'ok': True}), 200
-
-        # Idempotencia: si ya está pagado no reprocesar (MP puede reintentar el webhook)
-        if pedido.estado == 'pagado' and estado_mp == 'approved':
-            logger.info('[WEBHOOK] Pedido %s ya procesado, ignorando reintento', pedido.id_pedido)
+        # Idempotencia REAL: si ya tiene factura, está todo hecho (no reprocesar)
+        if estado_mp == 'approved' and pedido.id_factura:
+            logger.info('[WEBHOOK] Pedido %s ya tiene factura, ignorando reintento', pedido.id_pedido)
             return jsonify({'ok': True}), 200
 
         pedido.wompi_status = estado_mp
         pedido.metodo_pago = metodo
 
-        if estado_mp == 'approved' and pedido.estado == 'pendiente':
-            logger.info('[WEBHOOK] Aprobando pedido %s', pedido.id_pedido)
-            pedido.estado = 'pagado'
-            pedido.fecha_pago = datetime.utcnow()
-            db.session.commit()
+        if estado_mp == 'approved':
+            # Marcar pagado (pendiente, o 'pagado' sin factura = reintento que sana)
+            if pedido.estado != 'pagado':
+                pedido.estado = 'pagado'
+                pedido.fecha_pago = datetime.utcnow()
+                db.session.commit()
 
-            factura = None
+            # Crear factura — si falla, pedir reintento a MP para NO perder el pago
             try:
                 factura = _crear_factura_desde_pedido(pedido)
                 pedido.id_factura = factura.id_factura
                 db.session.commit()
                 logger.info('[WEBHOOK] Factura %s creada', factura.numero_factura)
             except Exception as e:
-                logger.error('[WEBHOOK] Error factura: %s', str(e), exc_info=True)
                 db.session.rollback()
+                logger.error('[WEBHOOK] Error creando factura %s: %s', referencia, e, exc_info=True)
+                _avisar_admin(f'Pago aprobado de {referencia} pero FALLÓ crear la factura. '
+                              f'MP reintentará; si persiste, crearla manual.')
+                return jsonify({'error': 'factura_failed'}), 500
 
-            # Email en hilo separado: no bloquea la respuesta al webhook
-            if factura and pedido.email_cliente:
+            # Email (hilo aparte, no bloquea)
+            if pedido.email_cliente:
                 _lanzar_email_async(pedido.email_cliente, factura.id_factura)
 
-            # Aviso por WhatsApp: "tu orden se está preparando" (no bloquea)
+            # Aviso por WhatsApp: "tu orden se está preparando"
             if pedido.telefono_cliente:
                 notificar_whatsapp(pedido.telefono_cliente, 'pago_confirmado', {
                     'nombre': pedido.nombre_cliente,
@@ -768,8 +794,6 @@ def mp_webhook():
 
             try:
                 _crear_pedido_fabricacion_si_aplica(pedido)
-                # MEJORA #3: commit de los pedidos de fabricación
-                # (antes quedaban sin persistir porque no había commit después)
                 db.session.commit()
             except Exception as e:
                 logger.error('[WEBHOOK] Error fabricacion: %s', str(e), exc_info=True)
@@ -789,11 +813,13 @@ def mp_webhook():
                 logger.error('[WEBHOOK] Error liberando reservas: %s', str(e))
             db.session.commit()
         else:
-            logger.info('[WEBHOOK] Estado no procesado: %s pedido=%s', estado_mp, pedido.id_pedido)
             db.session.commit()
 
     except Exception as e:
-        logger.error('[WEBHOOK] Error general: %s', str(e), exc_info=True)
+        db.session.rollback()
+        logger.error('[WEBHOOK] Error general %s: %s', referencia, e, exc_info=True)
+        _avisar_admin(f'Error procesando el pago del pedido {referencia}: {str(e)[:120]}. MP reintentará.')
+        return jsonify({'error': 'processing_failed'}), 500
 
     return jsonify({'ok': True}), 200
 
@@ -1018,9 +1044,12 @@ def actualizar_estado_entrega(id_pedido):
     # Aviso por WhatsApp según el nuevo estado (no bloquea)
     if pedido.telefono_cliente:
         if nuevo_estado == 'EMPACADO':
-            notificar_whatsapp(pedido.telefono_cliente, 'pedido_listo', {
-                'nombre': pedido.nombre_cliente, 'referencia': pedido.referencia,
-            })
+            # Si viene de fabricación, el aviso ya lo envió marcar_listo() con el link de saldo.
+            pf = PedidoFabricacion.query.filter_by(id_pedido_web=pedido.id_pedido).first()
+            if not pf or pf.estado != 'listo_para_entrega':
+                notificar_whatsapp(pedido.telefono_cliente, 'pedido_listo', {
+                    'nombre': pedido.nombre_cliente, 'referencia': pedido.referencia,
+                })
         elif nuevo_estado == 'ENTREGADO':
             notificar_whatsapp(pedido.telefono_cliente, 'entregado', {
                 'nombre': pedido.nombre_cliente, 'referencia': pedido.referencia,
