@@ -132,6 +132,8 @@ def _auto_migrate():
             "CREATE INDEX IF NOT EXISTS idx_facturas_estado_saldo ON facturas(estado, saldo_pendiente)",
             # Dirección en pedidos_fabricacion
             "ALTER TABLE pedidos_fabricacion ADD COLUMN IF NOT EXISTS direccion_envio VARCHAR(300)",
+            # Idempotencia del pago de saldo (id del pago MP que lo saldó)
+            "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS mp_saldo_payment_id VARCHAR(50)",
             # ── Consolidado desde app/__init__.py (un solo lugar de migraciones) ──
             "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS canal VARCHAR(20) DEFAULT 'PRESENCIAL'",
             "ALTER TABLE gastos ADD COLUMN IF NOT EXISTS tipo_gasto VARCHAR(20) DEFAULT 'TIENDA'",

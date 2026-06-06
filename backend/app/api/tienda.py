@@ -474,6 +474,103 @@ def crear_pedido():
 
 
 # ══════════════════════════════════════════════════════════════
+# PAGAR SALDO — genera link de MP para saldo pendiente
+# ══════════════════════════════════════════════════════════════
+
+def _generar_link_saldo(pedido, factura):
+    """Crea una preferencia de MercadoPago para el saldo pendiente.
+    Devuelve el init_point (URL de pago) o None si falla."""
+    mp_token = os.getenv('MP_ACCESS_TOKEN', '')
+    if not mp_token:
+        logger.error('[PAGAR-SALDO] MP_ACCESS_TOKEN no configurado')
+        return None
+
+    backend_url   = os.getenv('BACKEND_URL', 'https://raloz-web.onrender.com')
+    redirect_base = os.getenv('MP_REDIRECT_URL', 'https://ralozcol-web.pages.dev')
+    saldo_ref     = f"{pedido.referencia}-SALDO"
+
+    preference_data = {
+        'external_reference': saldo_ref,
+        'items': [{
+            'id': 'SALDO',
+            'title': f'Saldo pendiente — Pedido {pedido.referencia}',
+            'quantity': 1,
+            'unit_price': float(factura.saldo_pendiente),
+            'currency_id': 'COP',
+        }],
+        'payer': {
+            'name': (factura.cliente_nombre or pedido.nombre_cliente or '').split(' ')[0],
+            'email': factura.cliente_email or pedido.email_cliente or '',
+        },
+        'back_urls': {
+            'success': f"{redirect_base}?estado=saldo_pagado&ref={pedido.referencia}",
+            'failure': f"{redirect_base}?estado=fallido&ref={pedido.referencia}",
+            'pending': f"{redirect_base}?estado=pendiente&ref={pedido.referencia}",
+        },
+        'auto_return': 'approved',
+        'notification_url': f"{backend_url}/api/tienda/mp/webhook",
+        'statement_descriptor': 'RALOZ UNIFORMES',
+    }
+
+    try:
+        resp = requests.post(
+            f'{MP_API}/checkout/preferences',
+            json=preference_data,
+            headers={'Authorization': f'Bearer {mp_token}', 'Content-Type': 'application/json'},
+            timeout=20,
+        )
+        if resp.status_code not in (200, 201):
+            logger.error('[PAGAR-SALDO] MP error %s: %s', resp.status_code, resp.text[:300])
+            return None
+        return resp.json().get('init_point')
+    except Exception as e:
+        logger.error('[PAGAR-SALDO] Error generando link: %s', str(e), exc_info=True)
+        return None
+
+
+@tienda_bp.route('/pagar-saldo', methods=['POST'])
+@limiter.limit("10 per minute")
+def pagar_saldo():
+    """
+    Genera un link de MercadoPago para pagar el saldo pendiente.
+    Lo puede llamar el admin (al marcar listo), el bot de WhatsApp, o el cliente.
+    Solo genera link si el pedido ya está LISTO PARA ENTREGA y tiene saldo > 0.
+    """
+    data = request.get_json() or {}
+    referencia = (data.get('referencia') or '').strip()
+    if not referencia:
+        return jsonify({'error': 'referencia requerida'}), 400
+
+    pedido = PedidoWeb.query.filter_by(referencia=referencia).first()
+    if not pedido:
+        return jsonify({'error': 'Pedido no encontrado', 'code': 'no_encontrado'}), 404
+    if not pedido.id_factura:
+        return jsonify({'error': 'El pedido aún no tiene factura', 'code': 'sin_factura'}), 400
+
+    factura = Factura.query.get(pedido.id_factura)
+    if not factura:
+        return jsonify({'error': 'Factura no encontrada', 'code': 'no_encontrado'}), 404
+    if not factura.saldo_pendiente or factura.saldo_pendiente <= 0:
+        return jsonify({'error': 'Este pedido ya está pagado en su totalidad', 'code': 'sin_saldo'}), 400
+
+    # Solo permitir pagar el saldo cuando el pedido ya está listo (no en producción)
+    pf = PedidoFabricacion.query.filter_by(id_pedido_web=pedido.id_pedido).first()
+    if pf and pf.estado not in ('listo_para_entrega', 'entregado'):
+        return jsonify({'error': 'El pedido aún se está fabricando', 'code': 'en_produccion'}), 400
+
+    init_point = _generar_link_saldo(pedido, factura)
+    if not init_point:
+        return jsonify({'error': 'No se pudo generar el link de pago'}), 502
+
+    logger.info('[PAGAR-SALDO] Link generado para %s: $%s', referencia, factura.saldo_pendiente)
+    return jsonify({
+        'pago_url':   init_point,
+        'monto':      factura.saldo_pendiente,
+        'referencia': referencia,
+    }), 200
+
+
+# ══════════════════════════════════════════════════════════════
 # WEBHOOK MERCADOPAGO — confirmación de pago
 # ══════════════════════════════════════════════════════════════
 
@@ -517,6 +614,74 @@ def _validar_firma_mp(data_id: str) -> bool:
     return True
 
 
+def _avisar_admin(texto):
+    """Alerta al admin por WhatsApp (si ADMIN_WHATSAPP está configurado en el backend)."""
+    admin = os.getenv('ADMIN_WHATSAPP', '').strip()
+    if admin:
+        try:
+            notificar_whatsapp(admin, 'aviso_admin', {'texto': texto})
+        except Exception:
+            pass
+
+
+def _procesar_pago_saldo(referencia_saldo, estado_mp, pago_data):
+    """
+    Procesa el pago del SALDO restante (referencia *-SALDO).
+    Seguro: idempotente (no descuenta dos veces el mismo pago) y maneja el caso
+    de que el saldo ya estuviera en 0 (pagado en el local) → avisa al admin.
+    """
+    referencia = referencia_saldo[:-6]  # quita "-SALDO"
+    if estado_mp != 'approved':
+        logger.info('[WEBHOOK-SALDO] %s estado=%s (no aprobado)', referencia, estado_mp)
+        return jsonify({'ok': True}), 200
+
+    pedido = PedidoWeb.query.filter_by(referencia=referencia).first()
+    if not pedido or not pedido.id_factura:
+        logger.warning('[WEBHOOK-SALDO] pedido/factura no encontrado: %s', referencia)
+        return jsonify({'ok': True}), 200
+    factura = Factura.query.get(pedido.id_factura)
+    if not factura:
+        return jsonify({'ok': True}), 200
+
+    payment_id = str(pago_data.get('id') or '')
+
+    # Idempotencia: este MISMO pago ya se procesó (MP reintenta el webhook)
+    if payment_id and factura.mp_saldo_payment_id == payment_id:
+        logger.info('[WEBHOOK-SALDO] pago %s ya procesado, ignorando reintento', payment_id)
+        return jsonify({'ok': True}), 200
+
+    saldo_actual = factura.saldo_pendiente or 0
+    # El saldo ya estaba en 0 (pagó en el local o doble pago) → NO descontar, avisar
+    if saldo_actual <= 0:
+        monto = pago_data.get('transaction_amount')
+        logger.error('[WEBHOOK-SALDO] %s: pago recibido pero el saldo ya era 0 (monto=%s). Posible doble pago — revisar/devolver.', referencia, monto)
+        _avisar_admin(f'OJO: llegó pago de saldo del pedido {referencia} por ${monto}, '
+                      f'pero el saldo ya estaba en $0. Posible doble pago — revisar y devolver.')
+        return jsonify({'ok': True}), 200
+
+    # Validar monto real pagado (no confiar en el link); para el saldo es el valor fijo
+    monto = float(pago_data.get('transaction_amount') or saldo_actual)
+    factura.total_abonado   = round((factura.total_abonado or 0) + monto, 2)
+    factura.saldo_pendiente = round(max(0, saldo_actual - monto), 2)
+    factura.mp_saldo_payment_id = payment_id
+    if factura.saldo_pendiente <= 0:
+        factura.estado = 'PAGADA'
+    pf = PedidoFabricacion.query.filter_by(id_pedido_web=pedido.id_pedido).first()
+    if pf:
+        pf.saldo_pendiente = factura.saldo_pendiente
+    db.session.commit()
+
+    logger.info('[WEBHOOK-SALDO] %s saldo pagado (monto=%s, restante=%s)',
+                referencia, monto, factura.saldo_pendiente)
+    if pedido.telefono_cliente:
+        notificar_whatsapp(pedido.telefono_cliente, 'saldo_pagado', {
+            'nombre':     pedido.nombre_cliente,
+            'referencia': referencia,
+            'monto':      f"${int(monto):,}".replace(',', '.'),
+        })
+    return jsonify({'ok': True}), 200
+
+
 @tienda_bp.route('/mp/webhook', methods=['POST'])
 def mp_webhook():
     """Recibe notificaciones de MercadoPago y procesa pagos aprobados"""
@@ -555,6 +720,10 @@ def mp_webhook():
         if not referencia:
             logger.warning('[WEBHOOK] Sin external_reference en resource_id=%s', resource_id)
             return jsonify({'ok': True}), 200
+
+        # ── Pago del SALDO restante (la referencia termina en -SALDO) ──
+        if referencia.endswith('-SALDO'):
+            return _procesar_pago_saldo(referencia, estado_mp, pago_data)
 
         pedido = PedidoWeb.query.filter_by(referencia=referencia).first()
         if not pedido:
@@ -941,7 +1110,29 @@ def marcar_pedido_fabricacion_listo(id_pedido):
         return jsonify({'error': 'El pedido ya fue entregado'}), 400
     pf.estado = 'listo_para_entrega'
     db.session.commit()
-    return jsonify({'ok': True, 'estado': pf.estado, 'pedido': pf.to_dict()}), 200
+
+    # Avisar al cliente que su pedido está listo. Si debe saldo, generar el
+    # link de MercadoPago y mandárselo en el mismo mensaje de WhatsApp.
+    saldo = pf.saldo_pendiente or 0
+    pago_url = None
+    referencia = None
+    pedido = PedidoWeb.query.get(pf.id_pedido_web) if pf.id_pedido_web else None
+    if pedido:
+        referencia = pedido.referencia
+        if saldo > 0 and pedido.id_factura:
+            factura = Factura.query.get(pedido.id_factura)
+            if factura:
+                pago_url = _generar_link_saldo(pedido, factura)
+
+    if pf.telefono_cliente:
+        datos = {'nombre': pf.nombre_cliente, 'referencia': referencia or ''}
+        if saldo > 0:
+            datos['saldo'] = f"${int(saldo):,}".replace(',', '.')
+            if pago_url:
+                datos['pago_url'] = pago_url
+        notificar_whatsapp(pf.telefono_cliente, 'pedido_listo', datos)
+
+    return jsonify({'ok': True, 'estado': pf.estado, 'pago_url': pago_url, 'pedido': pf.to_dict()}), 200
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-entregado', methods=['POST'])

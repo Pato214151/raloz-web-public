@@ -24,6 +24,7 @@ class Factura(db.Model):
     genero_estudiante = db.Column(db.String(20))
     domicilio = db.Column(db.Float, default=0)
     canal = db.Column(db.String(20), default='PRESENCIAL')  # 'PRESENCIAL' o 'WEB'
+    mp_saldo_payment_id = db.Column(db.String(50))  # id del pago MP que saldó el saldo (idempotencia)
     observaciones = db.Column(db.Text)
     fecha_entrega = db.Column(db.Date)
     usuario_creacion = db.Column(db.String(100), nullable=False)
