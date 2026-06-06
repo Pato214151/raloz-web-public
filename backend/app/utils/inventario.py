@@ -7,8 +7,8 @@ desincronizan. NO hace commit (lo hace quien llama, para mantener la
 transacción atómica del caller).
 """
 from app import db
-from app.models import Stock, MovimientoInventario, PrecioColegio
-from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES
+from app.models import Stock, MovimientoInventario, PrecioColegio, Producto
+from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
 
 TIPOS = ('ENTRADA', 'SALIDA', 'AJUSTE')
 
@@ -62,6 +62,72 @@ def construir_catalogo_colegio(colegio_id):
         })
     catalogo.sort(key=lambda c: c['producto_nombre'])
     return catalogo
+
+
+def construir_balance_colegio(colegio_id, desde=None, hasta=None):
+    """
+    Balance de prendas de un colegio (desde el kardex):
+    por prenda → entraron / salieron / quedan + valor del inventario.
+
+    desde/hasta: datetime opcionales para acotar entradas y salidas.
+    Devuelve (balance:list, totales:dict).
+    """
+    # Movimientos en el rango
+    q = MovimientoInventario.query.filter_by(id_colegio=colegio_id)
+    if desde:
+        q = q.filter(MovimientoInventario.fecha >= desde)
+    if hasta:
+        q = q.filter(MovimientoInventario.fecha <= hasta)
+    movs = q.all()
+
+    # Precios: (id_producto, talla_grupo) -> precio
+    precios = {
+        (p.id_producto, p.talla_grupo): p.precio_unitario
+        for p in PrecioColegio.query.filter_by(id_colegio=colegio_id).all()
+    }
+
+    data = {}
+
+    def row(pid):
+        return data.setdefault(pid, {
+            'id_producto': pid, 'producto_nombre': f'Prod#{pid}',
+            'entradas': 0, 'salidas': 0, 'ajustes': 0,
+            'stock_actual': 0, 'valor_inventario': 0,
+        })
+
+    for m in movs:
+        r = row(m.id_producto)
+        if m.tipo == 'ENTRADA':
+            r['entradas'] += m.cantidad
+        elif m.tipo == 'SALIDA':
+            r['salidas'] += m.cantidad
+        else:
+            r['ajustes'] += 1
+
+    # Stock actual + valor del inventario (stock × precio de su grupo de talla)
+    for s in Stock.query.filter_by(id_colegio=colegio_id).all():
+        r = row(s.id_producto)
+        r['stock_actual'] += (s.cantidad or 0)
+        grupo = TALLA_INDIVIDUAL_A_GRUPO.get(s.talla_individual, s.talla_individual)
+        precio = precios.get((s.id_producto, grupo), 0)
+        r['valor_inventario'] += (s.cantidad or 0) * precio
+
+    # Resolver nombres reales de productos
+    pids = list(data.keys())
+    if pids:
+        nombres = {p.id_producto: p.nombre
+                   for p in Producto.query.filter(Producto.id_producto.in_(pids)).all()}
+        for pid, r in data.items():
+            r['producto_nombre'] = nombres.get(pid, f'Prod#{pid}')
+
+    balance = sorted(data.values(), key=lambda x: (-x['salidas'], x['producto_nombre']))
+    totales = {
+        'entradas': sum(b['entradas'] for b in balance),
+        'salidas': sum(b['salidas'] for b in balance),
+        'stock_actual': sum(b['stock_actual'] for b in balance),
+        'valor_inventario': sum(b['valor_inventario'] for b in balance),
+    }
+    return balance, totales
 
 
 def registrar_movimiento(id_colegio, id_producto, talla, tipo, cantidad,

@@ -66,3 +66,26 @@ def test_catalogo_incluye_tallas_en_cero(app):
     tallas = {f['talla']: f['cantidad'] for f in cat[0]['tallas']}
     assert tallas == {'6': 0, '8': 4, '10': 0, '12': 0}  # las de 0 también aparecen
     assert cat[0]['total'] == 4
+
+
+def test_balance_entradas_salidas_y_valor(app):
+    """Fase 3: el balance suma entradas/salidas del kardex, el stock actual
+    y el valor del inventario (stock × precio)."""
+    from app.models import Producto, PrecioColegio
+    from app.utils.inventario import construir_balance_colegio
+
+    db.session.add(Producto(id_producto=1, nombre='Camiseta Niño', tipo='normal'))
+    db.session.add(PrecioColegio(id_colegio=1, id_producto=1, talla_grupo='6-8', precio_unitario=40000))
+    db.session.commit()
+
+    registrar_movimiento(1, 1, '8', 'ENTRADA', 10, usuario='u'); db.session.commit()
+    registrar_movimiento(1, 1, '8', 'SALIDA', 3, usuario='u'); db.session.commit()
+
+    balance, totales = construir_balance_colegio(1)
+    assert len(balance) == 1
+    b = balance[0]
+    assert b['entradas'] == 10
+    assert b['salidas'] == 3
+    assert b['stock_actual'] == 7              # 10 - 3
+    assert b['valor_inventario'] == 7 * 40000  # talla 8 → grupo 6-8 → $40.000
+    assert totales['valor_inventario'] == 280000

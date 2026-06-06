@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, Plus, X, Printer, AlertTriangle, Activity, ChevronRight, Trash2, Edit2, Check } from 'lucide-react'
+import { Package, Plus, X, Printer, AlertTriangle, Activity, ChevronRight, Trash2, Edit2, Check, BarChart3 } from 'lucide-react'
 
 const TALLAS_NORMAL = ['2', '4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'Única']
 const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
@@ -65,6 +65,13 @@ export default function StockView() {
   const [actFiltroUsuario, setActFiltroUsuario] = useState('')
   const [loadingAct, setLoadingAct]         = useState(false)
 
+  // Reportes / balance de prendas
+  const [balance, setBalance]       = useState([])
+  const [totalesBal, setTotalesBal] = useState(null)
+  const [loadingBal, setLoadingBal] = useState(false)
+  const [repDesde, setRepDesde]     = useState('')
+  const [repHasta, setRepHasta]     = useState('')
+
   useEffect(() => { cargarInicial() }, [])
 
   useEffect(() => {
@@ -73,7 +80,25 @@ export default function StockView() {
 
   useEffect(() => {
     if (tab === 'actividad') cargarActividad()
-  }, [tab, actFiltroUsuario])
+    if (tab === 'reportes' && colegioSel) cargarBalance()
+  }, [tab, actFiltroUsuario, colegioSel])
+
+  async function cargarBalance() {
+    if (!colegioSel) return
+    setLoadingBal(true)
+    try {
+      const params = { colegio_id: colegioSel.id_colegio }
+      if (repDesde) params.desde = repDesde
+      if (repHasta) params.hasta = repHasta
+      const res = await api.get('/stock/balance', { params })
+      setBalance(res.data.balance || [])
+      setTotalesBal(res.data.totales || null)
+    } catch {
+      toast.error('Error cargando balance')
+    } finally {
+      setLoadingBal(false)
+    }
+  }
 
   async function cargarInicial() {
     try {
@@ -304,6 +329,12 @@ export default function StockView() {
           }`}>
           <Package size={15} /> Inventario
         </button>
+        <button onClick={() => setTab('reportes')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+            tab === 'reportes' ? 'border-emerald-500 text-emerald-600 bg-emerald-50' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}>
+          <BarChart3 size={15} /> Reportes
+        </button>
         {isAdmin() && (
           <button onClick={() => setTab('actividad')}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
@@ -468,6 +499,87 @@ export default function StockView() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ════════════════ TAB REPORTES ════════════════ */}
+      {tab === 'reportes' && (
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="card flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Colegio</label>
+              <select value={colegioSel?.id_colegio || ''}
+                onChange={e => setColegioSel(colegios.find(c => String(c.id_colegio) === e.target.value) || null)}
+                className="input-field text-sm">
+                <option value="">Seleccionar...</option>
+                {colegios.map(c => <option key={c.id_colegio} value={c.id_colegio}>{c.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Desde <span className="text-gray-400">(opcional)</span></label>
+              <input type="date" value={repDesde} onChange={e => setRepDesde(e.target.value)} className="input-field text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Hasta <span className="text-gray-400">(opcional)</span></label>
+              <input type="date" value={repHasta} onChange={e => setRepHasta(e.target.value)} className="input-field text-sm" />
+            </div>
+            <button onClick={cargarBalance} className="btn-primary text-sm">Ver reporte</button>
+          </div>
+
+          {!colegioSel ? (
+            <div className="card text-center py-12 text-gray-400">
+              <BarChart3 className="mx-auto mb-3 opacity-30" size={44} />
+              Elige un colegio para ver su balance de prendas.
+            </div>
+          ) : loadingBal ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin h-8 w-8 border-b-2 border-emerald-600 rounded-full" />
+            </div>
+          ) : (
+            <>
+              {/* Totales */}
+              {totalesBal && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="card text-center"><p className="text-xs text-gray-500">Entraron</p><p className="text-2xl font-bold text-green-600">{totalesBal.entradas}</p></div>
+                  <div className="card text-center"><p className="text-xs text-gray-500">Salieron</p><p className="text-2xl font-bold text-red-500">{totalesBal.salidas}</p></div>
+                  <div className="card text-center"><p className="text-xs text-gray-500">En stock</p><p className="text-2xl font-bold text-gray-800">{totalesBal.stock_actual}</p></div>
+                  <div className="card text-center"><p className="text-xs text-gray-500">Valor inventario</p><p className="text-xl font-bold text-emerald-600">${(totalesBal.valor_inventario || 0).toLocaleString('es-CO')}</p></div>
+                </div>
+              )}
+
+              {/* Tabla por prenda */}
+              <div className="card overflow-x-auto">
+                {balance.length === 0 ? (
+                  <p className="text-center py-8 text-gray-400">Sin movimientos para este colegio en el periodo.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b">
+                        <th className="py-2 pr-3">Prenda</th>
+                        <th className="py-2 px-3 text-center text-green-600">Entraron</th>
+                        <th className="py-2 px-3 text-center text-red-500">Salieron</th>
+                        <th className="py-2 px-3 text-center">Quedan</th>
+                        <th className="py-2 pl-3 text-right">Valor inventario</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {balance.map(b => (
+                        <tr key={b.id_producto} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-2 pr-3 font-medium text-gray-800">{b.producto_nombre}</td>
+                          <td className="py-2 px-3 text-center text-green-600 font-semibold">{b.entradas}</td>
+                          <td className="py-2 px-3 text-center text-red-500 font-semibold">{b.salidas}</td>
+                          <td className={`py-2 px-3 text-center font-semibold ${b.stock_actual === 0 ? 'text-red-400' : b.stock_actual < 5 ? 'text-amber-500' : 'text-gray-800'}`}>{b.stock_actual}</td>
+                          <td className="py-2 pl-3 text-right text-gray-700">${(b.valor_inventario || 0).toLocaleString('es-CO')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <p className="text-xs text-gray-400">Ordenado por más vendidas. El balance sale del kardex (libro de movimientos), así siempre cuadra.</p>
+            </>
+          )}
         </div>
       )}
 

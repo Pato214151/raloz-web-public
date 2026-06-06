@@ -8,7 +8,8 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.models import Stock, Colegio, Producto, MovimientoInventario
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
-from app.utils.inventario import registrar_movimiento, construir_catalogo_colegio
+from app.utils.inventario import registrar_movimiento, construir_catalogo_colegio, construir_balance_colegio
+from datetime import datetime
 
 stock_bp = Blueprint('stock', __name__)
 
@@ -338,4 +339,44 @@ def catalogo_colegio():
         'id_colegio': colegio_id,
         'catalogo': catalogo,
         'total_unidades': sum(c['total'] for c in catalogo),
+    }), 200
+
+
+@stock_bp.route('/balance', methods=['GET'])
+@jwt_required()
+def balance_colegio():
+    """
+    Balance de prendas de un colegio: por prenda entraron/salieron/quedan
+    + valor del inventario. Opcional: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+    para acotar entradas/salidas a un periodo.
+    """
+    colegio_id = request.args.get('colegio_id', type=int)
+    if not colegio_id:
+        return jsonify({'error': 'colegio_id requerido'}), 400
+    colegio = Colegio.query.get(colegio_id)
+    if not colegio:
+        return jsonify({'error': 'Colegio no encontrado'}), 404
+
+    def _parse(arg, fin=False):
+        v = request.args.get(arg)
+        if not v:
+            return None
+        try:
+            d = datetime.strptime(v, '%Y-%m-%d')
+            return d.replace(hour=23, minute=59, second=59) if fin else d
+        except ValueError:
+            return None
+
+    desde = _parse('desde')
+    hasta = _parse('hasta', fin=True)
+
+    balance, totales = construir_balance_colegio(colegio_id, desde, hasta)
+
+    return jsonify({
+        'colegio': colegio.nombre,
+        'id_colegio': colegio_id,
+        'desde': request.args.get('desde'),
+        'hasta': request.args.get('hasta'),
+        'balance': balance,
+        'totales': totales,
     }), 200
