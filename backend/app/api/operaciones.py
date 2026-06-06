@@ -51,7 +51,7 @@ def tablero():
             'cliente': f.nombre_cliente, 'colegio': f.nombre_colegio,
             'detalle': detalle,
             'fecha': f.fecha_pedido.isoformat() if f.fecha_pedido else None,
-            'link': '/fabricacion',
+            'link': '/operaciones?tab=fabricacion',
         })
 
     # 3) Pedidos web (factura canal WEB por entregar / empacada)
@@ -69,7 +69,7 @@ def tablero():
             'colegio': fa.colegio.nombre if fa.colegio else None,
             'detalle': fa.estado_entrega,
             'fecha': fa.fecha_factura.isoformat() if fa.fecha_factura else None,
-            'link': '/pedidos-online',
+            'link': '/operaciones?tab=web',
         })
 
     por_preparar = [i for i in items if i['etapa'] == 'por_preparar']

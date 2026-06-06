@@ -20,7 +20,7 @@ import CuentasPorCobrar from './components/reportes/CuentasPorCobrar'
 import Reportes from './components/reportes/Reportes'
 import Configuracion from './components/configuracion/Configuracion'
 import Tareas from './components/tareas/Tareas'
-import CentroOperaciones from './components/operaciones/CentroOperaciones'
+import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
 import PedidosFabricacion from './components/fabricacion/PedidosFabricacion'
 import StockPendienteFab from './components/fabricacion/StockPendienteFab'
@@ -87,7 +87,7 @@ export default function App() {
             <ProtectedRoute roles={['administrador']}><Usuarios /></ProtectedRoute>
           } />
           <Route path="tareas" element={<Tareas />} />
-          <Route path="operaciones" element={<CentroOperaciones />} />
+          <Route path="operaciones" element={<Operaciones />} />
           <Route path="pedidos-online" element={<PedidosOnline />} />
           <Route path="fabricacion" element={<PedidosFabricacion />} />
           <Route path="fabricacion/stock" element={<StockPendienteFab />} />

@@ -33,12 +33,7 @@ const menuGroups = [
     groupId: 'operaciones',
     label: 'Operaciones',
     items: [
-      { path: '/operaciones',       label: 'Centro (todo)',      icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/pedidos-online',    label: 'Pedidos Web',        icon: ShoppingCart, roles: ['administrador', 'vendedor'] },
-      { path: '/fabricacion',       label: 'Fabricación',        icon: Scissors,     roles: ['administrador', 'vendedor'] },
-      { path: '/fabricacion/stock', label: 'Stock Fabricación',  icon: Hammer,       roles: ['administrador', 'vendedor'] },
-      { path: '/pendientes',        label: 'Pendientes',         icon: Package,      roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/empaque',           label: 'Empaque',            icon: PackageCheck, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/operaciones',       label: 'Operaciones',        icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
