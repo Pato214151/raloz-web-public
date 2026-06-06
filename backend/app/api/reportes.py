@@ -2,7 +2,7 @@
 API de Reportes y Ventas
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required
 from app import db
 from app.models import Factura, Pago, Gasto, FacturaDetalle
@@ -11,6 +11,89 @@ from sqlalchemy import func, and_
 from datetime import date, timedelta
 
 reportes_bp = Blueprint('reportes', __name__)
+
+# IVA general Colombia (los precios YA lo incluyen → se desglosa hacia atrás)
+IVA_TASA = 0.19
+
+
+@reportes_bp.route('/contadora', methods=['GET'])
+@rol_requerido('administrador')
+def reporte_contadora():
+    """
+    Excel para la contadora: ventas del periodo con datos del cliente,
+    cómo pagó y el IVA desglosado (base gravable + IVA 19% + total).
+    Params: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD (default: mes actual).
+    """
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from app.utils.validators import validate_date
+
+    hoy = date.today()
+    desde = validate_date(request.args.get('desde', '')) or hoy.replace(day=1)
+    hasta = validate_date(request.args.get('hasta', '')) or hoy
+
+    facturas = Factura.query.filter(
+        Factura.fecha_factura >= desde,
+        Factura.fecha_factura <= hasta,
+        Factura.estado != 'ANULADA',
+    ).order_by(Factura.fecha_factura, Factura.numero_factura).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Ventas IVA'
+
+    headers = ['N° Factura', 'Fecha', 'Cliente', 'NIT/CC', 'Teléfono', 'Email',
+               'Canal', 'Método de pago', 'Estado', 'Base gravable', 'IVA 19%', 'Total']
+    ws.append(headers)
+    hdr_fill = PatternFill('solid', fgColor='1F4E78')
+    for c in ws[1]:
+        c.font = Font(bold=True, color='FFFFFF')
+        c.fill = hdr_fill
+        c.alignment = Alignment(horizontal='center')
+
+    tot_base = tot_iva = tot_total = 0.0
+    for f in facturas:
+        total = float(f.total or 0)
+        base = round(total / (1 + IVA_TASA), 2)
+        iva = round(total - base, 2)
+        tot_base += base
+        tot_iva += iva
+        tot_total += total
+        ws.append([
+            f.numero_factura,
+            f.fecha_factura.isoformat() if f.fecha_factura else '',
+            f.cliente_nombre or '',
+            f.cliente_nit or '',
+            f.cliente_telefono or '',
+            f.cliente_email or '',
+            f.canal or 'PRESENCIAL',
+            f.metodo_pago or '',
+            f.estado or '',
+            base, iva, total,
+        ])
+
+    ws.append([])
+    ws.append(['', '', '', '', '', '', '', '', 'TOTALES',
+               round(tot_base, 2), round(tot_iva, 2), round(tot_total, 2)])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+
+    anchos = [16, 12, 28, 14, 14, 26, 12, 16, 12, 15, 13, 14]
+    for col, w in zip('ABCDEFGHIJKL', anchos):
+        ws.column_dimensions[col].width = w
+    for row in ws.iter_rows(min_row=2, min_col=10, max_col=12):
+        for cell in row:
+            cell.number_format = '#,##0'
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    nombre = f'ventas_iva_{desde.isoformat()}_a_{hasta.isoformat()}.xlsx'
+    return send_file(
+        buf, as_attachment=True, download_name=nombre,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
 
 
 @reportes_bp.route('/ventas', methods=['GET'])

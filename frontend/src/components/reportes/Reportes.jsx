@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { Printer, Download } from 'lucide-react'
+import { Printer, Download, FileSpreadsheet } from 'lucide-react'
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16']
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
@@ -117,6 +117,26 @@ export default function Reportes() {
     toast.success('CSV descargado')
   }
 
+  const exportarContadora = async () => {
+    try {
+      const res = await api.get('/reportes/contadora', {
+        params: { desde: fechaDesde, hasta: fechaHasta },
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ventas_iva_${fechaDesde}_a_${fechaHasta}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Reporte para contadora descargado')
+    } catch {
+      toast.error('Error generando el reporte')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Reportes</h2>
@@ -154,7 +174,13 @@ export default function Reportes() {
             <button onClick={exportarCSV} className="btn-secondary flex items-center gap-1">
               <Download size={16} /> CSV
             </button>
+            <button onClick={exportarContadora} className="btn-primary flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700">
+              <FileSpreadsheet size={16} /> Para contadora (Excel + IVA)
+            </button>
           </div>
+          <p className="text-xs text-gray-400 -mt-2">
+            "Para contadora": Excel del periodo con cliente, NIT, cómo pagó y el IVA (19%) desglosado, listo para enviarle.
+          </p>
 
           {reporte && (
             <>

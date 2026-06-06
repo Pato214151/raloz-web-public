@@ -24,5 +24,8 @@ marshmallow==3.23.1
 # PDF generation
 reportlab==4.2.5
 
+# Excel (reporte para contadora)
+openpyxl==3.1.2
+
 # Production
 gunicorn==23.0.0
