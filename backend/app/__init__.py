@@ -159,64 +159,13 @@ def create_app(config_name=None):
     app.register_blueprint(tareas_bp, url_prefix='/api/tareas')
     app.register_blueprint(tienda_bp, url_prefix='/api/tienda')
 
-    # ── Migraciones automáticas al arrancar ──
-    # pool_pre_ping ya está activo; connect_args agrega timeout de red explícito
+    # ── Config de conexión (timeout de red explícito a Supabase) ──
+    # pool_pre_ping ya está activo; connect_args agrega timeout de red.
+    # NOTA: todas las migraciones automáticas viven ahora en run.py (_auto_migrate),
+    # en un solo lugar, para no duplicarlas ni que diverjan.
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('connect_args', {}).update({
         'connect_timeout': 10,  # máx 10 s esperando conexión TCP a Supabase
     })
-
-    with app.app_context():
-        try:
-            from sqlalchemy import text
-            with db.engine.connect() as conn:
-                conn.execute(text(
-                    "ALTER TABLE facturas ADD COLUMN IF NOT EXISTS canal VARCHAR(20) DEFAULT 'PRESENCIAL'"
-                ))
-                conn.execute(text(
-                    "ALTER TABLE gastos ADD COLUMN IF NOT EXISTS tipo_gasto VARCHAR(20) DEFAULT 'TIENDA'"
-                ))
-                conn.execute(text(
-                    "ALTER TABLE tareas ADD COLUMN IF NOT EXISTS prioridad VARCHAR(10) DEFAULT 'MEDIA'"
-                ))
-                conn.execute(text(
-                    "UPDATE tareas SET prioridad = 'MEDIA' WHERE prioridad IS NULL"
-                ))
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS caja_diaria (
-                        id_caja          SERIAL PRIMARY KEY,
-                        fecha_apertura   TIMESTAMP NOT NULL,
-                        fecha_cierre     TIMESTAMP,
-                        usuario_apertura VARCHAR(100) NOT NULL,
-                        usuario_cierre   VARCHAR(100),
-                        monto_inicial    FLOAT DEFAULT 0,
-                        total_ventas     FLOAT DEFAULT 0,
-                        total_gastos     FLOAT DEFAULT 0,
-                        monto_esperado   FLOAT DEFAULT 0,
-                        monto_real       FLOAT DEFAULT 0,
-                        diferencia       FLOAT DEFAULT 0,
-                        estado           VARCHAR(20) DEFAULT 'ABIERTA',
-                        observaciones    TEXT
-                    )
-                """))
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS movimientos_caja (
-                        id_movimiento SERIAL PRIMARY KEY,
-                        id_caja       INTEGER NOT NULL REFERENCES caja_diaria(id_caja),
-                        tipo          VARCHAR(50) NOT NULL,
-                        concepto      VARCHAR(500),
-                        valor         FLOAT NOT NULL,
-                        metodo_pago   VARCHAR(50),
-                        referencia    VARCHAR(200),
-                        usuario       VARCHAR(100) NOT NULL,
-                        fecha_hora    TIMESTAMP DEFAULT NOW()
-                    )
-                """))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_movimientos_caja ON movimientos_caja(id_caja)"
-                ))
-                conn.commit()
-        except Exception as e:
-            logger.error('[INIT] Error en migración automática: %s', str(e), exc_info=True)
 
     # ── Health check ──
     @app.route('/api/health')
