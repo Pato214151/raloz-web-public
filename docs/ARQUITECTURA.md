@@ -219,13 +219,18 @@ web para la compra en vez de duplicarla.
 | **Ventas y pagos** | `facturas` · `pagos` · `ventas` · `caja` · `gastos` |
 | **Inventario** | `stock` · `productos` · `precios` · `colegios` |
 | **Producción** | `pendientes` · `prendas_pendientes` · `empaque` |
-| **Tienda online** | `tienda` (catálogo, reservas, pedidos, webhook MP, ~1.300 LOC) |
+| **Tienda online** | paquete `tienda/`: `publico` (catálogo, reservas, pedidos, webhook MP) + `admin` (gestión de pedidos y fabricación) |
 | **Gestión** | `clientes` · `usuarios` · `tareas` · `dashboard` · `reportes` |
 | **Plataforma** | `auth` (JWT, OAuth, logout) · `metodos_pago` |
 
 Patrón: **1 blueprint por dominio**, modelos SQLAlchemy, decoradores de
 autorización (`@rol_requerido`, `@admin_requerido`) y utilidades compartidas
 (`tallas`, `email_service`, `validators`, `decorators`, `whatsapp_notify`).
+
+El dominio más grande, `tienda`, es un **paquete** dividido por responsabilidad
+(`publico.py` / `admin.py`), con la lógica de negocio (crear factura, clasificar
+items, fabricación) en la capa `app/services/facturacion_web.py` — reutilizada
+tanto por el webhook público como por los endpoints admin.
 
 ---
 
@@ -235,7 +240,9 @@ Auditoría de seguridad realizada y corregida (jun 2026):
 
 - ✅ **Autenticación:** JWT (acceso 2 h, refresco 30 d), bcrypt, bloqueo de
   cuenta tras 5 intentos, **logout real** con lista negra de tokens.
-- ✅ **Autorización:** rutas por rol; datos financieros solo para administrador.
+- ✅ **Autorización:** rutas por rol (decoradores `@rol_requerido`); datos
+  financieros solo para administrador; gestión de pedidos online restringida a
+  **administrador + vendedor**.
 - ✅ **Pagos:** precio calculado en servidor; webhook de MercadoPago con
   **firma HMAC**; idempotencia ante reintentos.
 - ✅ **Hardening:** rate limiting, CORS restringido, headers de seguridad
@@ -258,7 +265,7 @@ flowchart LR
 
 | Componente | Plataforma | Notas |
 |---|---|---|
-| Backend + Panel admin | Render | Gunicorn; migraciones SQL en el arranque |
+| Backend + Panel admin | Render | Gunicorn; migraciones versionadas en el arranque (`schema_migrations`) |
 | Tienda pública | Cloudflare Pages | Sin build; cache-busting por versión |
 | Base de datos | Supabase (PostgreSQL) | SSL obligatorio |
 | Pagos | MercadoPago | Producción + sandbox |
