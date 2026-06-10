@@ -53,6 +53,15 @@ def create_app(config_name=None):
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
     app.config['JWT_TOKEN_LOCATION'] = ['headers']
 
+    # ── Guard de secretos ──
+    # Si se está corriendo con los valores 'dev' por defecto (falta el env en
+    # Render), avisar FUERTE en los logs. No rompe el arranque, pero deja
+    # rastro claro de una configuración insegura.
+    if app.config['SECRET_KEY'] == 'dev-secret-key-cambiar':
+        logger.critical('[SEGURIDAD] SECRET_KEY usa el valor por defecto — configúralo en el entorno')
+    if app.config['JWT_SECRET_KEY'] == 'jwt-dev-secret-cambiar':
+        logger.critical('[SEGURIDAD] JWT_SECRET_KEY usa el valor por defecto — configúralo en el entorno')
+
     # ── Inicializar extensiones ──
     db.init_app(app)
     migrate.init_app(app, db)
@@ -88,6 +97,20 @@ def create_app(config_name=None):
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         # HSTS: fuerza HTTPS en el navegador (Render sirve siempre por HTTPS)
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        # CSP en modo REPORT-ONLY: no bloquea nada, solo reporta violaciones en la
+        # consola del navegador. Permite afinar la política contra el panel React +
+        # Google OAuth sin riesgo de romperlo; cuando se confirme que no genera
+        # reportes legítimos, se puede cambiar a 'Content-Security-Policy' (enforce).
+        response.headers['Content-Security-Policy-Report-Only'] = (
+            "default-src 'self'; "
+            "script-src 'self' https://accounts.google.com https://apis.google.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "connect-src 'self' https://accounts.google.com; "
+            "frame-src https://accounts.google.com; "
+            "frame-ancestors 'none'"
+        )
         return response
 
     # ── JWT Error Handlers (sin hooks, sin callbacks) ──
