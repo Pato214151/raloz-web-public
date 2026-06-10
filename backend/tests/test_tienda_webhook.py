@@ -11,7 +11,7 @@ from app.models import (
     Colegio, Producto, Stock, Reserva, PedidoWeb, Factura,
     Pago, PedidoFabricacion, StockPendienteFabricacion,
 )
-from app.api import tienda
+from app.api.tienda import publico as tienda
 
 
 class _FakeResponse:
@@ -197,7 +197,7 @@ def test_reembolso_de_pedido_facturado_avisa_y_no_toca_stock(tienda_client, ento
     Reembolso de una venta ya facturada: avisa al admin, NO devuelve stock ni
     anula la factura (la prenda física puede no haber vuelto). Marca 'reembolsado'.
     """
-    from app.api import tienda
+    from app.api.tienda import publico as tienda
     avisos = []
     monkeypatch.setattr(tienda, '_avisar_admin', lambda texto: avisos.append(texto))
 
@@ -224,7 +224,7 @@ def test_reembolso_de_pedido_facturado_avisa_y_no_toca_stock(tienda_client, ento
 
 def test_reembolso_repetido_no_avisa_dos_veces(tienda_client, entorno_mp, monkeypatch):
     """MP reintenta el webhook de reembolso: el admin debe recibir UN solo aviso."""
-    from app.api import tienda
+    from app.api.tienda import publico as tienda
     avisos = []
     monkeypatch.setattr(tienda, '_avisar_admin', lambda texto: avisos.append(texto))
 

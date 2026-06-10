@@ -146,3 +146,28 @@ ENDPOINTS_ADMIN = [
 def test_endpoints_admin_sin_token_dan_401(client, metodo, url):
     resp = client.open(url, method=metodo)
     assert resp.status_code == 401, f'{metodo} {url} no exige JWT (status {resp.status_code})'
+
+
+# ── Control de rol: pedidos online → administrador + vendedor ──────
+
+def _token(tienda_app, rol):
+    from flask_jwt_extended import create_access_token
+    with tienda_app.app_context():
+        return create_access_token(identity='1', additional_claims={'usuario': 'tester', 'rol': rol})
+
+
+@pytest.mark.parametrize('metodo,url', ENDPOINTS_ADMIN)
+def test_cajero_no_puede_gestionar_pedidos(tienda_app, client, metodo, url):
+    """El cajero queda fuera: debe recibir 403 en los endpoints admin de tienda."""
+    headers = {'Authorization': f'Bearer {_token(tienda_app, "cajero")}'}
+    resp = client.open(url, method=metodo, headers=headers)
+    assert resp.status_code == 403, f'{metodo} {url} dejó pasar a cajero (status {resp.status_code})'
+
+
+@pytest.mark.parametrize('rol', ['administrador', 'vendedor'])
+def test_admin_y_vendedor_pasan_la_autorizacion(tienda_app, client, rol):
+    """admin y vendedor superan la capa de auth (no 401/403); el 404 por falta de
+    datos confirma que llegaron al handler."""
+    headers = {'Authorization': f'Bearer {_token(tienda_app, rol)}'}
+    resp = client.open('/api/tienda/admin/pedidos/999', method='GET', headers=headers)
+    assert resp.status_code not in (401, 403), f'{rol} fue bloqueado (status {resp.status_code})'
