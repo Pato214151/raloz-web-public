@@ -16,6 +16,7 @@ import requests
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
 
 logger = logging.getLogger(__name__)
 from app import db, limiter
@@ -242,6 +243,49 @@ def reservar_producto():
 
 
 # ══════════════════════════════════════════════════════════════
+# LIBERAR RESERVAS — devuelve stock cuando el cliente quita
+# items del carrito (antes quedaba secuestrado hasta 30 min).
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/reservar/liberar', methods=['POST'])
+@limiter.limit("30 per minute")
+def liberar_reservas():
+    """
+    Cancela reservas activas de una sesión del carrito.
+    El session_id (UUID secreto del navegador) actúa como credencial:
+    solo permite liberar las reservas de esa misma sesión.
+    Si se envía ids_reserva, libera solo esas; si no, todas las de la sesión.
+    """
+    data = request.get_json() or {}
+    session_id = (data.get('session_id') or '').strip()
+    if not session_id:
+        return jsonify({'error': 'session_id requerido'}), 400
+
+    query = Reserva.query.filter(
+        Reserva.session_id == session_id,
+        Reserva.estado == 'activa',
+    )
+
+    ids_reserva = data.get('ids_reserva')
+    if ids_reserva:
+        try:
+            ids_reserva = [int(x) for x in ids_reserva]
+        except (ValueError, TypeError):
+            return jsonify({'error': 'ids_reserva inválidos'}), 400
+        query = query.filter(Reserva.id_reserva.in_(ids_reserva))
+
+    liberadas = 0
+    for reserva in query.all():
+        reserva.estado = 'cancelada'
+        liberadas += 1
+    db.session.commit()
+
+    if liberadas:
+        logger.info('[RESERVA] %d reserva(s) liberadas para sesión %s…', liberadas, session_id[:8])
+    return jsonify({'ok': True, 'liberadas': liberadas}), 200
+
+
+# ══════════════════════════════════════════════════════════════
 # CREAR PEDIDO — genera preferencia de MercadoPago
 # ══════════════════════════════════════════════════════════════
 
@@ -289,7 +333,11 @@ def crear_pedido():
             return jsonify({'error': 'Colegio no encontrado'}), 404
         nombre_colegio_str = colegio.nombre
 
-    print(f"[PEDIDO] id_colegio={id_colegio_raw} colegio={nombre_colegio_str} abono={abono_porcentaje}% entrega={tipo_entrega} items={[(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido','normal')) for i in items]}", flush=True)
+    logger.info(
+        '[PEDIDO] id_colegio=%s colegio=%s abono=%s%% entrega=%s items=%s',
+        id_colegio_raw, nombre_colegio_str, abono_porcentaje, tipo_entrega,
+        [(i.get('id_producto'), i.get('talla'), i.get('tipo_pedido', 'normal')) for i in items],
+    )
 
     total_orden = 0
     items_validados = []
@@ -800,7 +848,34 @@ def mp_webhook():
                 logger.error('[WEBHOOK] Error fabricacion: %s', str(e), exc_info=True)
                 db.session.rollback()
 
+        elif estado_mp in ('refunded', 'charged_back') and pedido.id_factura:
+            # Reembolso / contracargo de un pedido YA facturado (venta completada).
+            # OJO: MercadoPago devolvió el DINERO, pero la prenda física no
+            # necesariamente volvió al local. Por eso NO tocamos la factura ni el
+            # stock automáticamente: avisamos al admin para que, cuando reciba la
+            # prenda de vuelta, anule la factura en el panel (eso sí devuelve el
+            # stock y actualiza la tienda). Marcamos 'reembolsado' para que el
+            # reintento del webhook no mande el aviso dos veces.
+            if pedido.estado != 'reembolsado':
+                factura = Factura.query.get(pedido.id_factura)
+                num = factura.numero_factura if factura else '?'
+                logger.warning('[WEBHOOK] %s: %s de pedido YA facturado (factura=%s)',
+                               referencia, estado_mp, num)
+                accion = 'reembolsó' if estado_mp == 'refunded' else 'hizo contracargo (disputa) sobre'
+                monto = f"${int(pedido.total):,}".replace(',', '.')
+                _avisar_admin(
+                    f'OJO: MercadoPago {accion} el pedido {referencia} '
+                    f'(factura {num}, {monto}). El dinero ya se devolvió. '
+                    f'Cuando el cliente devuelva la prenda, anula la factura en el '
+                    f'panel para regresar el stock a la tienda.'
+                )
+                pedido.estado = 'reembolsado'
+            db.session.commit()
+
         elif estado_mp in ('rejected', 'cancelled', 'refunded', 'charged_back'):
+            # Pago que nunca llegó a completarse (rechazado/cancelado, o reembolso
+            # de un pedido sin factura). Liberamos las reservas para devolver el
+            # stock disponible de inmediato.
             logger.info('[WEBHOOK] Pedido %s → fallido (%s)', pedido.id_pedido, estado_mp)
             pedido.estado = 'fallido'
             try:
@@ -830,14 +905,9 @@ def mp_webhook():
 # ══════════════════════════════════════════════════════════════
 
 @tienda_bp.route('/admin/pedidos', methods=['GET'])
+@jwt_required()
 def listar_pedidos_admin():
     """Lista todos los pedidos online con filtros. Requiere JWT."""
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
     estado  = request.args.get('estado', '').strip()
     limit   = min(request.args.get('limit', 50, type=int), 200)
     offset  = request.args.get('offset', 0, type=int)
@@ -879,14 +949,9 @@ def listar_pedidos_admin():
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>', methods=['GET'])
+@jwt_required()
 def detalle_pedido_admin(id_pedido):
     """Detalle de un pedido con sus items. Requiere JWT."""
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
     pedido = PedidoWeb.query.get_or_404(id_pedido)
     d = pedido.to_dict()
 
@@ -905,14 +970,9 @@ def detalle_pedido_admin(id_pedido):
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/marcar-pagado', methods=['POST'])
+@jwt_required()
 def marcar_pedido_pagado_manual(id_pedido):
     """Marca un pedido como pagado manualmente (cuando el webhook de MP falló). Requiere JWT."""
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
     pedido = PedidoWeb.query.get_or_404(id_pedido)
 
     if pedido.estado == 'pagado':
@@ -950,14 +1010,9 @@ def marcar_pedido_pagado_manual(id_pedido):
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/generar-factura', methods=['POST'])
+@jwt_required()
 def generar_factura_pedido(id_pedido):
     """Crea la factura para un pedido pagado que no la tiene aún (reintento tras error del webhook)."""
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
     pedido = PedidoWeb.query.get_or_404(id_pedido)
     if pedido.estado != 'pagado':
         return jsonify({'error': 'Solo se puede generar factura para pedidos pagados'}), 400
@@ -988,14 +1043,9 @@ def generar_factura_pedido(id_pedido):
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/reenviar-email', methods=['POST'])
+@jwt_required()
 def reenviar_email_pedido(id_pedido):
     """Reenvía el email de confirmación con la factura PDF al cliente."""
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
     pedido = PedidoWeb.query.get_or_404(id_pedido)
     if not pedido.id_factura:
         return jsonify({'error': 'El pedido no tiene factura aún. Genera la factura primero.'}), 400
@@ -1016,14 +1066,9 @@ def reenviar_email_pedido(id_pedido):
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/actualizar-entrega', methods=['POST'])
+@jwt_required()
 def actualizar_estado_entrega(id_pedido):
     """Actualiza el estado de entrega de un pedido pagado (POR_ENTREGAR → EMPACADO → ENTREGADO)."""
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
     pedido = PedidoWeb.query.get_or_404(id_pedido)
     if not pedido.id_factura:
         return jsonify({'error': 'El pedido no tiene factura aún'}), 400
@@ -1066,15 +1111,11 @@ def actualizar_estado_entrega(id_pedido):
 
 
 @tienda_bp.route('/admin/pedidos/<int:id_pedido>/factura.pdf', methods=['GET'])
+@jwt_required()
 def descargar_factura_admin(id_pedido):
     """Genera y descarga el PDF de la factura de un pedido. Requiere JWT."""
-    from flask_jwt_extended import verify_jwt_in_request
     from flask import Response
     from app.utils.email_service import generar_pdf_factura
-    try:
-        verify_jwt_in_request()
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
 
     pedido = PedidoWeb.query.get_or_404(id_pedido)
     if not pedido.id_factura:
@@ -1097,20 +1138,9 @@ def descargar_factura_admin(id_pedido):
 # ADMIN — Pedidos de Fabricación
 # ══════════════════════════════════════════════════════════════
 
-def _jwt_required():
-    from flask_jwt_extended import verify_jwt_in_request
-    try:
-        verify_jwt_in_request()
-        return None
-    except Exception:
-        return jsonify({'error': 'No autorizado'}), 401
-
-
 @tienda_bp.route('/admin/fabricacion/pedidos', methods=['GET'])
+@jwt_required()
 def listar_pedidos_fabricacion():
-    err = _jwt_required()
-    if err: return err
-
     estado = request.args.get('estado', '').strip()
     limit  = min(request.args.get('limit', 50, type=int), 200)
     offset = request.args.get('offset', 0, type=int)
@@ -1126,17 +1156,15 @@ def listar_pedidos_fabricacion():
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>', methods=['GET'])
+@jwt_required()
 def detalle_pedido_fabricacion(id_pedido):
-    err = _jwt_required()
-    if err: return err
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
     return jsonify({'pedido': pf.to_dict()}), 200
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-listo', methods=['POST'])
+@jwt_required()
 def marcar_pedido_fabricacion_listo(id_pedido):
-    err = _jwt_required()
-    if err: return err
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
     if pf.estado == 'entregado':
         return jsonify({'error': 'El pedido ya fue entregado'}), 400
@@ -1171,9 +1199,8 @@ def marcar_pedido_fabricacion_listo(id_pedido):
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-entregado', methods=['POST'])
+@jwt_required()
 def marcar_pedido_fabricacion_entregado(id_pedido):
-    err = _jwt_required()
-    if err: return err
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
     pf.estado = 'entregado'
     db.session.commit()
@@ -1183,10 +1210,9 @@ def marcar_pedido_fabricacion_entregado(id_pedido):
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/marcar-notificado', methods=['POST'])
+@jwt_required()
 def marcar_pedido_fabricacion_notificado(id_pedido):
     """Marca que el cliente fue notificado por WhatsApp"""
-    err = _jwt_required()
-    if err: return err
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
     pf.notificado = True
     db.session.commit()
@@ -1194,11 +1220,9 @@ def marcar_pedido_fabricacion_notificado(id_pedido):
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/registrar-saldo', methods=['POST'])
+@jwt_required()
 def registrar_saldo_fabricacion(id_pedido):
     """Registra el pago del saldo pendiente de un pedido de fabricación"""
-    err = _jwt_required()
-    if err: return err
-
     data   = request.get_json() or {}
     monto  = float(data.get('monto', 0))
     metodo = data.get('metodo', 'efectivo')
@@ -1242,10 +1266,9 @@ def registrar_saldo_fabricacion(id_pedido):
 
 
 @tienda_bp.route('/admin/fabricacion/pedidos/<int:id_pedido>/actualizar-fecha', methods=['POST'])
+@jwt_required()
 def actualizar_fecha_fabricacion(id_pedido):
     """Actualiza la fecha estimada de entrega"""
-    err = _jwt_required()
-    if err: return err
     data = request.get_json() or {}
     fecha_str = data.get('fecha_estimada', '')
     pf = PedidoFabricacion.query.get_or_404(id_pedido)
@@ -1267,20 +1290,17 @@ def actualizar_fecha_fabricacion(id_pedido):
 
 
 @tienda_bp.route('/admin/fabricacion/stock-pendiente', methods=['GET'])
+@jwt_required()
 def listar_stock_pendiente():
-    err = _jwt_required()
-    if err: return err
     items = StockPendienteFabricacion.query.filter_by(estado='pendiente')\
         .order_by(StockPendienteFabricacion.fecha_creacion.asc()).all()
     return jsonify({'items': [i.to_dict() for i in items]}), 200
 
 
 @tienda_bp.route('/admin/fabricacion/stock-pendiente/registrar', methods=['POST'])
+@jwt_required()
 def registrar_fabricacion():
     """Registra unidades fabricadas: suma stock real y actualiza pedidos afectados"""
-    err = _jwt_required()
-    if err: return err
-
     data        = request.get_json() or {}
     id_pendiente = data.get('id_pendiente')
     cantidad_fab = int(data.get('cantidad_fabricada', 0))

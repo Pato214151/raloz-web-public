@@ -21,3 +21,30 @@ def app():
         yield application
         db.session.remove()
         db.drop_all()
+
+
+@pytest.fixture
+def tienda_app():
+    """App mínima con el blueprint de tienda registrado (endpoints públicos + admin)."""
+    from app import jwt
+    application = Flask('test')
+    application.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    application.config['JWT_SECRET_KEY'] = 'test-secret'
+    application.config['RATELIMIT_ENABLED'] = False
+    db.init_app(application)
+    jwt.init_app(application)
+
+    from app.api.tienda import tienda_bp
+    application.register_blueprint(tienda_bp, url_prefix='/api/tienda')
+
+    with application.app_context():
+        db.create_all()
+        yield application
+        db.session.remove()
+        db.drop_all()
+
+
+@pytest.fixture
+def tienda_client(tienda_app):
+    return tienda_app.test_client()
