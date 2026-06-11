@@ -24,9 +24,12 @@ def listar_gastos():
     categoria = request.args.get('categoria')
     metodo_pago = request.args.get('metodo_pago')
     tipo_gasto = request.args.get('tipo_gasto')
+    estado_pago = request.args.get('estado_pago')  # 'PAGADO' | 'PENDIENTE' (deudas)
 
     query = Gasto.query
 
+    if estado_pago:
+        query = query.filter(Gasto.estado_pago == estado_pago)
     if fecha:
         fd = validate_date(fecha)
         if fd:
@@ -80,6 +83,9 @@ def crear_gasto():
     if tipo_gasto not in ('TIENDA', 'EMPRESA'):
         tipo_gasto = 'TIENDA'
 
+    # Si es una deuda (debo ahora, pago después), no cuenta como gasto hasta pagarla.
+    es_deuda = bool(data.get('es_deuda'))
+
     gasto = Gasto(
         fecha=fecha,
         descripcion=descripcion,
@@ -87,13 +93,39 @@ def crear_gasto():
         metodo_pago=sanitize_string(data.get('metodo_pago', 'EFECTIVO'), 50),
         categoria=sanitize_string(data.get('categoria', 'Otros'), 100),
         tipo_gasto=tipo_gasto,
+        estado_pago='PENDIENTE' if es_deuda else 'PAGADO',
         usuario_registro=identity['usuario'],
     )
     db.session.add(gasto)
     db.session.commit()
-    registrar_auditoria('gastos', gasto.id_gasto, 'CREAR', f'Gasto: {descripcion} ${valor:,.0f}')
+    accion = 'CREAR_DEUDA' if es_deuda else 'CREAR'
+    registrar_auditoria('gastos', gasto.id_gasto, accion, f'{"Deuda" if es_deuda else "Gasto"}: {descripcion} ${valor:,.0f}')
 
-    return jsonify({'message': 'Gasto registrado', 'gasto': gasto.to_dict()}), 201
+    return jsonify({'message': 'Deuda registrada' if es_deuda else 'Gasto registrado', 'gasto': gasto.to_dict()}), 201
+
+
+@gastos_bp.route('/<int:id_gasto>/pagar', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'cajero')
+def pagar_deuda(id_gasto):
+    """Marca una deuda pendiente como pagada. Ahí se convierte en gasto real,
+    fechado el día del pago (cuenta en el balance de ese mes)."""
+    gasto = Gasto.query.get_or_404(id_gasto)
+    if (gasto.estado_pago or 'PAGADO') != 'PENDIENTE':
+        return jsonify({'error': 'Este gasto no es una deuda pendiente'}), 400
+
+    data = request.get_json() or {}
+    hoy = date.today()
+    gasto.estado_pago = 'PAGADO'
+    gasto.fecha_pago = hoy
+    gasto.fecha = hoy  # cuenta como gasto del día en que se paga
+    metodo = sanitize_string(data.get('metodo_pago', ''), 50)
+    if metodo:
+        gasto.metodo_pago = metodo
+    db.session.commit()
+    registrar_auditoria('gastos', id_gasto, 'PAGAR_DEUDA',
+                        f'Deuda pagada: {gasto.descripcion} ${gasto.valor:,.0f}')
+    return jsonify({'message': 'Deuda marcada como pagada', 'gasto': gasto.to_dict()}), 200
 
 
 @gastos_bp.route('/<int:id_gasto>', methods=['PUT'])

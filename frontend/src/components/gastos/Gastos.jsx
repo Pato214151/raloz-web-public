@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, Wallet, X, Edit, Printer, Store, Briefcase, AlertTriangle } from 'lucide-react'
+import { Plus, Wallet, X, Edit, Printer, Store, Briefcase, AlertTriangle, CheckCircle } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -51,6 +51,7 @@ export default function Gastos() {
     metodo_pago: 'EFECTIVO',
     categoria: '',
     tipo_gasto: 'EMPRESA',
+    es_deuda: false,
     fecha: new Date().toISOString().split('T')[0]
   })
 
@@ -95,6 +96,7 @@ export default function Gastos() {
         metodo_pago: 'EFECTIVO',
         categoria: '',
         tipo_gasto: 'EMPRESA',
+        es_deuda: false,
         fecha: new Date().toISOString().split('T')[0]
       })
     }
@@ -115,8 +117,8 @@ export default function Gastos() {
         await api.put(`/gastos/${editingId}`, datos)
         toast.success('Gasto actualizado')
       } else {
-        await api.post('/gastos', datos)
-        toast.success('Gasto registrado')
+        const res = await api.post('/gastos', datos)
+        toast.success(res.data?.message || 'Gasto registrado')
       }
       closeForm()
       loadGastos()
@@ -136,23 +138,40 @@ export default function Gastos() {
     }
   }
 
+  const pagarDeuda = async (g) => {
+    if (!confirm(`¿Marcar como PAGADA la deuda "${g.descripcion}" (${formatMoney(g.valor)})? Se registrará como gasto de hoy.`)) return
+    try {
+      await api.post(`/gastos/${g.id_gasto}/pagar`, { metodo_pago: g.metodo_pago })
+      toast.success('Deuda pagada — ya cuenta como gasto de hoy')
+      loadGastos()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al pagar la deuda')
+    }
+  }
+
   // Filtrar por búsqueda local
   const gastosFiltered = buscarDesc.trim()
     ? gastos.filter(g => g.descripcion?.toLowerCase().includes(buscarDesc.toLowerCase()))
     : gastos
-  const totalGastosFiltered = gastosFiltered.reduce((sum, g) => sum + (g.valor || 0), 0)
 
-  // Cálculos
-  const totalGastos = gastosFiltered.reduce((sum, g) => sum + (g.valor || 0), 0)
-  const totalTienda = gastosFiltered.filter(g => (g.tipo_gasto || 'TIENDA') === 'TIENDA').reduce((sum, g) => sum + g.valor, 0)
-  const totalEmpresa = gastosFiltered.filter(g => g.tipo_gasto === 'EMPRESA').reduce((sum, g) => sum + g.valor, 0)
+  // Una deuda (estado PENDIENTE) NO cuenta como gasto hasta pagarse.
+  const esDeuda = (g) => (g.estado_pago || 'PAGADO') === 'PENDIENTE'
+  const gastosReales = gastosFiltered.filter(g => !esDeuda(g))
+  const deudas = gastosFiltered.filter(esDeuda)
+  const totalDeudas = deudas.reduce((sum, g) => sum + (g.valor || 0), 0)
+  const totalGastosFiltered = gastosReales.reduce((sum, g) => sum + (g.valor || 0), 0)
+
+  // Cálculos (solo gastos reales; las deudas pendientes van aparte)
+  const totalGastos = gastosReales.reduce((sum, g) => sum + (g.valor || 0), 0)
+  const totalTienda = gastosReales.filter(g => (g.tipo_gasto || 'TIENDA') === 'TIENDA').reduce((sum, g) => sum + g.valor, 0)
+  const totalEmpresa = gastosReales.filter(g => g.tipo_gasto === 'EMPRESA').reduce((sum, g) => sum + g.valor, 0)
   const gastosPorCategoria = CATEGORIAS.map(cat => ({
     categoria: cat,
-    total: gastosFiltered.filter(g => g.categoria === cat).reduce((sum, g) => sum + g.valor, 0)
+    total: gastosReales.filter(g => g.categoria === cat).reduce((sum, g) => sum + g.valor, 0)
   })).filter(x => x.total > 0)
   const gastosPorMetodo = METODOS.map(met => ({
     metodo: met,
-    total: gastosFiltered.filter(g => g.metodo_pago === met).reduce((sum, g) => sum + g.valor, 0)
+    total: gastosReales.filter(g => g.metodo_pago === met).reduce((sum, g) => sum + g.valor, 0)
   })).filter(x => x.total > 0)
 
   if (loading && gastos.length === 0) {
@@ -174,7 +193,7 @@ export default function Gastos() {
         <div className="card text-center">
           <p className="text-xs text-gray-500 mb-1">Total Gastos</p>
           <p className="text-2xl font-bold text-red-600">{formatMoney(totalGastos)}</p>
-          <p className="text-xs text-gray-400 mt-1">{gastosFiltered.length} registros</p>
+          <p className="text-xs text-gray-400 mt-1">{gastosReales.length} registros</p>
         </div>
         <div className="card text-center border-l-4 border-orange-400">
           <div className="flex items-center justify-center gap-1 mb-1">
@@ -195,10 +214,17 @@ export default function Gastos() {
         <div className="card text-center">
           <p className="text-xs text-gray-500 mb-1">Gasto Promedio</p>
           <p className="text-2xl font-bold text-gray-700">
-            {gastosFiltered.length > 0 ? formatMoney(totalGastos / gastosFiltered.length) : '$0'}
+            {gastosReales.length > 0 ? formatMoney(totalGastos / gastosReales.length) : '$0'}
           </p>
           <p className="text-xs text-gray-400 mt-1">por registro</p>
         </div>
+        {deudas.length > 0 && (
+          <div className="card text-center border-l-4 border-purple-400">
+            <p className="text-xs text-purple-600 font-semibold mb-1">Deudas pendientes</p>
+            <p className="text-2xl font-bold text-purple-600">{formatMoney(totalDeudas)}</p>
+            <p className="text-xs text-gray-400 mt-1">{deudas.length} por pagar · no cuentan como gasto</p>
+          </div>
+        )}
       </div>
 
       {/* Filtros */}
@@ -301,9 +327,12 @@ export default function Gastos() {
             </thead>
             <tbody>
               {gastosFiltered.map(g => (
-                <tr key={g.id_gasto} className="border-b border-gray-50 hover:bg-gray-50">
+                <tr key={g.id_gasto} className={`border-b border-gray-50 hover:bg-gray-50 ${esDeuda(g) ? 'bg-purple-50/50' : ''}`}>
                   <td className="px-4 py-3 font-medium text-gray-900">{g.fecha}</td>
-                  <td className="px-4 py-3 text-gray-700">{g.descripcion}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {g.descripcion}
+                    {esDeuda(g) && <span className="ml-2 bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-[10px] font-bold align-middle">DEUDA</span>}
+                  </td>
                   <td className="px-4 py-3">
                     {(g.tipo_gasto || 'TIENDA') === 'TIENDA'
                       ? <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-medium flex items-center gap-1 w-fit"><Store size={11} /> Almacén</span>
@@ -316,9 +345,18 @@ export default function Gastos() {
                   <td className="px-4 py-3">
                     <span className="bg-blue-100 px-2 py-1 rounded text-xs text-blue-700">{g.metodo_pago}</span>
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-red-600">{formatMoney(g.valor)}</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${esDeuda(g) ? 'text-purple-600' : 'text-red-600'}`}>{formatMoney(g.valor)}</td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex justify-center gap-2">
+                      {esDeuda(g) && (
+                        <button
+                          onClick={() => pagarDeuda(g)}
+                          className="text-green-600 hover:text-green-800 p-1"
+                          title="Marcar como pagada"
+                        >
+                          <CheckCircle size={15} />
+                        </button>
+                      )}
                       <button
                         onClick={() => openForm(g)}
                         className="text-amber-600 hover:text-amber-800 p-1"
@@ -347,7 +385,7 @@ export default function Gastos() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-screen overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">
-              {editingId ? 'Editar Gasto' : 'Nuevo Gasto'}
+              {editingId ? 'Editar Gasto' : (form.es_deuda ? 'Nueva Deuda' : 'Nuevo Gasto')}
             </h3>
             <form onSubmit={guardarGasto} className="space-y-4">
               <div>
@@ -432,6 +470,25 @@ export default function Gastos() {
                   </p>
                 )}
               </div>
+
+              {!editingId && (
+                <div className={`rounded-lg border-2 p-3 transition-colors ${form.es_deuda ? 'border-purple-300 bg-purple-50' : 'border-gray-200'}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.es_deuda}
+                      onChange={e => setForm({...form, es_deuda: e.target.checked})}
+                      className="w-4 h-4 text-purple-600 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-800">Es una deuda (la debo ahora, pago después)</span>
+                  </label>
+                  {form.es_deuda && (
+                    <p className="text-xs text-purple-600 mt-1.5 ml-6">
+                      Quedará pendiente y NO contará como gasto hasta que la marques pagada (ahí se registra como gasto del día del pago).
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-1">Fecha</label>

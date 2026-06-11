@@ -53,12 +53,13 @@ def resumen_dashboard():
         Pago.fecha_pago <= hoy,
     )).first()
 
-    # Gastos mes
+    # Gastos mes (excluye deudas pendientes — esas no son gasto hasta pagarse)
     gastos_mes = db.session.query(
         func.coalesce(func.sum(Gasto.valor), 0),
     ).filter(and_(
         Gasto.fecha >= inicio_mes,
         Gasto.fecha <= hoy,
+        func.coalesce(Gasto.estado_pago, 'PAGADO') != 'PENDIENTE',
     )).first()
 
     # Prendas pendientes de entrega (ventas POS con entrega no inmediata)

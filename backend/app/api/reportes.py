@@ -134,6 +134,7 @@ def reporte_ventas():
         and_(
             Gasto.fecha >= fecha_desde,
             Gasto.fecha <= fecha_hasta,
+            func.coalesce(Gasto.estado_pago, 'PAGADO') != 'PENDIENTE',
         )
     ).first()
 
@@ -308,10 +309,11 @@ def reporte_cuentas():
 
     pagos = query_pagos.all()
 
-    # Gastos en período
+    # Gastos en período (excluye deudas pendientes)
     query_gastos = Gasto.query.filter(
         Gasto.fecha >= fecha_desde,
-        Gasto.fecha <= fecha_hasta
+        Gasto.fecha <= fecha_hasta,
+        func.coalesce(Gasto.estado_pago, 'PAGADO') != 'PENDIENTE',
     )
 
     gastos = query_gastos.all()

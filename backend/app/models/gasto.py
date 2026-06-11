@@ -12,6 +12,10 @@ class Gasto(db.Model):
     metodo_pago = db.Column(db.String(50), nullable=False)
     categoria = db.Column(db.String(100), default='Otros')
     tipo_gasto = db.Column(db.String(20), default='TIENDA')  # 'TIENDA' o 'EMPRESA'
+    # 'PAGADO' = gasto real (cuenta en el balance) | 'PENDIENTE' = deuda (no cuenta
+    # hasta que se marca pagada, ahí se convierte en gasto del día de pago).
+    estado_pago = db.Column(db.String(20), default='PAGADO')
+    fecha_pago = db.Column(db.Date, nullable=True)
     usuario_registro = db.Column(db.String(100), nullable=False)
     fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -28,6 +32,8 @@ class Gasto(db.Model):
             'metodo_pago': self.metodo_pago,
             'categoria': self.categoria or 'Otros',
             'tipo_gasto': self.tipo_gasto or 'TIENDA',
+            'estado_pago': self.estado_pago or 'PAGADO',
+            'fecha_pago': self.fecha_pago.isoformat() if self.fecha_pago else None,
             'usuario_registro': self.usuario_registro,
             'fecha_registro': self.fecha_registro.isoformat() if self.fecha_registro else None,
         }

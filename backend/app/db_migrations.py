@@ -171,6 +171,16 @@ MIGRACIONES = [
             "INSERT INTO precios_colegio (id_colegio, id_producto, talla_grupo, precio_unitario) VALUES (3,22,'XL',120000) ON CONFLICT DO NOTHING",
         ],
     },
+    {
+        'version': '0010',
+        'descripcion': 'Deudas en gastos: estado_pago + fecha_pago',
+        'sql': [
+            # 'PAGADO' (gasto normal) o 'PENDIENTE' (deuda aún no pagada).
+            "ALTER TABLE gastos ADD COLUMN IF NOT EXISTS estado_pago VARCHAR(20) DEFAULT 'PAGADO'",
+            "ALTER TABLE gastos ADD COLUMN IF NOT EXISTS fecha_pago DATE",
+            "UPDATE gastos SET estado_pago = 'PAGADO' WHERE estado_pago IS NULL",
+        ],
+    },
 ]
 
 

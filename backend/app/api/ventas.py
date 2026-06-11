@@ -102,10 +102,11 @@ def hoja_ventas_diaria():
         Pago.fecha_pago <= fecha_hasta
     ).order_by(Pago.fecha_pago).all()
 
-    # Gastos del rango
+    # Gastos del rango (excluye deudas pendientes)
     gastos = Gasto.query.filter(
         Gasto.fecha >= fecha,
-        Gasto.fecha <= fecha_hasta
+        Gasto.fecha <= fecha_hasta,
+        func.coalesce(Gasto.estado_pago, 'PAGADO') != 'PENDIENTE',
     ).order_by(Gasto.fecha).all()
 
     # Calcular totales
