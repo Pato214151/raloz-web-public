@@ -285,9 +285,13 @@ def marcar_listo_llamar(id_factura):
 @empaque_bp.route('/listos-llamar', methods=['GET'])
 @jwt_required()
 def listar_listos_llamar():
-    """Listar todos los paquetes listos para llamar al cliente"""
-    facturas = Factura.query.filter_by(estado_entrega='LISTO_LLAMAR') \
-        .order_by(Factura.fecha_creacion.desc()).all()
+    """Listar todos los paquetes listos para llamar/entregar al cliente.
+    Incluye los paquetes marcados en el módulo de empaque (LISTO_LLAMAR) y los
+    pedidos online ya empacados (EMPACADO), para que aparezcan en una sola
+    pantalla."""
+    facturas = Factura.query.filter(
+        Factura.estado_entrega.in_(['LISTO_LLAMAR', 'EMPACADO'])
+    ).order_by(Factura.fecha_creacion.desc()).all()
 
     return jsonify([{
         'id_factura': f.id_factura,
