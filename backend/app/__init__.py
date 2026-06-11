@@ -97,14 +97,15 @@ def create_app(config_name=None):
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         # HSTS: fuerza HTTPS en el navegador (Render sirve siempre por HTTPS)
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        # CSP en modo REPORT-ONLY: no bloquea nada, solo reporta violaciones en la
-        # consola del navegador. Permite afinar la política contra el panel React +
-        # Google OAuth sin riesgo de romperlo; cuando se confirme que no genera
-        # reportes legítimos, se puede cambiar a 'Content-Security-Policy' (enforce).
-        response.headers['Content-Security-Policy-Report-Only'] = (
+        # CSP en modo ENFORCE. Verificado contra el panel React + Google OAuth:
+        # el build no tiene scripts inline (solo el módulo desde 'self'); la única
+        # dependencia externa es accounts.google.com (GSI). 'unsafe-inline' en
+        # style-src cubre los estilos en línea de React/Tailwind y del botón GSI.
+        # Si algo del panel se rompiera, volver a 'Content-Security-Policy-Report-Only'.
+        response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
             "script-src 'self' https://accounts.google.com https://apis.google.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com; "
             "img-src 'self' data: https:; "
             "font-src 'self' data: https://fonts.gstatic.com; "
             "connect-src 'self' https://accounts.google.com; "
