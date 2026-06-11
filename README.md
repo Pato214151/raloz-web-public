@@ -120,31 +120,31 @@ raloz-web/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py          # Flask app factory
-│   │   ├── api/                 # 23 blueprints (un archivo por dominio)
-│   │   │   ├── tienda.py        # Tienda pública + admin pedidos web
+│   │   ├── api/                 # 23 dominios (un blueprint por dominio)
+│   │   │   ├── tienda/          # PAQUETE: publico.py + admin.py
 │   │   │   ├── facturas.py      # CRUD facturas + PDF
 │   │   │   ├── stock.py         # Inventario
 │   │   │   ├── auth.py          # JWT login + Google OAuth
 │   │   │   └── ...
+│   │   ├── services/            # Lógica de negocio (facturacion_web.py)
 │   │   ├── models/              # 24 modelos SQLAlchemy
-│   │   │   ├── pedido_web.py
-│   │   │   ├── pedido_fabricacion.py
-│   │   │   ├── factura.py
-│   │   │   └── ...
 │   │   ├── utils/
 │   │   │   ├── email_service.py # Generación PDF + envío Brevo
 │   │   │   └── tallas.py        # Conversión tallas grupo↔individual
-│   │   └── static/
-│   │       └── logo.png         # Logo para PDF
-│   ├── run.py                   # Punto de entrada + migraciones inline
+│   │   └── db_migrations.py     # Migraciones versionadas (schema_migrations)
+│   ├── run.py                   # Punto de entrada + jobs daemon
+│   ├── security_check.py        # Chequeo de seguridad contra producción
+│   ├── tests/                   # ~97 tests (pytest)
 │   └── requirements.txt
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx              # Router principal
-│   │   ├── services/api.js      # Axios + interceptores JWT
-│   │   ├── context/AuthContext.jsx
+│   │   ├── services/api.ts      # Axios tipado + interceptores JWT
+│   │   ├── types/api.ts         # Tipos de dominio (migración gradual a TS)
+│   │   ├── context/AuthContext.tsx
 │   │   └── components/          # Un directorio por módulo
+│   ├── tsconfig.json           # TS gradual (allowJs: JS y TS conviven)
 │   ├── dist/                    # Build producción (servido por Flask)
 │   └── package.json
 │
@@ -268,10 +268,27 @@ git push   # Render detecta el push y redespliega en ~2-3 min
 
 ---
 
+## Calidad: Tests, CI y Seguridad
+
+```bash
+cd backend && python -m pytest tests/ -q      # ~97 tests (webhook, stock, roles, deudas...)
+cd backend && python security_check.py        # chequeo de seguridad contra producción
+cd frontend && npm run typecheck && npm run build
+```
+
+- **CI** (GitHub Actions): en cada push a `main` y PR corre `pytest` + `tsc --noEmit` + `vite build`.
+- **Seguridad** (auditada): JWT con lista negra al logout, bloqueo de cuenta, rate limiting,
+  CORS por allowlist, headers (HSTS, CSP en modo enforce, X-Frame DENY), webhook MercadoPago
+  con firma HMAC, sanitización de entradas. `security_check.py` los verifica en vivo.
+- **TypeScript gradual**: `allowJs` deja convivir `.jsx` y `.ts(x)`; solo los convertidos se
+  type-checkean. Migrar archivo por archivo importando tipos de `src/types/`.
+
+---
+
 ## Notas Importantes
 
-1. **Nombres de productos**: Los nombres en `Raloz/js/data/productos.js` deben coincidir EXACTAMENTE con los nombres en la BD (incluyendo emojis y tildes)
-2. **Migraciones**: Se ejecutan automáticamente al iniciar `run.py` via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+1. **Catálogo de la tienda**: `Raloz/js/data/{colegios,productos,precios}.js` se **generan** desde la BD con `Raloz/tools/sync_catalogo.mjs` (`--check` reporta drift, `--write` regenera). No editar a mano.
+2. **Migraciones**: versionadas en `app/db_migrations.py` (lista `MIGRACIONES`), registradas en `schema_migrations`; corren al iniciar y nunca se re-ejecutan. Para agregar una columna, añade un dict con la siguiente versión.
 3. **Cold start Render**: El servidor free tier tarda ~90s en arrancar tras inactividad. La tienda reintenta automáticamente
 4. **Service Worker**: La tienda funciona offline con catálogo estático; sincroniza al reconectarse
 5. **Tallas**: Dos formatos — "grupos" (6-8, 10-12) para precios, "individuales" (6, 8, 10) para stock
