@@ -159,24 +159,67 @@ def seed():
             db.session.add(SerieFacturacion(ano=datetime.now().year, consecutivo_actual=0))
         print("✓ Serie de facturación creada")
 
-        # Usuario admin por defecto
+        # Usuario admin por defecto.
+        # SEGURIDAD: nunca sembrar un password conocido por defecto. Se toma de
+        # ADMIN_PASSWORD; si no está, se genera uno aleatorio y se imprime UNA vez.
+        import os
+        import secrets
         admin = Usuario.query.filter_by(usuario='admin').first()
         if not admin:
+            admin_pw = os.getenv('ADMIN_PASSWORD', '').strip()
+            generada = not admin_pw
+            if generada:
+                admin_pw = secrets.token_urlsafe(12)
             salt = bcrypt.gensalt(rounds=12)
-            hash_pw = bcrypt.hashpw('admin123'.encode('utf-8'), salt).decode('utf-8')
+            hash_pw = bcrypt.hashpw(admin_pw.encode('utf-8'), salt).decode('utf-8')
             admin = Usuario(
                 usuario='admin',
-                email='admin@raloz.com',
+                email=os.getenv('ADMIN_EMAIL', 'admin@raloz.com'),
                 contrasena_hash=hash_pw,
                 rol='administrador',
             )
             db.session.add(admin)
-            print("✓ Usuario admin creado (password: admin123) — ¡CAMBIAR EN PRODUCCIÓN!")
+            if generada:
+                print(f"✓ Usuario admin creado con password ALEATORIO: {admin_pw}")
+                print("  ⚠️  GUÁRDALO YA y cámbialo al primer ingreso (o define ADMIN_PASSWORD antes de sembrar).")
+            else:
+                print("✓ Usuario admin creado con el password de ADMIN_PASSWORD")
         else:
             print("ℹ️  Usuario admin ya existe")
 
         db.session.commit()
         print("\n✅ Datos iniciales insertados")
+
+
+@app.cli.command('reset-admin-password')
+def reset_admin_password():
+    """
+    Rota el password del usuario admin. Toma el nuevo valor de ADMIN_PASSWORD
+    (env) o genera uno aleatorio y lo imprime una sola vez.
+    Uso en Render:  ADMIN_PASSWORD='...' flask reset-admin-password
+    """
+    with app.app_context():
+        import os
+        import bcrypt
+        import secrets
+        admin = Usuario.query.filter_by(usuario='admin').first()
+        if not admin:
+            print("✗ No existe el usuario 'admin'. Corré primero: flask seed")
+            return
+        nueva = os.getenv('ADMIN_PASSWORD', '').strip()
+        generada = not nueva
+        if generada:
+            nueva = secrets.token_urlsafe(12)
+        salt = bcrypt.gensalt(rounds=12)
+        admin.contrasena_hash = bcrypt.hashpw(nueva.encode('utf-8'), salt).decode('utf-8')
+        admin.intentos_fallidos = 0
+        admin.bloqueado_hasta = None
+        db.session.commit()
+        if generada:
+            print(f"✓ Password de admin rotado. Nuevo password ALEATORIO: {nueva}")
+            print("  ⚠️  Guardalo ya; no se vuelve a mostrar.")
+        else:
+            print("✓ Password de admin rotado al valor de ADMIN_PASSWORD.")
 
 
 if __name__ == '__main__':
