@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import api from '../../services/api'
 import {
   LayoutDashboard, FileText, Search, Package, TrendingUp, Users, Wallet,
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
@@ -103,6 +104,23 @@ export default function Layout() {
   const navigate  = useNavigate()
   const location  = useLocation()
 
+  // Badge de pedidos online nuevos (pagados, aún sin procesar). Refresca cada 45 s.
+  const [nuevosPedidos, setNuevosPedidos] = useState(0)
+  const puedeVerPedidos = ['administrador', 'vendedor'].includes(usuario?.rol)
+  useEffect(() => {
+    if (!puedeVerPedidos) return
+    let activo = true
+    const cargar = async () => {
+      try {
+        const res = await api.get('/tienda/admin/pedidos/conteo-nuevos')
+        if (activo) setNuevosPedidos(res.data?.nuevos || 0)
+      } catch { /* silencioso */ }
+    }
+    cargar()
+    const id = setInterval(cargar, 45000)
+    return () => { activo = false; clearInterval(id) }
+  }, [puedeVerPedidos])
+
   const handleLogout = () => { logout(); navigate('/login') }
   const toggleGroup  = (id) => setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }))
 
@@ -186,13 +204,22 @@ export default function Layout() {
                         }`
                       }
                     >
-                      {({ isActive }) => (
-                        <>
-                          <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
-                          <span className="truncate">{item.label}</span>
-                          {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
-                        </>
-                      )}
+                      {({ isActive }) => {
+                        const showBadge = item.path === '/operaciones' && nuevosPedidos > 0
+                        return (
+                          <>
+                            <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
+                            <span className="truncate">{item.label}</span>
+                            {showBadge ? (
+                              <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
+                                {nuevosPedidos > 99 ? '99+' : nuevosPedidos}
+                              </span>
+                            ) : isActive ? (
+                              <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                            ) : null}
+                          </>
+                        )
+                      }}
                     </NavLink>
                   ))}
                 </div>

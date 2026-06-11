@@ -123,6 +123,7 @@ def test_stock_liberado_vuelve_a_estar_disponible(client):
 # ── Protección JWT de los endpoints admin ──────────────────────────
 
 ENDPOINTS_ADMIN = [
+    ('GET',  '/api/tienda/admin/pedidos/conteo-nuevos'),
     ('GET',  '/api/tienda/admin/pedidos'),
     ('GET',  '/api/tienda/admin/pedidos/1'),
     ('POST', '/api/tienda/admin/pedidos/1/marcar-pagado'),
@@ -171,3 +172,44 @@ def test_admin_y_vendedor_pasan_la_autorizacion(tienda_app, client, rol):
     headers = {'Authorization': f'Bearer {_token(tienda_app, rol)}'}
     resp = client.open('/api/tienda/admin/pedidos/999', method='GET', headers=headers)
     assert resp.status_code not in (401, 403), f'{rol} fue bloqueado (status {resp.status_code})'
+
+
+# ── Conteo de pedidos nuevos (badge del panel) ─────────────────────
+
+def test_conteo_pedidos_nuevos(tienda_app, client):
+    """Cuenta pedidos pagados con factura en POR_ENTREGAR; ignora los empacados."""
+    from datetime import date
+    from app.models import PedidoWeb, Factura, Colegio
+    headers = {'Authorization': f'Bearer {_token(tienda_app, "administrador")}'}
+
+    col = Colegio(nombre='COL CONTEO', ciudad='Bogotá')
+    db.session.add(col)
+    db.session.flush()
+    cid = col.id_colegio
+
+    def conteo():
+        r = client.get('/api/tienda/admin/pedidos/conteo-nuevos', headers=headers)
+        assert r.status_code == 200
+        return r.get_json()['nuevos']
+
+    assert conteo() == 0  # sin pedidos
+
+    # Factura POR_ENTREGAR + pedido pagado → cuenta como nuevo
+    f1 = Factura(numero_factura='FAC-T-1', id_colegio=cid, total=1000, estado='PAGADA', estado_entrega='POR_ENTREGAR', fecha_factura=date.today(), usuario_creacion='TEST')
+    db.session.add(f1)
+    db.session.flush()
+    db.session.add(PedidoWeb(
+        referencia='R-NUEVO-1', nombre_cliente='X', email_cliente='x@x.com',
+        items_json='[]', total=1000, estado='pagado', id_factura=f1.id_factura,
+    ))
+    # Otro ya empacado → NO debe contar
+    f2 = Factura(numero_factura='FAC-T-2', id_colegio=cid, total=1000, estado='PAGADA', estado_entrega='EMPACADO', fecha_factura=date.today(), usuario_creacion='TEST')
+    db.session.add(f2)
+    db.session.flush()
+    db.session.add(PedidoWeb(
+        referencia='R-EMP-1', nombre_cliente='Y', email_cliente='y@y.com',
+        items_json='[]', total=1000, estado='pagado', id_factura=f2.id_factura,
+    ))
+    db.session.commit()
+
+    assert conteo() == 1  # solo el POR_ENTREGAR

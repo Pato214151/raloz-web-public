@@ -31,6 +31,24 @@ logger = logging.getLogger(__name__)
 # ADMIN — Gestión de pedidos online (requiere JWT)
 # ══════════════════════════════════════════════════════════════
 
+@tienda_bp.route('/admin/pedidos/conteo-nuevos', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def conteo_pedidos_nuevos():
+    """Cuenta los pedidos online pagados que aún no se han procesado
+    (factura en POR_ENTREGAR). Lo usa el badge de 'pedidos nuevos' del panel."""
+    nuevos = (
+        PedidoWeb.query
+        .join(Factura, PedidoWeb.id_factura == Factura.id_factura)
+        .filter(
+            PedidoWeb.estado == 'pagado',
+            Factura.estado_entrega == 'POR_ENTREGAR',
+        )
+        .count()
+    )
+    return jsonify({'nuevos': nuevos}), 200
+
+
 @tienda_bp.route('/admin/pedidos', methods=['GET'])
 @jwt_required()
 @rol_requerido('administrador', 'vendedor')
