@@ -213,3 +213,36 @@ def test_conteo_pedidos_nuevos(tienda_app, client):
     db.session.commit()
 
     assert conteo() == 1  # solo el POR_ENTREGAR
+
+
+def test_vista_activos_solo_pagados_sin_entregar(tienda_app, client):
+    """vista=activos muestra solo pagados sin entregar (POR_ENTREGAR/EMPACADO),
+    ocultando entregados y cancelados."""
+    from datetime import date
+    from app.models import PedidoWeb, Factura, Colegio
+    headers = {'Authorization': f'Bearer {_token(tienda_app, "administrador")}'}
+
+    col = Colegio(nombre='COL ACTIVOS', ciudad='Bogotá')
+    db.session.add(col)
+    db.session.flush()
+    cid = col.id_colegio
+
+    def mk(ref, estado_entrega):
+        f = Factura(numero_factura=f'FAC-{ref}', id_colegio=cid, total=1000, estado='PAGADA',
+                    estado_entrega=estado_entrega, fecha_factura=date.today(), usuario_creacion='T')
+        db.session.add(f)
+        db.session.flush()
+        db.session.add(PedidoWeb(referencia=ref, nombre_cliente='X', email_cliente='x@x.com',
+                                 items_json='[]', total=1000, estado='pagado', id_factura=f.id_factura))
+
+    mk('A-POR', 'POR_ENTREGAR')   # aparece
+    mk('A-EMP', 'EMPACADO')       # aparece
+    mk('A-ENT', 'ENTREGADO')      # NO aparece (ya entregado)
+    db.session.add(PedidoWeb(referencia='A-CANC', nombre_cliente='Y', email_cliente='y@y.com',
+                             items_json='[]', total=1000, estado='cancelado'))  # NO aparece
+    db.session.commit()
+
+    r = client.get('/api/tienda/admin/pedidos?vista=activos', headers=headers)
+    assert r.status_code == 200
+    refs = {p['referencia'] for p in r.get_json()['pedidos']}
+    assert refs == {'A-POR', 'A-EMP'}

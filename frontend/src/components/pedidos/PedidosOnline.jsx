@@ -29,7 +29,7 @@ export default function PedidosOnline() {
   const [pedidos, setPedidos]       = useState([])
   const [total, setTotal]           = useState(0)
   const [loading, setLoading]       = useState(false)
-  const [filtroEstado, setFiltro]   = useState('')
+  const [filtroEstado, setFiltro]   = useState('activos')
   const [seleccionado, setSelected] = useState(null)
   const [descargando, setDesc]      = useState(null)
   const [marcando, setMarcando]     = useState(null)
@@ -40,7 +40,9 @@ export default function PedidosOnline() {
   const cargar = useCallback(async () => {
     setLoading(true)
     try {
-      const params = filtroEstado ? { estado: filtroEstado } : {}
+      const params = filtroEstado === 'activos'
+        ? { vista: 'activos' }
+        : (filtroEstado ? { estado: filtroEstado } : {})
       const res = await api.get('/tienda/admin/pedidos', { params })
       setPedidos(res.data.pedidos || [])
       setTotal(res.data.total || 0)
@@ -188,7 +190,7 @@ export default function PedidosOnline() {
 
       {/* Filtros por estado */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {[['', 'Todos'], ['pendiente', 'Pendientes'], ['pagado', 'Pagados'], ['fallido', 'Fallidos']].map(([val, lab]) => (
+        {[['activos', 'Por atender'], ['', 'Todos'], ['pendiente', 'Pendientes'], ['pagado', 'Pagados'], ['fallido', 'Fallidos']].map(([val, lab]) => (
           <button key={val} onClick={() => setFiltro(val)}
             className={`px-3 py-1 rounded-full text-sm border transition-colors ${
               filtroEstado === val
@@ -204,7 +206,7 @@ export default function PedidosOnline() {
       {loading ? (
         <div className="text-center py-12 text-gray-500">Cargando pedidos...</div>
       ) : pedidos.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">Sin pedidos{filtroEstado ? ` con estado "${filtroEstado}"` : ''}.</div>
+        <div className="text-center py-12 text-gray-400">{filtroEstado === 'activos' ? '🎉 No hay pedidos por atender — ¡todo al día!' : `Sin pedidos${filtroEstado ? ` con estado "${filtroEstado}"` : ''}.`}</div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">

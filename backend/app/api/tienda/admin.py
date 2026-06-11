@@ -53,13 +53,21 @@ def conteo_pedidos_nuevos():
 @jwt_required()
 @rol_requerido('administrador', 'vendedor')
 def listar_pedidos_admin():
-    """Lista todos los pedidos online con filtros. Requiere JWT."""
+    """Lista los pedidos online con filtros. Requiere JWT.
+    vista='activos' → solo los que requieren acción (pagados y aún sin entregar),
+    ocultando los viejos (entregados, cancelados, fallidos)."""
     estado  = request.args.get('estado', '').strip()
+    vista   = request.args.get('vista', '').strip()
     limit   = min(request.args.get('limit', 50, type=int), 200)
     offset  = request.args.get('offset', 0, type=int)
 
     query = PedidoWeb.query
-    if estado:
+    if vista == 'activos':
+        query = query.join(Factura, PedidoWeb.id_factura == Factura.id_factura).filter(
+            PedidoWeb.estado == 'pagado',
+            Factura.estado_entrega.in_(['POR_ENTREGAR', 'EMPACADO']),
+        )
+    elif estado:
         query = query.filter(PedidoWeb.estado == estado)
     query = query.order_by(PedidoWeb.fecha_creacion.desc())
 
