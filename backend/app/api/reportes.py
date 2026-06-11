@@ -318,6 +318,13 @@ def reporte_cuentas():
 
     gastos = query_gastos.all()
 
+    # Cuentas por pagar: TODAS las deudas pendientes vigentes (no solo del período),
+    # porque es lo que la empresa debe a la fecha.
+    deudas = Gasto.query.filter(
+        func.coalesce(Gasto.estado_pago, 'PAGADO') == 'PENDIENTE'
+    ).order_by(Gasto.fecha.asc()).all()
+    total_por_pagar = sum(g.valor for g in deudas)
+
     # Calcular totales
     total_ingresos = sum(f.total for f in facturas)
     total_gastos = sum(g.valor for g in gastos)
@@ -381,6 +388,16 @@ def reporte_cuentas():
         'detalles_egresos': {
             'gastos': float(total_gastos),
             'cantidad_gastos': cantidad_gastos,
+        },
+        'cuentas_por_pagar': {
+            'total': float(total_por_pagar),
+            'cantidad': len(deudas),
+            'detalle': [{
+                'descripcion': g.descripcion,
+                'valor': float(g.valor),
+                'categoria': g.categoria,
+                'fecha': g.fecha.isoformat() if g.fecha else None,
+            } for g in deudas],
         },
         'por_colegio': por_colegio,
     }), 200

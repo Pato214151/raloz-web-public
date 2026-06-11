@@ -8,11 +8,12 @@ const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
 export default function Reportes() {
-  const [tab, setTab] = useState('ventas')
+  const [tab, setTab] = useState('balance')
   const [reporte, setReporte] = useState(null)
   const [topProductos, setTopProductos] = useState([])
   const [gastosCat, setGastosCat] = useState([])
   const [totalGastos, setTotalGastos] = useState(0)
+  const [cuentas, setCuentas] = useState(null)
   const [fechaDesde, setFechaDesde] = useState(new Date().toISOString().slice(0, 8) + '01')
   const [fechaHasta, setFechaHasta] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
@@ -22,13 +23,15 @@ export default function Reportes() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [ventasRes, prodRes, gastosRes] = await Promise.all([
+      const [ventasRes, prodRes, gastosRes, cuentasRes] = await Promise.all([
         api.get('/reportes/ventas', { params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta } }),
         api.get('/reportes/productos-mas-vendidos', { params: { limite: 10 } }),
         api.get('/gastos', { params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, per_page: 500 } }),
+        api.get('/reportes/cuentas', { params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta } }),
       ])
       setReporte(ventasRes.data)
       setTopProductos(prodRes.data.productos || [])
+      setCuentas(cuentasRes.data)
 
       // Agrupar gastos por categoría
       const gastos = gastosRes.data.gastos || []
@@ -137,6 +140,58 @@ export default function Reportes() {
     }
   }
 
+  const imprimirBalance = () => {
+    if (!cuentas) return
+    const r = cuentas.resumen || {}
+    const cpp = cuentas.cuentas_por_pagar || {}
+    const colRows = (cuentas.por_colegio || []).map(c =>
+      `<tr><td>${c.colegio_nombre || '—'}</td>
+        <td style="text-align:right">${fmt(c.ingresos)}</td>
+        <td style="text-align:right">${fmt(c.cobrado)}</td>
+        <td style="text-align:right;color:#b45309">${fmt(c.pendiente)}</td>
+        <td style="text-align:right;font-weight:bold;color:#6b21a8">${fmt(c.utilidad)}</td></tr>`
+    ).join('')
+    const deudaRows = (cpp.detalle || []).map(d =>
+      `<tr><td>${d.fecha || ''}</td><td>${d.descripcion || ''}</td><td>${d.categoria || ''}</td>
+        <td style="text-align:right;color:#7e22ce;font-weight:bold">${fmt(d.valor)}</td></tr>`
+    ).join('')
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><title>Balance ${cuentas.fecha_desde} a ${cuentas.fecha_hasta}</title>
+      <style>
+        body{font-family:Arial;margin:24px;color:#222}
+        h1{color:#1e3a8a;font-size:22px;margin-bottom:2px}
+        .sub{color:#666;font-size:13px;margin-bottom:18px}
+        .kpis{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+        .kpi{flex:1;min-width:130px;padding:14px;border-radius:10px;text-align:center}
+        .kpi small{font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+        .kpi b{display:block;font-size:20px;margin-top:4px}
+        table{width:100%;border-collapse:collapse;margin:8px 0 20px;font-size:13px}
+        th{background:#1e3a8a;color:#fff;padding:8px;text-align:left;font-size:12px}
+        td{padding:6px 8px;border-bottom:1px solid #eee}
+        h3{color:#1e3a8a;font-size:15px;margin:16px 0 6px}
+        @media print{body{margin:12px}}
+      </style></head><body>
+      <h1>RALOZ COL SAS — Balance del periodo</h1>
+      <div class="sub">${cuentas.fecha_desde} a ${cuentas.fecha_hasta} · generado ${new Date().toLocaleString('es-CO')}</div>
+      <div class="kpis">
+        <div class="kpi" style="background:#dcfce7;color:#166534"><small>Ingresos (ventas)</small><b>${fmt(r.total_ingresos)}</b></div>
+        <div class="kpi" style="background:#fee2e2;color:#991b1b"><small>Gastos pagados</small><b>${fmt(r.total_gastos)}</b></div>
+        <div class="kpi" style="background:#ede9fe;color:#5b21b6"><small>Utilidad</small><b>${fmt(r.utilidad_neta)}</b></div>
+        <div class="kpi" style="background:#fef9c3;color:#854d0e"><small>Por cobrar</small><b>${fmt(r.total_pendiente)}</b></div>
+        <div class="kpi" style="background:#f3e8ff;color:#7e22ce"><small>Por pagar (deudas)</small><b>${fmt(cpp.total)}</b></div>
+      </div>
+      <h3>Por colegio</h3>
+      <table><thead><tr><th>Colegio</th><th style="text-align:right">Ventas</th><th style="text-align:right">Cobrado</th><th style="text-align:right">Por cobrar</th><th style="text-align:right">Utilidad</th></tr></thead>
+      <tbody>${colRows || '<tr><td colspan=5 style="text-align:center;color:#999">Sin datos</td></tr>'}</tbody></table>
+      ${deudaRows ? `<h3>Cuentas por pagar (deudas pendientes)</h3>
+      <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${deudaRows}</tbody></table>` : ''}
+      <hr><p style="text-align:center;font-size:11px;color:#999">RALOZ COL SAS</p>
+      <script>window.onload=function(){window.print()}<\/script>
+      </body></html>`)
+    w.document.close()
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Reportes</h2>
@@ -144,6 +199,7 @@ export default function Reportes() {
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
         {[
+          { id: 'balance', label: 'Balance del mes' },
           { id: 'ventas', label: 'Ventas' },
           { id: 'gastos', label: 'Gastos' },
           { id: 'productos', label: 'Top Productos' },
@@ -154,6 +210,93 @@ export default function Reportes() {
             }`}>{t.label}</button>
         ))}
       </div>
+
+      {/* Balance del mes */}
+      {tab === 'balance' && (
+        <div className="space-y-4">
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Desde</label>
+              <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Hasta</label>
+              <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="input-field" />
+            </div>
+            <button onClick={loadData} disabled={loading} className="btn-primary">Consultar</button>
+            <button onClick={imprimirBalance} className="btn-secondary flex items-center gap-1"><Printer size={16} /> Imprimir balance (PDF)</button>
+            <button onClick={exportarContadora} className="btn-primary flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700"><FileSpreadsheet size={16} /> Excel para contadora</button>
+          </div>
+          <p className="text-xs text-gray-400 -mt-2">Resumen del periodo para presentar a la gerencia: lo que entró, lo que salió, la utilidad, lo que te deben y lo que la empresa debe.</p>
+
+          {cuentas && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="card text-center"><p className="text-xs text-gray-500">Ingresos (ventas)</p><p className="text-2xl font-bold text-green-600">{fmt(cuentas.resumen?.total_ingresos)}</p></div>
+                <div className="card text-center"><p className="text-xs text-gray-500">Gastos pagados</p><p className="text-2xl font-bold text-red-600">{fmt(cuentas.resumen?.total_gastos)}</p></div>
+                <div className="card text-center border-2 border-purple-200"><p className="text-xs text-purple-600 font-semibold">Utilidad</p><p className="text-2xl font-bold text-purple-700">{fmt(cuentas.resumen?.utilidad_neta)}</p></div>
+                <div className="card text-center"><p className="text-xs text-gray-500">Por cobrar</p><p className="text-2xl font-bold text-amber-600">{fmt(cuentas.resumen?.total_pendiente)}</p></div>
+                <div className="card text-center"><p className="text-xs text-gray-500">Por pagar (deudas)</p><p className="text-2xl font-bold text-fuchsia-700">{fmt(cuentas.cuentas_por_pagar?.total)}</p></div>
+              </div>
+
+              <div className="card">
+                <h3 className="text-lg font-semibold mb-3">Por colegio</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b bg-gray-50">
+                      <th className="px-3 py-2 text-left font-medium text-gray-600">Colegio</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-600">Ventas</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-600">Cobrado</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-600">Por cobrar</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-600">Utilidad</th>
+                    </tr></thead>
+                    <tbody>
+                      {(cuentas.por_colegio || []).map((c) => (
+                        <tr key={c.id_colegio} className="border-b border-gray-50">
+                          <td className="px-3 py-2 font-medium">{c.colegio_nombre || '—'}</td>
+                          <td className="px-3 py-2 text-right text-green-600">{fmt(c.ingresos)}</td>
+                          <td className="px-3 py-2 text-right text-blue-600">{fmt(c.cobrado)}</td>
+                          <td className="px-3 py-2 text-right text-amber-600">{fmt(c.pendiente)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-purple-700">{fmt(c.utilidad)}</td>
+                        </tr>
+                      ))}
+                      {(!cuentas.por_colegio || cuentas.por_colegio.length === 0) && (
+                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Sin ventas en el período</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {cuentas.cuentas_por_pagar?.cantidad > 0 && (
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-3 text-fuchsia-700">Cuentas por pagar (deudas pendientes)</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b bg-gray-50">
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Fecha</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Concepto</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Categoría</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-600">Valor</th>
+                      </tr></thead>
+                      <tbody>
+                        {cuentas.cuentas_por_pagar.detalle.map((d, i) => (
+                          <tr key={i} className="border-b border-gray-50">
+                            <td className="px-3 py-2">{d.fecha || '—'}</td>
+                            <td className="px-3 py-2 font-medium">{d.descripcion}</td>
+                            <td className="px-3 py-2 text-gray-500">{d.categoria || '—'}</td>
+                            <td className="px-3 py-2 text-right font-bold text-fuchsia-700">{fmt(d.valor)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Ventas */}
       {tab === 'ventas' && (
