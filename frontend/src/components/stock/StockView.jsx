@@ -50,11 +50,6 @@ export default function StockView() {
   const [loading, setLoading]       = useState(true)
   const [loadingStock, setLoadingStock] = useState(false)
 
-  // Edición inline
-  const [editKey, setEditKey] = useState(null)
-  const [editVal, setEditVal] = useState('')
-  const [editObs, setEditObs] = useState('')
-  const [editModo, setEditModo] = useState('sumar') // 'sumar' (llegó mercancía) | 'fijar' (exacto)
 
   // Modal agregar
   const [showAdd, setShowAdd] = useState(false)
@@ -148,34 +143,6 @@ export default function StockView() {
       toast.error('Error cargando actividad')
     } finally {
       setLoadingAct(false)
-    }
-  }
-
-  async function guardarInline(s) {
-    const n = parseInt(editVal)
-    if (isNaN(n) || n < 0) { toast.error('Cantidad inválida'); return }
-    try {
-      if (editModo === 'sumar') {
-        if (n <= 0) { toast.error('¿Cuántas llegaron?'); return }
-        // ENTRADA: suma lo que llegó y queda en el kardex
-        await api.post('/stock/entrada', {
-          id_colegio:       colegioSel.id_colegio,
-          id_producto:      s.id_producto,
-          talla_individual: s.talla_individual,
-          cantidad:         n,
-          motivo:           'Recepción de mercancía',
-        })
-      } else {
-        // FIJAR: corrige el stock al valor exacto
-        await api.put(`/stock/${s.id_stock}`, { cantidad: n, observaciones: '' })
-      }
-      setEditKey(null); setEditVal(''); setEditModo('sumar')
-      await cargarStock(colegioSel.id_colegio)          // recarga → refleja al instante
-      const r = await api.get('/stock/resumen')
-      setResumen(r.data.resumen || [])
-      toast.success(editModo === 'sumar' ? `Entrada registrada: +${n}` : 'Stock corregido')
-    } catch (e) {
-      toast.error(e.response?.data?.error || 'Error')
     }
   }
 
@@ -463,45 +430,18 @@ export default function StockView() {
                         <div className="flex flex-wrap gap-2">
                           {grupo.items.map(s => (
                             <div key={`${s.id_producto}-${s.talla_individual}`} className="relative group">
-                              {s.id_stock && editKey === s.id_stock ? (
-                                <div className="bg-white border-2 border-raloz-400 rounded-xl p-2 flex flex-col items-center gap-1.5 w-28 shadow-lg relative z-10">
-                                  <span className="text-[11px] text-gray-500 font-medium">T.{s.talla_individual} · hay {s.cantidad}</span>
-                                  <div className="flex gap-1 w-full">
-                                    <button type="button" onClick={() => setEditModo('sumar')}
-                                      className={`flex-1 text-[10px] py-1 rounded font-medium ${editModo === 'sumar' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>Llegó +</button>
-                                    <button type="button" onClick={() => setEditModo('fijar')}
-                                      className={`flex-1 text-[10px] py-1 rounded font-medium ${editModo === 'fijar' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'}`}>Fijar</button>
-                                  </div>
-                                  <input type="number" min="0" value={editVal}
-                                    onChange={e => setEditVal(e.target.value)}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Enter') guardarInline(s)
-                                      if (e.key === 'Escape') { setEditKey(null); setEditVal('') }
-                                    }}
-                                    autoFocus
-                                    placeholder={editModo === 'sumar' ? '¿cuántas?' : 'total'}
-                                    className="w-full text-center border rounded text-sm font-bold py-1 focus:outline-none focus:border-raloz-400" />
-                                  <div className="flex gap-1 w-full">
-                                    <button onClick={() => { setEditKey(null); setEditVal('') }}
-                                      className="flex-1 text-[10px] text-gray-400 hover:text-gray-600 py-1">Cancelar</button>
-                                    <button onClick={() => guardarInline(s)}
-                                      className="flex-1 bg-raloz-600 hover:bg-raloz-700 text-white text-[10px] font-medium py-1 rounded flex items-center justify-center gap-0.5"><Check size={11} /> Guardar</button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div
-                                  onClick={() => {
-                                    if (s.id_stock) { setEditKey(s.id_stock); setEditVal(''); setEditModo('sumar') }
-                                    else { setNewStock({ producto_id: String(s.id_producto), talla: s.talla_individual, cantidad: '', observaciones: '', modo: 'entrada' }); setShowAdd(true) }
-                                  }}
-                                  title={s.id_stock ? 'Clic: sumar lo que llegó o fijar el total' : 'Sin stock — clic para registrar entrada'}
-                                  className={`cursor-pointer flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 font-bold text-sm transition-all hover:scale-105 hover:shadow-sm ${tallaCaja(s.cantidad)}`}>
-                                  <span className="text-xs font-normal opacity-70">{s.talla_individual}</span>
-                                  <span className="text-lg leading-tight">{s.cantidad}</span>
-                                </div>
-                              )}
+                              <div
+                                onClick={() => {
+                                  setNewStock({ producto_id: String(s.id_producto), talla: s.talla_individual, cantidad: '', observaciones: '', modo: 'entrada' })
+                                  setShowAdd(true)
+                                }}
+                                title={s.id_stock ? 'Clic para registrar entrada o ajustar' : 'Sin stock — clic para registrar entrada'}
+                                className={`cursor-pointer flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 font-bold text-sm transition-all hover:scale-105 hover:shadow-sm ${tallaCaja(s.cantidad)}`}>
+                                <span className="text-xs font-normal opacity-70">{s.talla_individual}</span>
+                                <span className="text-lg leading-tight">{s.cantidad}</span>
+                              </div>
                               {/* Botón eliminar (solo si la talla ya tiene registro de stock) */}
-                              {s.id_stock && editKey !== s.id_stock && (
+                              {s.id_stock && (
                                 <button
                                   onClick={() => eliminar(s.id_stock, nombreProd, s.talla_individual)}
                                   className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full hover:bg-red-600"
