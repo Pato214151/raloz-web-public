@@ -83,13 +83,19 @@ def catalogo_colegio(id_colegio):
     for pid, meta in productos_meta.items():
         tallas_precios = precios_por_pid.get(pid, {})
 
-        # Construir mapa talla_individual → precio desde los grupos configurados
+        # Construir mapa talla_individual → precio desde los grupos configurados.
+        # Las medias se manejan por GRUPO (4-6, 6-8, ...): el grupo ES la talla y
+        # NO se expande (sus grupos chocan con los de ropa: 6-8 → 6,8).
+        es_medias = 'media' in (meta.get('tipo') or '').lower()
         talla_precio_map = {}
         for talla_grupo, precio_u in tallas_precios.items():
             if not precio_u or precio_u <= 0:
                 continue
-            for talla_ind in TALLA_GRUPO_A_INDIVIDUALES.get(talla_grupo, [talla_grupo]):
-                talla_precio_map[talla_ind] = precio_u
+            if es_medias:
+                talla_precio_map[talla_grupo] = precio_u
+            else:
+                for talla_ind in TALLA_GRUPO_A_INDIVIDUALES.get(talla_grupo, [talla_grupo]):
+                    talla_precio_map[talla_ind] = precio_u
 
         if not talla_precio_map:
             continue

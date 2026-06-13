@@ -5,8 +5,11 @@ import toast from 'react-hot-toast'
 import { Package, Plus, X, Printer, AlertTriangle, Activity, ChevronRight, Trash2, Edit2, Check, BarChart3 } from 'lucide-react'
 
 const TALLAS_NORMAL = ['2', '4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'Única']
-const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
+const TALLAS_MEDIAS = ['4-6', '6-8', '8-10', '10-12', '12-14']
 const TALLAS_ORDEN = [...TALLAS_NORMAL, ...TALLAS_MEDIAS]
+
+// El tipo en la base puede venir como 'Medias' (mayúscula); comparar sin distinguir.
+const esMedias = (tipo) => (tipo || '').toLowerCase().includes('media')
 
 const ACCION_BADGE = {
   ACTUALIZAR: 'bg-blue-100 text-blue-700',
@@ -199,7 +202,7 @@ export default function StockView() {
 
   // Tallas para el producto seleccionado en el modal
   const prodSeleccionado = productos.find(p => String(p.id_producto) === String(newStock.producto_id))
-  const tallasModal = prodSeleccionado?.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
+  const tallasModal = esMedias(prodSeleccionado?.tipo) ? TALLAS_MEDIAS : TALLAS_NORMAL
 
   // Lookup de stock real para edición/eliminación inline (por producto+talla → id_stock)
   const stockLookup = {}
@@ -416,7 +419,7 @@ export default function StockView() {
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-gray-800">{nombreProd}</p>
-                            {grupo.tipo === 'medias' && (
+                            {esMedias(grupo.tipo) && (
                               <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">medias</span>
                             )}
                             {grupo.sinPrecio && (
@@ -655,7 +658,7 @@ export default function StockView() {
                   <option value="">Seleccionar talla...</option>
                   {tallasModal.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-                {prodSeleccionado?.tipo === 'medias' && (
+                {esMedias(prodSeleccionado?.tipo) && (
                   <p className="text-xs text-purple-600 mt-1">Tallas de medias</p>
                 )}
               </div>

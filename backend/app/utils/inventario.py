@@ -46,8 +46,14 @@ def construir_catalogo_colegio(colegio_id):
             'producto_tipo': p.producto.tipo if p.producto else None,
             'tallas': set(),
         })
-        for t in TALLA_GRUPO_A_INDIVIDUALES.get(p.talla_grupo, [p.talla_grupo]):
-            info['tallas'].add(t)
+        # Las medias se manejan por GRUPO (4-6, 6-8, 8-10, 10-12, 12-14): el grupo
+        # ES la talla y NO se expande, porque sus grupos chocan con los de ropa
+        # (6-8 → 6,8). Para el resto sí se expande a tallas individuales.
+        if 'media' in (info['producto_tipo'] or '').lower():
+            info['tallas'].add(p.talla_grupo)
+        else:
+            for t in TALLA_GRUPO_A_INDIVIDUALES.get(p.talla_grupo, [p.talla_grupo]):
+                info['tallas'].add(t)
 
     catalogo = []
     for pid, info in productos.items():
