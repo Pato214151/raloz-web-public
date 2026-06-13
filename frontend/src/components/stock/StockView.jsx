@@ -54,6 +54,7 @@ export default function StockView() {
   const [editKey, setEditKey] = useState(null)
   const [editVal, setEditVal] = useState('')
   const [editObs, setEditObs] = useState('')
+  const [editModo, setEditModo] = useState('sumar') // 'sumar' (llegó mercancía) | 'fijar' (exacto)
 
   // Modal agregar
   const [showAdd, setShowAdd] = useState(false)
@@ -150,17 +151,29 @@ export default function StockView() {
     }
   }
 
-  async function guardarEdicion(id_stock) {
-    const val = parseInt(editVal)
-    if (isNaN(val) || val < 0) { toast.error('Cantidad inválida'); return }
+  async function guardarInline(s) {
+    const n = parseInt(editVal)
+    if (isNaN(n) || n < 0) { toast.error('Cantidad inválida'); return }
     try {
-      await api.put(`/stock/${id_stock}`, { cantidad: val, observaciones: editObs })
-      setStock(prev => prev.map(s => s.id_stock === id_stock ? { ...s, cantidad: val } : s))
+      if (editModo === 'sumar') {
+        if (n <= 0) { toast.error('¿Cuántas llegaron?'); return }
+        // ENTRADA: suma lo que llegó y queda en el kardex
+        await api.post('/stock/entrada', {
+          id_colegio:       colegioSel.id_colegio,
+          id_producto:      s.id_producto,
+          talla_individual: s.talla_individual,
+          cantidad:         n,
+          motivo:           'Recepción de mercancía',
+        })
+      } else {
+        // FIJAR: corrige el stock al valor exacto
+        await api.put(`/stock/${s.id_stock}`, { cantidad: n, observaciones: '' })
+      }
+      setEditKey(null); setEditVal(''); setEditModo('sumar')
+      await cargarStock(colegioSel.id_colegio)          // recarga → refleja al instante
       const r = await api.get('/stock/resumen')
       setResumen(r.data.resumen || [])
-      setEditKey(null)
-      setEditObs('')
-      toast.success('Cantidad actualizada')
+      toast.success(editModo === 'sumar' ? `Entrada registrada: +${n}` : 'Stock corregido')
     } catch (e) {
       toast.error(e.response?.data?.error || 'Error')
     }
@@ -238,7 +251,9 @@ export default function StockView() {
           id_stock: sk ? sk.id_stock : null,
           id_producto: prod.id_producto,
           talla_individual: t.talla,
-          cantidad: t.cantidad,
+          // Usa el stock REAL (que se actualiza al editar), no la cantidad del
+          // catálogo (que quedaba vieja → por eso tocaba F5 para ver el cambio).
+          cantidad: sk ? sk.cantidad : (t.cantidad || 0),
         }
       }),
     }
@@ -449,32 +464,37 @@ export default function StockView() {
                           {grupo.items.map(s => (
                             <div key={`${s.id_producto}-${s.talla_individual}`} className="relative group">
                               {s.id_stock && editKey === s.id_stock ? (
-                                <div className="bg-white border-2 border-raloz-400 rounded-xl p-2 flex flex-col items-center gap-1 w-20">
-                                  <span className="text-xs text-gray-500 font-medium">{s.talla_individual}</span>
+                                <div className="bg-white border-2 border-raloz-400 rounded-xl p-2 flex flex-col items-center gap-1.5 w-28 shadow-lg relative z-10">
+                                  <span className="text-[11px] text-gray-500 font-medium">T.{s.talla_individual} · hay {s.cantidad}</span>
+                                  <div className="flex gap-1 w-full">
+                                    <button type="button" onClick={() => setEditModo('sumar')}
+                                      className={`flex-1 text-[10px] py-1 rounded font-medium ${editModo === 'sumar' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>Llegó +</button>
+                                    <button type="button" onClick={() => setEditModo('fijar')}
+                                      className={`flex-1 text-[10px] py-1 rounded font-medium ${editModo === 'fijar' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'}`}>Fijar</button>
+                                  </div>
                                   <input type="number" min="0" value={editVal}
                                     onChange={e => setEditVal(e.target.value)}
                                     onKeyDown={e => {
-                                      if (e.key === 'Enter') guardarEdicion(s.id_stock)
-                                      if (e.key === 'Escape') { setEditKey(null); setEditObs('') }
+                                      if (e.key === 'Enter') guardarInline(s)
+                                      if (e.key === 'Escape') { setEditKey(null); setEditVal('') }
                                     }}
                                     autoFocus
-                                    className="w-14 text-center border rounded text-sm font-bold py-1 focus:outline-none" />
-                                  <input type="text" value={editObs}
-                                    onChange={e => setEditObs(e.target.value)}
-                                    placeholder="Obs..."
-                                    className="w-16 text-xs border rounded px-1 py-0.5 focus:outline-none" />
-                                  <button onClick={() => guardarEdicion(s.id_stock)}
-                                    className="text-green-600 hover:bg-green-50 rounded p-0.5">
-                                    <Check size={12} />
-                                  </button>
+                                    placeholder={editModo === 'sumar' ? '¿cuántas?' : 'total'}
+                                    className="w-full text-center border rounded text-sm font-bold py-1 focus:outline-none focus:border-raloz-400" />
+                                  <div className="flex gap-1 w-full">
+                                    <button onClick={() => { setEditKey(null); setEditVal('') }}
+                                      className="flex-1 text-[10px] text-gray-400 hover:text-gray-600 py-1">Cancelar</button>
+                                    <button onClick={() => guardarInline(s)}
+                                      className="flex-1 bg-raloz-600 hover:bg-raloz-700 text-white text-[10px] font-medium py-1 rounded flex items-center justify-center gap-0.5"><Check size={11} /> Guardar</button>
+                                  </div>
                                 </div>
                               ) : (
                                 <div
                                   onClick={() => {
-                                    if (s.id_stock) { setEditKey(s.id_stock); setEditVal(s.cantidad.toString()); setEditObs('') }
+                                    if (s.id_stock) { setEditKey(s.id_stock); setEditVal(''); setEditModo('sumar') }
                                     else { setNewStock({ producto_id: String(s.id_producto), talla: s.talla_individual, cantidad: '', observaciones: '', modo: 'entrada' }); setShowAdd(true) }
                                   }}
-                                  title={s.id_stock ? 'Clic para editar' : 'Sin stock — clic para registrar entrada'}
+                                  title={s.id_stock ? 'Clic: sumar lo que llegó o fijar el total' : 'Sin stock — clic para registrar entrada'}
                                   className={`cursor-pointer flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 font-bold text-sm transition-all hover:scale-105 hover:shadow-sm ${tallaCaja(s.cantidad)}`}>
                                   <span className="text-xs font-normal opacity-70">{s.talla_individual}</span>
                                   <span className="text-lg leading-tight">{s.cantidad}</span>
