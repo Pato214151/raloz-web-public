@@ -43,6 +43,7 @@ const menuGroups = [
     items: [
       { path: '/stock',   label: 'Stock Actual',     icon: Activity,   roles: ['administrador', 'vendedor'] },
       { path: '/precios', label: 'Precios Colegios', icon: DollarSign, roles: ['administrador'] },
+      { path: '/ordenes-produccion', label: 'Órdenes Producción', icon: Scissors, roles: ['administrador'] },
     ],
   },
   {
@@ -81,6 +82,7 @@ const PAGE_TITLES = {
   '/empaque':            'Empaque',
   '/stock':              'Stock Actual',
   '/precios':            'Precios Colegios',
+  '/ordenes-produccion': 'Órdenes de Producción',
   '/gastos':             'Gastos',
   '/caja':               'Caja',
   '/reportes':           'Reportes',

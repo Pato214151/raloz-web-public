@@ -24,6 +24,7 @@ import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
 import PedidosFabricacion from './components/fabricacion/PedidosFabricacion'
 import StockPendienteFab from './components/fabricacion/StockPendienteFab'
+import OrdenesProduccion from './components/ordenesProduccion/OrdenesProduccion'
 
 function ProtectedRoute({ children, roles }) {
   const { usuario, loading } = useAuth()
@@ -91,6 +92,9 @@ export default function App() {
           <Route path="pedidos-online" element={<PedidosOnline />} />
           <Route path="fabricacion" element={<PedidosFabricacion />} />
           <Route path="fabricacion/stock" element={<StockPendienteFab />} />
+          <Route path="ordenes-produccion" element={
+            <ProtectedRoute roles={['administrador']}><OrdenesProduccion /></ProtectedRoute>
+          } />
         </Route>
 
         <Route path="*" element={<Navigate to="/" />} />

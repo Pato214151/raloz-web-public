@@ -181,6 +181,39 @@ MIGRACIONES = [
             "UPDATE gastos SET estado_pago = 'PAGADO' WHERE estado_pago IS NULL",
         ],
     },
+    {
+        'version': '0011',
+        'descripcion': 'Tabla ordenes_produccion (órdenes de confección al taller)',
+        'sql': [
+            """
+            CREATE TABLE IF NOT EXISTS ordenes_produccion (
+                id_orden         SERIAL PRIMARY KEY,
+                numero           INTEGER NOT NULL,
+                prenda           VARCHAR(200) NOT NULL,
+                id_colegio       INTEGER REFERENCES colegios(id_colegio),
+                nombre_colegio   VARCHAR(200),
+                taller           VARCHAR(200),
+                fecha            TIMESTAMP DEFAULT NOW(),
+                fecha_entrega    DATE,
+                insumos_json     TEXT,
+                tallas_json      TEXT,
+                logo_descripcion VARCHAR(200),
+                logo_ubicacion   VARCHAR(120),
+                logo_tecnica     VARCHAR(80),
+                logo_tamano      VARCHAR(60),
+                observaciones    TEXT,
+                costo_tela       FLOAT DEFAULT 0,
+                costo_insumos    FLOAT DEFAULT 0,
+                costo_mano_obra  FLOAT DEFAULT 0,
+                estado           VARCHAR(30) DEFAULT 'creada',
+                usuario_creacion VARCHAR(120),
+                created_at       TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_ordprod_fecha ON ordenes_produccion(fecha)",
+            "CREATE INDEX IF NOT EXISTS idx_ordprod_colegio ON ordenes_produccion(id_colegio)",
+        ],
+    },
 ]
 
 

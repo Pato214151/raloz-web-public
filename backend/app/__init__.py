@@ -162,6 +162,7 @@ def create_app(config_name=None):
     from app.api.metodos_pago import metodos_pago_bp
     from app.api.tareas import tareas_bp
     from app.api.tienda import tienda_bp
+    from app.api.ordenes_produccion import ordenes_produccion_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -184,6 +185,7 @@ def create_app(config_name=None):
     app.register_blueprint(metodos_pago_bp, url_prefix='/api/metodos-pago')
     app.register_blueprint(tareas_bp, url_prefix='/api/tareas')
     app.register_blueprint(tienda_bp, url_prefix='/api/tienda')
+    app.register_blueprint(ordenes_produccion_bp, url_prefix='/api/ordenes-produccion')
 
     # ── Config de conexión (timeout de red explícito a Supabase) ──
     # pool_pre_ping ya está activo; connect_args agrega timeout de red.

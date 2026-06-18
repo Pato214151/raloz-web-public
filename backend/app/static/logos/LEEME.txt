@@ -1,0 +1,16 @@
+LOGOS DE COLEGIOS — para las Órdenes de Producción
+===================================================
+
+Guarda aquí los logos de cada colegio con ESTOS nombres EXACTOS
+(en minúsculas, formato PNG con fondo transparente o blanco):
+
+    manyanet.png     -> Colegio Padre Manyanet  (colegio 3)
+    marillac.png     -> Colegio Marillac         (colegio 1)
+    adventista.png   -> Educación Adventista     (colegio 2)
+
+Cuando el administrador elija un colegio al crear una orden de producción,
+el sistema pondrá automáticamente el logo correspondiente en el PDF que se
+imprime para el taller.
+
+Si más adelante agregas otro colegio, guarda su logo aquí con el nombre del
+colegio en minúsculas (sin tildes ni espacios), p. ej. "sanjose.png".
