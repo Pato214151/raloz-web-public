@@ -88,6 +88,43 @@ def _job_cancelar_pedidos_abandonados():
 threading.Thread(target=_job_cancelar_pedidos_abandonados, daemon=True, name='pedidos-abandonados-cleanup').start()
 
 
+# ─── Ducklab: latido de telemetría al portal (cada 3 min) ────────
+# Reporta "online" + versión al portal Ducklab para el monitoreo en vivo y el
+# dead-man switch. Se ACTIVA SOLO si DUCKLAB_API_KEY y DUCKLAB_TELEMETRY_URL
+# están en el entorno (la API key NUNCA se hardcodea). Con varios workers de
+# gunicorn, un advisory lock hace que solo uno mande el latido por ciclo.
+def _job_telemetria_ducklab():
+    import os
+    import requests
+    from sqlalchemy import text
+    url = os.getenv('DUCKLAB_TELEMETRY_URL', '').strip()
+    key = os.getenv('DUCKLAB_API_KEY', '').strip()
+    if not url or not key:
+        return  # telemetría desactivada
+    version = os.getenv('APP_VERSION', '1.0.0')
+    time.sleep(20)  # deja que la app arranque
+    while True:
+        try:
+            with app.app_context():
+                tengo_lock = db.session.execute(
+                    text("SELECT pg_try_advisory_xact_lock(1003)")
+                ).scalar()
+                if tengo_lock:
+                    requests.post(
+                        url,
+                        headers={'Authorization': f'Bearer {key}'},
+                        json={'status': 'online', 'version': version},
+                        timeout=10,
+                    )
+                db.session.commit()
+        except Exception as e:
+            logger.warning('[TELEMETRIA] %s', str(e)[:120])
+        time.sleep(180)  # cada 3 min (< 5 min de "stale" en el portal)
+
+
+threading.Thread(target=_job_telemetria_ducklab, daemon=True, name='ducklab-telemetria').start()
+
+
 # ─── Migración automática versionada ─────────────────────────────
 # Las migraciones viven en app/db_migrations.py: cada una tiene versión y
 # queda registrada en la tabla schema_migrations (no se re-ejecutan, y un

@@ -150,7 +150,7 @@ def create_app(config_name=None):
     from app.api.clientes import clientes_bp
     from app.api.gastos import gastos_bp
     from app.api.caja import caja_bp
-    from app.api.pendientes import pendientes_bp
+    # [ARCHIVED] from app.api.pendientes import pendientes_bp  # ahora usa prendas_bp
     from app.api.reportes import reportes_bp
     from app.api.usuarios import usuarios_bp
     from app.api.dashboard import dashboard_bp
@@ -173,7 +173,7 @@ def create_app(config_name=None):
     app.register_blueprint(clientes_bp, url_prefix='/api/clientes')
     app.register_blueprint(gastos_bp, url_prefix='/api/gastos')
     app.register_blueprint(caja_bp, url_prefix='/api/caja')
-    app.register_blueprint(pendientes_bp, url_prefix='/api/pendientes')
+    # [ARCHIVED] app.register_blueprint(pendientes_bp, url_prefix='/api/pendientes')  # ahora usa prendas_bp
     app.register_blueprint(reportes_bp, url_prefix='/api/reportes')
     app.register_blueprint(usuarios_bp, url_prefix='/api/usuarios')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')

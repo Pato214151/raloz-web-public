@@ -24,7 +24,7 @@ import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
 import PedidosFabricacion from './components/fabricacion/PedidosFabricacion'
 import StockPendienteFab from './components/fabricacion/StockPendienteFab'
-import OrdenesProduccion from './components/ordenesProduccion/OrdenesProduccion'
+import OrdenesProduccion from './components/ordenes-produccion/OrdenesProduccion'
 
 function ProtectedRoute({ children, roles }) {
   const { usuario, loading } = useAuth()
