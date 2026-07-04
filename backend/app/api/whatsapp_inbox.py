@@ -67,6 +67,10 @@ def log_mensaje():
     conv.ultima_fecha = datetime.utcnow()
     if direccion == 'in':
         conv.no_leidos = (conv.no_leidos or 0) + 1
+    # El bot puede pedir el paso a humano (ej: el cliente pidió un asesor)
+    set_modo = data.get('set_modo')
+    if set_modo in ('bot', 'humano'):
+        conv.modo = set_modo
 
     db.session.add(WaMensaje(
         chat_id=chat_id, direccion=direccion, texto=texto, autor=autor,
