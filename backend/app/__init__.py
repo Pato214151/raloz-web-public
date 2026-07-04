@@ -72,7 +72,9 @@ def create_app(config_name=None):
     # supports_credentials (es inválido y peligroso). Si CORS_ORIGINS no está
     # configurado, caemos a una lista segura conocida.
     _cors_defaults = [
-        "https://ralozcol-web.pages.dev",   # tienda pública (Cloudflare)
+        "https://ralozcolsas.com",          # tienda pública (dominio propio)
+        "https://www.ralozcolsas.com",      # con www
+        "https://ralozcol-web.pages.dev",   # dominio anterior (transición)
         "https://raloz-web.onrender.com",   # panel admin (mismo backend)
         "http://localhost:5173",            # frontend dev (Vite)
         "http://localhost:3000",
@@ -199,6 +201,16 @@ def create_app(config_name=None):
     @app.route('/api/health')
     def health():
         return {'status': 'ok', 'app': 'RALOZ COL SAS', 'version': '1.0.0-beta'}
+
+    # ── Política de privacidad (URL pública requerida por Meta/WhatsApp) ──
+    @app.route('/privacidad')
+    def privacidad():
+        ruta = os.path.join(os.path.dirname(__file__), 'privacidad.html')
+        try:
+            with open(ruta, encoding='utf-8') as f:
+                return f.read(), 200, {'Content-Type': 'text/html; charset=utf-8'}
+        except FileNotFoundError:
+            return jsonify({'error': 'privacidad.html no encontrado'}), 404
 
     # ══════════════════════════════════════════════════════════
     # Servir frontend React en producción

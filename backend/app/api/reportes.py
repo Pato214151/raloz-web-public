@@ -121,10 +121,11 @@ def reporte_ventas():
 
     cobros = db.session.query(
         func.sum(Pago.valor).label('total_cobrado'),
-    ).filter(
+    ).join(Factura, Pago.id_factura == Factura.id_factura).filter(
         and_(
             Pago.fecha_pago >= fecha_desde,
             Pago.fecha_pago <= fecha_hasta,
+            Factura.estado != 'ANULADA',
         )
     ).first()
 
@@ -299,13 +300,14 @@ def reporte_cuentas():
 
     # Pagos en período — joinedload para evitar N+1 al acceder pago.factura
     from sqlalchemy.orm import joinedload
-    query_pagos = Pago.query.options(joinedload(Pago.factura)).filter(
+    query_pagos = Pago.query.options(joinedload(Pago.factura)).join(Factura).filter(
         Pago.fecha_pago >= fecha_desde,
-        Pago.fecha_pago <= fecha_hasta
+        Pago.fecha_pago <= fecha_hasta,
+        Factura.estado != 'ANULADA'
     )
 
     if colegio_id:
-        query_pagos = query_pagos.join(Factura).filter(Factura.id_colegio == colegio_id)
+        query_pagos = query_pagos.filter(Factura.id_colegio == colegio_id)
 
     pagos = query_pagos.all()
 

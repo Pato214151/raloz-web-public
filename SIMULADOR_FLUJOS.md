@@ -24,7 +24,7 @@
 
 **Situación:** Una madre compra 2 camisas para su hijo en el Colegio Marillac. Las camisas están en stock.
 
-### Lo que hace el cliente en la tienda (ralozcol-web.pages.dev)
+### Lo que hace el cliente en la tienda (ralozcolsas.com)
 
 ```
 1. Abre la tienda → selecciona "Colegio Marillac"
@@ -37,7 +37,7 @@
    (No aparece opción de abono porque no hay fabricación)
 8. Clic "Ir a pagar con MercadoPago" → redirige a checkout.mercadopago.com
 9. Paga con tarjeta débito Bancolombia → transacción aprobada
-10. MercadoPago redirige a ralozcol-web.pages.dev?status=success
+10. MercadoPago redirige a ralozcolsas.com?status=success
 ```
 
 ### Lo que hace el sistema (automático, en segundos)

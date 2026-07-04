@@ -12,7 +12,7 @@ uniformes escolares en Bogotá: tienda pública, panel administrativo/POS, pasar
 de pagos, facturación electrónica, bot de WhatsApp y una auditoría de seguridad
 documentada. *Full-stack e-commerce platform running in production.*
 
-🛒 [Tienda en vivo](https://ralozcol-web.pages.dev) · 🖥️ [Panel admin](https://raloz-web.onrender.com) · 📐 [Arquitectura](docs/ARQUITECTURA.md) · 💼 [Resumen para CV/LinkedIn](docs/PORTFOLIO.md)
+🛒 [Tienda en vivo](https://ralozcolsas.com) · 🖥️ [Panel admin](https://raloz-web.onrender.com) · 📐 [Arquitectura](docs/ARQUITECTURA.md) · 💼 [Resumen para CV/LinkedIn](docs/PORTFOLIO.md)
 
 > **Empresa:** RALOZ COL SAS · Uniformes Escolares · Bogotá, Colombia  
 > **Versión:** 1.0.0-beta  
@@ -32,7 +32,7 @@ Este repositorio contiene **dos sistemas integrados**:
 | Sistema | Tecnología | URL Producción | Usuarios |
 |---------|-----------|----------------|---------|
 | **POS / Admin** | Flask + React | [raloz-web.onrender.com](https://raloz-web.onrender.com) | Administradores, vendedores, cajeros |
-| **Tienda Pública** | HTML + CSS + JS puro | [ralozcol-web.pages.dev](https://ralozcol-web.pages.dev) | Clientes finales (padres de familia) |
+| **Tienda Pública** | HTML + CSS + JS puro | [ralozcolsas.com](https://ralozcolsas.com) | Clientes finales (padres de familia) |
 
 Ambos comparten el mismo backend Flask. La tienda pública consume los endpoints `/api/tienda/*` que no requieren autenticación.
 
@@ -43,7 +43,7 @@ Ambos comparten el mismo backend Flask. La tienda pública consume los endpoints
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    CLIENTE FINAL                         │
-│              ralozcol-web.pages.dev                      │
+│              ralozcolsas.com                      │
 │        (HTML/CSS/JS estático en Cloudflare Pages)        │
 └────────────────────────┬────────────────────────────────┘
                          │ POST /api/tienda/pedido
@@ -203,7 +203,7 @@ JWT_SECRET_KEY=clave-secreta-muy-larga
 
 # MercadoPago
 MP_ACCESS_TOKEN=APP_USR-...    # Token de producción
-MP_REDIRECT_URL=https://ralozcol-web.pages.dev  # URL de retorno
+MP_REDIRECT_URL=https://ralozcolsas.com  # URL de retorno
 
 # Email (Brevo - producción en Render)
 BREVO_API_KEY=xkeysib-...      # API key de Brevo (NO la SMTP key)
@@ -217,7 +217,7 @@ EMAIL_NOMBRE=RALOZ COL SAS
 ## Flujo de Datos: Pedido Online
 
 ```
-1. Cliente elige colegio + productos en ralozcol-web.pages.dev
+1. Cliente elige colegio + productos en ralozcolsas.com
 2. Agrega al carrito → checkout form (nombre, email, tel, dirección)
 3. POST /api/tienda/pedido → backend crea PedidoWeb (estado=pendiente)
 4. Backend genera preferencia en MercadoPago → retorna init_point URL

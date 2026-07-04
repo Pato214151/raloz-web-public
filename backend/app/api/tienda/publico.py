@@ -451,7 +451,7 @@ def crear_pedido():
 
     # Crear preferencia en MercadoPago
     mp_token = os.getenv('MP_ACCESS_TOKEN', '')
-    redirect_base = os.getenv('MP_REDIRECT_URL', 'https://ralozcol-web.pages.dev')
+    redirect_base = os.getenv('MP_REDIRECT_URL', 'https://ralozcolsas.com')
     backend_url   = os.getenv('BACKEND_URL', 'https://raloz-web.onrender.com')
 
     logger.info('[MP] token presente: %s | redirect_base: %s', bool(mp_token), redirect_base)
@@ -550,7 +550,7 @@ def _generar_link_saldo(pedido, factura):
         return None
 
     backend_url   = os.getenv('BACKEND_URL', 'https://raloz-web.onrender.com')
-    redirect_base = os.getenv('MP_REDIRECT_URL', 'https://ralozcol-web.pages.dev')
+    redirect_base = os.getenv('MP_REDIRECT_URL', 'https://ralozcolsas.com')
     saldo_ref     = f"{pedido.referencia}-SALDO"
 
     preference_data = {

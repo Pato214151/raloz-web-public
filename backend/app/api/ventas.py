@@ -96,10 +96,11 @@ def hoja_ventas_diaria():
         Factura.estado != 'ANULADA'
     ).order_by(Factura.numero_factura).all()
 
-    # Pagos del rango
-    pagos = Pago.query.filter(
+    # Pagos del rango (excluye pagos de facturas anuladas)
+    pagos = Pago.query.join(Factura).filter(
         Pago.fecha_pago >= fecha,
-        Pago.fecha_pago <= fecha_hasta
+        Pago.fecha_pago <= fecha_hasta,
+        Factura.estado != 'ANULADA'
     ).order_by(Pago.fecha_pago).all()
 
     # Gastos del rango (excluye deudas pendientes)

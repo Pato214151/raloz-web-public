@@ -40,17 +40,21 @@ def resumen_dashboard():
         Factura.estado != 'ANULADA',
     )).first()
 
-    # Cobros hoy
+    # Cobros hoy (excluye pagos de facturas anuladas)
     cobros_hoy = db.session.query(
         func.coalesce(func.sum(Pago.valor), 0),
-    ).filter(Pago.fecha_pago == hoy).first()
+    ).join(Factura, Pago.id_factura == Factura.id_factura).filter(and_(
+        Pago.fecha_pago == hoy,
+        Factura.estado != 'ANULADA',
+    )).first()
 
-    # Cobros mes
+    # Cobros mes (excluye pagos de facturas anuladas)
     cobros_mes = db.session.query(
         func.coalesce(func.sum(Pago.valor), 0),
-    ).filter(and_(
+    ).join(Factura, Pago.id_factura == Factura.id_factura).filter(and_(
         Pago.fecha_pago >= inicio_mes,
         Pago.fecha_pago <= hoy,
+        Factura.estado != 'ANULADA',
     )).first()
 
     # Gastos mes (excluye deudas pendientes — esas no son gasto hasta pagarse)

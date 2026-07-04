@@ -509,7 +509,7 @@ def generar_pdf_factura(factura, detalles) -> BytesIO:
             st('f2', fontSize=7.5, textColor=C_SLATE_500, fontName='Helvetica', alignment=TA_CENTER, leading=10),
         ),
         Paragraph(
-            '🌐 <b>ralozcol-web.pages.dev</b>',
+            '🌐 <b>ralozcolsas.com</b>',
             st('f3', fontSize=7.5, textColor=C_SLATE_500, fontName='Helvetica', alignment=TA_CENTER, leading=10),
         ),
     ]]
