@@ -25,6 +25,7 @@ from app.models.stock_pendiente_fabricacion import StockPendienteFabricacion
 from app.models.token_revocado import TokenRevocado
 from app.models.movimiento_inventario import MovimientoInventario
 from app.models.orden_produccion import OrdenProduccion
+from app.models.whatsapp import WaConversacion, WaMensaje
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -34,4 +35,5 @@ __all__ = [
     'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb', 'Reserva',
     'PedidoFabricacion', 'StockPendienteFabricacion', 'TokenRevocado',
     'MovimientoInventario', 'OrdenProduccion',
+    'WaConversacion', 'WaMensaje',
 ]

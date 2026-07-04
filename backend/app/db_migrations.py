@@ -214,6 +214,33 @@ MIGRACIONES = [
             "CREATE INDEX IF NOT EXISTS idx_ordprod_colegio ON ordenes_produccion(id_colegio)",
         ],
     },
+    {
+        'version': '0012',
+        'descripcion': 'Bandeja de WhatsApp: conversaciones y mensajes (bot + humano)',
+        'sql': [
+            """
+            CREATE TABLE IF NOT EXISTS wa_conversaciones (
+                chat_id         VARCHAR(40) PRIMARY KEY,
+                nombre          VARCHAR(160),
+                ultimo_mensaje  TEXT,
+                ultima_fecha    TIMESTAMP DEFAULT NOW(),
+                no_leidos       INTEGER DEFAULT 0,
+                modo            VARCHAR(10) DEFAULT 'bot'
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS wa_mensajes (
+                id_mensaje  SERIAL PRIMARY KEY,
+                chat_id     VARCHAR(40) NOT NULL,
+                direccion   VARCHAR(4) NOT NULL,
+                texto       TEXT,
+                autor       VARCHAR(120),
+                fecha       TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_wamsg_chat ON wa_mensajes(chat_id, fecha)",
+        ],
+    },
 ]
 
 

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Search, Package, TrendingUp, Users, Wallet,
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
-  ShoppingCart, Scissors, Truck, Activity, ChevronRight,
+  ShoppingCart, Scissors, Truck, Activity, ChevronRight, MessageCircle,
 } from 'lucide-react'
 
 // ─── Grupos de navegación (6 en lugar de 8) ──────────────────────
@@ -28,6 +28,7 @@ const menuGroups = [
       { path: '/ventas',      label: 'Hoja de Ventas',  icon: TrendingUp,  roles: ['administrador', 'vendedor'] },
       { path: '/cuentas',     label: 'Por Cobrar',      icon: AlertCircle, roles: ['administrador', 'vendedor'] },
       { path: '/clientes',    label: 'Clientes',        icon: Users,       roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/whatsapp',    label: 'WhatsApp',        icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
@@ -75,6 +76,7 @@ const PAGE_TITLES = {
   '/ventas':             'Hoja de Ventas',
   '/cuentas':            'Cuentas por Cobrar',
   '/clientes':           'Clientes',
+  '/whatsapp':           'WhatsApp',
   '/pedidos-online':     'Pedidos Web',
   '/fabricacion':        'Fabricación',
   '/fabricacion/stock':  'Stock Fabricación',
@@ -122,6 +124,21 @@ export default function Layout() {
     const id = setInterval(cargar, 45000)
     return () => { activo = false; clearInterval(id) }
   }, [puedeVerPedidos])
+
+  // Badge de WhatsApp: mensajes de clientes sin leer. Refresca cada 25 s.
+  const [waNoLeidos, setWaNoLeidos] = useState(0)
+  useEffect(() => {
+    let activo = true
+    const cargar = async () => {
+      try {
+        const res = await api.get('/wa/no-leidos')
+        if (activo) setWaNoLeidos(res.data?.no_leidos || 0)
+      } catch { /* silencioso */ }
+    }
+    cargar()
+    const id = setInterval(cargar, 25000)
+    return () => { activo = false; clearInterval(id) }
+  }, [])
 
   const handleLogout = () => { logout(); navigate('/login') }
   const toggleGroup  = (id) => setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }))
@@ -208,6 +225,7 @@ export default function Layout() {
                     >
                       {({ isActive }) => {
                         const showBadge = item.path === '/operaciones' && nuevosPedidos > 0
+                        const showWaBadge = item.path === '/whatsapp' && waNoLeidos > 0
                         return (
                           <>
                             <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
@@ -215,6 +233,10 @@ export default function Layout() {
                             {showBadge ? (
                               <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
                                 {nuevosPedidos > 99 ? '99+' : nuevosPedidos}
+                              </span>
+                            ) : showWaBadge ? (
+                              <span className="ml-auto bg-green-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
+                                {waNoLeidos > 99 ? '99+' : waNoLeidos}
                               </span>
                             ) : isActive ? (
                               <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />

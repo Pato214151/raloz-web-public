@@ -25,6 +25,7 @@ import PedidosOnline from './components/pedidos/PedidosOnline'
 import PedidosFabricacion from './components/fabricacion/PedidosFabricacion'
 import StockPendienteFab from './components/fabricacion/StockPendienteFab'
 import OrdenesProduccion from './components/ordenes-produccion/OrdenesProduccion'
+import WhatsApp from './components/whatsapp/WhatsApp'
 
 function ProtectedRoute({ children, roles }) {
   const { usuario, loading } = useAuth()
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="usuarios" element={
             <ProtectedRoute roles={['administrador']}><Usuarios /></ProtectedRoute>
           } />
+          <Route path="whatsapp" element={<WhatsApp />} />
           <Route path="tareas" element={<Tareas />} />
           <Route path="operaciones" element={<Operaciones />} />
           <Route path="pedidos-online" element={<PedidosOnline />} />
