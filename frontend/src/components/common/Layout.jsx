@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Search, Package, TrendingUp, Users, Wallet,
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
-  ShoppingCart, Scissors, Truck, Activity, ChevronRight, MessageCircle,
+  ShoppingCart, Scissors, Truck, Activity, ChevronRight, MessageCircle, CalendarClock,
 } from 'lucide-react'
 
 // ─── Grupos de navegación (6 en lugar de 8) ──────────────────────
@@ -29,6 +29,7 @@ const menuGroups = [
       { path: '/cuentas',     label: 'Por Cobrar',      icon: AlertCircle, roles: ['administrador', 'vendedor'] },
       { path: '/clientes',    label: 'Clientes',        icon: Users,       roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/whatsapp',    label: 'WhatsApp',        icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/citas',       label: 'Citas',           icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
@@ -77,6 +78,7 @@ const PAGE_TITLES = {
   '/cuentas':            'Cuentas por Cobrar',
   '/clientes':           'Clientes',
   '/whatsapp':           'WhatsApp',
+  '/citas':              'Citas',
   '/pedidos-online':     'Pedidos Web',
   '/fabricacion':        'Fabricación',
   '/fabricacion/stock':  'Stock Fabricación',
@@ -137,6 +139,21 @@ export default function Layout() {
     }
     cargar()
     const id = setInterval(cargar, 25000)
+    return () => { activo = false; clearInterval(id) }
+  }, [])
+
+  // Badge de citas pendientes. Refresca cada 30 s.
+  const [citasPend, setCitasPend] = useState(0)
+  useEffect(() => {
+    let activo = true
+    const cargar = async () => {
+      try {
+        const res = await api.get('/citas/pendientes/conteo')
+        if (activo) setCitasPend(res.data?.pendientes || 0)
+      } catch { /* silencioso */ }
+    }
+    cargar()
+    const id = setInterval(cargar, 30000)
     return () => { activo = false; clearInterval(id) }
   }, [])
 
@@ -226,6 +243,7 @@ export default function Layout() {
                       {({ isActive }) => {
                         const showBadge = item.path === '/operaciones' && nuevosPedidos > 0
                         const showWaBadge = item.path === '/whatsapp' && waNoLeidos > 0
+                        const showCitasBadge = item.path === '/citas' && citasPend > 0
                         return (
                           <>
                             <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
@@ -237,6 +255,10 @@ export default function Layout() {
                             ) : showWaBadge ? (
                               <span className="ml-auto bg-green-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
                                 {waNoLeidos > 99 ? '99+' : waNoLeidos}
+                              </span>
+                            ) : showCitasBadge ? (
+                              <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
+                                {citasPend > 99 ? '99+' : citasPend}
                               </span>
                             ) : isActive ? (
                               <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />

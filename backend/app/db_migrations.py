@@ -241,6 +241,25 @@ MIGRACIONES = [
             "CREATE INDEX IF NOT EXISTS idx_wamsg_chat ON wa_mensajes(chat_id, fecha)",
         ],
     },
+    {
+        'version': '0013',
+        'descripcion': 'Tabla citas (agendamiento desde el bot de WhatsApp)',
+        'sql': [
+            """
+            CREATE TABLE IF NOT EXISTS citas (
+                id_cita   SERIAL PRIMARY KEY,
+                chat_id   VARCHAR(40),
+                nombre    VARCHAR(160),
+                dia       VARCHAR(120),
+                hora      VARCHAR(60),
+                colegio   VARCHAR(120),
+                estado    VARCHAR(20) DEFAULT 'pendiente',
+                creada    TIMESTAMP DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado, creada)",
+        ],
+    },
 ]
 
 
