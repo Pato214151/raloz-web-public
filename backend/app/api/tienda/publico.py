@@ -17,7 +17,7 @@ from sqlalchemy import func
 from flask import request, jsonify
 
 from app import db, limiter
-from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
+from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO, expandir_grupo_para_producto
 from app.utils.whatsapp_notify import notificar_whatsapp
 from app.utils.validators import sanitize_string, validate_email
 from app.models import (
@@ -83,19 +83,14 @@ def catalogo_colegio(id_colegio):
     for pid, meta in productos_meta.items():
         tallas_precios = precios_por_pid.get(pid, {})
 
-        # Construir mapa talla_individual → precio desde los grupos configurados.
-        # Las medias se manejan por GRUPO (4-6, 6-8, ...): el grupo ES la talla y
-        # NO se expande (sus grupos chocan con los de ropa: 6-8 → 6,8).
-        es_medias = 'media' in (meta.get('tipo') or '').lower()
+        # Construir mapa talla_individual → precio desde los grupos configurados
+        # (regla de medias/expansión compartida en utils/tallas.py)
         talla_precio_map = {}
         for talla_grupo, precio_u in tallas_precios.items():
             if not precio_u or precio_u <= 0:
                 continue
-            if es_medias:
-                talla_precio_map[talla_grupo] = precio_u
-            else:
-                for talla_ind in TALLA_GRUPO_A_INDIVIDUALES.get(talla_grupo, [talla_grupo]):
-                    talla_precio_map[talla_ind] = precio_u
+            for talla_ind in expandir_grupo_para_producto(meta.get('tipo'), talla_grupo):
+                talla_precio_map[talla_ind] = precio_u
 
         if not talla_precio_map:
             continue
@@ -927,13 +922,16 @@ def _estado_pedido_texto(pedido, factura, pf):
     # pagado
     if pf and pf.estado == 'en_produccion':
         return '🧵 En producción (prenda bajo pedido)'
-    if pf and pf.estado == 'listo':
+    if pf and pf.estado == 'listo_para_entrega':
         return '✅ Listo para entrega'
     ee = (factura.estado_entrega if factura else None) or 'POR_ENTREGAR'
     return {
         'POR_ENTREGAR': '📦 Pagado — preparando tu pedido',
+        'LISTO_EMPAQUE': '📦 Pagado — preparando tu pedido',
         'EMPACADO': '📦 Empacado — listo para entregar',
+        'LISTO_LLAMAR': '📦 Empacado — listo para entregar',
         'ENTREGADO': '🎉 Entregado',
+        'ENTREGADA': '🎉 Entregado',
     }.get(ee, '📦 Pagado')
 
 
@@ -968,12 +966,15 @@ def pedidos_por_telefono(telefono):
             items = []
         resumen = ', '.join(f"{i.get('cantidad', 1)}x {i.get('nombre', '')} (T {i.get('talla', '')})"
                             for i in items[:4])
+        listo = bool((pf and pf.estado == 'listo_para_entrega') or
+                     (factura and factura.estado_entrega in ('EMPACADO', 'LISTO_LLAMAR')))
         pedidos.append({
             'referencia': p.referencia,
             'fecha': p.fecha_creacion.strftime('%d/%m/%Y') if p.fecha_creacion else '',
             'total': p.total,
             'estado_texto': _estado_pedido_texto(p, factura, pf),
             'resumen': resumen,
+            'listo': listo,
         })
         if len(pedidos) >= 5:
             break
