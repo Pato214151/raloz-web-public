@@ -260,6 +260,14 @@ MIGRACIONES = [
             "CREATE INDEX IF NOT EXISTS idx_citas_estado ON citas(estado, creada)",
         ],
     },
+    {
+        'version': '0014',
+        'descripcion': 'Soporte de imágenes/archivos en los mensajes de WhatsApp',
+        'sql': [
+            "ALTER TABLE wa_mensajes ADD COLUMN IF NOT EXISTS media_tipo VARCHAR(20)",
+            "ALTER TABLE wa_mensajes ADD COLUMN IF NOT EXISTS media_b64 TEXT",
+        ],
+    },
 ]
 
 

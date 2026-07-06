@@ -88,6 +88,32 @@ def _job_cancelar_pedidos_abandonados():
 threading.Thread(target=_job_cancelar_pedidos_abandonados, daemon=True, name='pedidos-abandonados-cleanup').start()
 
 
+# ─── Job: reconciliación de pagos con MercadoPago (cada 15 min) ──
+def _job_reconciliar_pagos():
+    """Red de seguridad: registra pagos aprobados en MP que el webhook haya
+    perdido (servidor dormido, timeout). Corre cada 15 min."""
+    from sqlalchemy import text
+    from app.services.reconciliacion import reconciliar_pagos
+    time.sleep(60)  # espera inicial
+    while True:
+        try:
+            with app.app_context():
+                tengo_lock = db.session.execute(
+                    text("SELECT pg_try_advisory_xact_lock(1003)")
+                ).scalar()
+                if tengo_lock:
+                    n = reconciliar_pagos(dias=2, logger=logger)
+                    if n:
+                        logger.warning('[RECON-JOB] %d pago(s) recuperados de MercadoPago', n)
+                db.session.commit()
+        except Exception as e:
+            logger.error('[RECON-JOB] Error: %s', str(e))
+        time.sleep(900)  # cada 15 minutos
+
+
+threading.Thread(target=_job_reconciliar_pagos, daemon=True, name='reconciliacion-pagos').start()
+
+
 # ─── Ducklab: latido de telemetría al portal (cada 3 min) ────────
 # Reporta "online" + versión al portal Ducklab para el monitoreo en vivo y el
 # dead-man switch. Se ACTIVA SOLO si DUCKLAB_API_KEY y DUCKLAB_TELEMETRY_URL

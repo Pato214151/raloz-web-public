@@ -16,6 +16,29 @@ function horaCorta(iso) {
   } catch { return '' }
 }
 
+// Adjunto (imagen/archivo) de un mensaje: se pide aparte por su id.
+function Media({ id, tipo }) {
+  const [src, setSrc] = useState(null)
+  const [err, setErr] = useState(false)
+  useEffect(() => {
+    let ok = true
+    api.get(`/wa/media/${id}`)
+      .then(r => { if (ok) setSrc(r.data.media_b64) })
+      .catch(() => { if (ok) setErr(true) })
+    return () => { ok = false }
+  }, [id])
+  if (err) return <p className="text-xs italic opacity-70 mb-1">No se pudo cargar el adjunto</p>
+  if (!src) return <p className="text-xs italic opacity-70 mb-1">Cargando adjunto…</p>
+  if (tipo === 'image') {
+    return (
+      <a href={src} target="_blank" rel="noopener" className="block mb-1">
+        <img src={src} alt="adjunto" className="rounded-lg max-w-[220px] max-h-[300px] object-contain" />
+      </a>
+    )
+  }
+  return <a href={src} download className="text-xs underline mb-1 inline-block">📎 Descargar archivo</a>
+}
+
 export default function WhatsApp() {
   const [conversaciones, setConversaciones] = useState([])
   const [activo, setActivo] = useState(null)        // chat_id seleccionado
@@ -180,6 +203,7 @@ export default function WhatsApp() {
                     m.direccion === 'out'
                       ? 'bg-green-600 text-white rounded-br-sm'
                       : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'}`}>
+                    {m.tiene_media && <Media id={m.id_mensaje} tipo={m.media_tipo} />}
                     {m.texto}
                     <div className={`text-[9px] mt-1 ${
                       m.direccion === 'out' ? 'text-green-100' : 'text-gray-400'}`}>

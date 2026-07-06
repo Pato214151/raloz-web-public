@@ -36,6 +36,10 @@ class WaMensaje(db.Model):
     texto = db.Column(db.Text)
     autor = db.Column(db.String(120))                     # 'cliente' | 'bot' | nombre del asesor
     fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    # Adjuntos: 'image' | 'document' | 'audio'... y el archivo en base64.
+    # Por rendimiento, to_dict NO devuelve el base64 (se pide aparte por su endpoint).
+    media_tipo = db.Column(db.String(20))
+    media_b64 = db.Column(db.Text)
 
     def to_dict(self):
         return {
@@ -45,4 +49,6 @@ class WaMensaje(db.Model):
             'texto': self.texto,
             'autor': self.autor,
             'fecha': self.fecha.isoformat() if self.fecha else None,
+            'media_tipo': self.media_tipo,
+            'tiene_media': bool(self.media_b64),
         }

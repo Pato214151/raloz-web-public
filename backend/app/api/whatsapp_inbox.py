@@ -74,6 +74,8 @@ def log_mensaje():
 
     db.session.add(WaMensaje(
         chat_id=chat_id, direccion=direccion, texto=texto, autor=autor,
+        media_tipo=data.get('media_tipo'),
+        media_b64=data.get('media_b64'),
     ))
     db.session.commit()
     return jsonify({'ok': True, 'modo': conv.modo or 'bot'})
@@ -118,6 +120,16 @@ def listar_mensajes(chat_id):
         conv.no_leidos = 0
         db.session.commit()
     return jsonify([m.to_dict() for m in msgs])
+
+
+@wa_inbox_bp.route('/media/<int:id_mensaje>', methods=['GET'])
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def obtener_media(id_mensaje):
+    """Devuelve el adjunto (imagen/archivo) de un mensaje, en base64."""
+    msg = db.session.get(WaMensaje, id_mensaje)
+    if not msg or not msg.media_b64:
+        return jsonify({'error': 'sin adjunto'}), 404
+    return jsonify({'media_tipo': msg.media_tipo or 'image', 'media_b64': msg.media_b64})
 
 
 @wa_inbox_bp.route('/conversaciones/<chat_id>/modo', methods=['POST'])
