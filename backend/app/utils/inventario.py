@@ -130,6 +130,27 @@ def construir_balance_colegio(colegio_id, desde=None, hasta=None):
     return balance, totales
 
 
+def stock_descontado_neto(numero_factura, id_colegio):
+    """
+    Cuánto stock descontó REALMENTE una factura, según el kardex:
+    SALIDAs con esa referencia menos ENTRADAs con esa referencia
+    (devoluciones por edición/anulación previas).
+
+    Devuelve dict {(id_producto, talla_individual): neto} solo con netos > 0.
+    Una venta "por entregar" no genera SALIDA al crearse, así que su neto es 0
+    y anularla/editarla no debe devolver nada al inventario.
+    """
+    netos = {}
+    movs = MovimientoInventario.query.filter_by(
+        referencia=numero_factura, id_colegio=id_colegio,
+    ).filter(MovimientoInventario.tipo.in_(('SALIDA', 'ENTRADA'))).all()
+    for m in movs:
+        clave = (m.id_producto, m.talla_individual)
+        delta = m.cantidad if m.tipo == 'SALIDA' else -m.cantidad
+        netos[clave] = netos.get(clave, 0) + delta
+    return {clave: neto for clave, neto in netos.items() if neto > 0}
+
+
 def registrar_movimiento(id_colegio, id_producto, talla, tipo, cantidad,
                          usuario, motivo='', referencia=None):
     """

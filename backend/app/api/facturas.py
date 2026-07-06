@@ -8,7 +8,7 @@ from app import db
 from app.models import (Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente,
                         Pago, PrendaPendiente, Producto, PrecioColegio, CajaDiaria, MovimientoCaja, Cliente)
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
-from app.utils.inventario import registrar_movimiento
+from app.utils.inventario import registrar_movimiento, stock_descontado_neto
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.validators import sanitize_string, validate_date, validate_required_fields
 from datetime import datetime, date
@@ -367,15 +367,17 @@ def editar_factura(id_factura):
 
         # Si se envían nuevos detalles, reemplazar productos
         if 'detalles' in data and isinstance(data['detalles'], list) and len(data['detalles']) > 0:
-            # Devolver stock de detalles actuales
-            for det_old in factura.detalles:
-                stock = Stock.query.filter_by(
-                    id_colegio=factura.id_colegio,
-                    id_producto=det_old.id_producto,
-                    talla_individual=det_old.talla_individual,
-                ).first()
-                if stock:
-                    stock.cantidad += det_old.cantidad
+            # Devolver al inventario SOLO lo que esta factura descontó
+            # realmente (kardex). Una venta "por entregar" nunca descontó
+            # stock, así que editarla no debe inflar el inventario.
+            descontado = stock_descontado_neto(factura.numero_factura, factura.id_colegio)
+            for (id_prod, talla), neto in descontado.items():
+                registrar_movimiento(
+                    factura.id_colegio, id_prod, talla, 'ENTRADA', neto,
+                    usuario=identity['usuario'], motivo='Edición factura (devolución)',
+                    referencia=factura.numero_factura,
+                )
+            habia_descontado = bool(descontado)
 
             # Eliminar detalles anteriores
             FacturaDetalle.query.filter_by(id_factura=id_factura).delete()
@@ -394,44 +396,43 @@ def editar_factura(id_factura):
                 total_linea = cantidad * precio
                 nuevo_total += total_linea
 
+                talla_item = sanitize_string(item.get('talla_individual', ''), 20)
                 detalle = FacturaDetalle(
                     id_factura=id_factura,
                     id_producto=int(item['id_producto']),
-                    talla_individual=sanitize_string(item.get('talla_individual', ''), 20),
+                    talla_individual=talla_item,
                     cantidad=cantidad,
                     precio_unitario=precio,
                     total_linea=total_linea,
                 )
                 db.session.add(detalle)
 
-                # Descontar nuevo stock
-                stock = Stock.query.filter_by(
-                    id_colegio=factura.id_colegio,
-                    id_producto=int(item['id_producto']),
-                    talla_individual=sanitize_string(item.get('talla_individual', ''), 20),
-                ).first()
-
-                if stock:
-                    if stock.cantidad >= cantidad:
-                        stock.cantidad -= cantidad
-                    else:
-                        faltante = cantidad - stock.cantidad
-                        stock.cantidad = 0
+                # Descontar el nuevo stock solo si la factura había descontado
+                # (venta de entrega inmediata). Se descuenta lo disponible por
+                # el kardex y el faltante queda en StockPendiente, como antes.
+                if habia_descontado:
+                    stock = Stock.query.filter_by(
+                        id_colegio=factura.id_colegio,
+                        id_producto=int(item['id_producto']),
+                        talla_individual=talla_item,
+                    ).first()
+                    disponible = stock.cantidad if stock else 0
+                    a_descontar = min(cantidad, disponible)
+                    if a_descontar > 0:
+                        registrar_movimiento(
+                            factura.id_colegio, int(item['id_producto']), talla_item,
+                            'SALIDA', a_descontar,
+                            usuario=identity['usuario'], motivo='Venta (edición factura)',
+                            referencia=factura.numero_factura,
+                        )
+                    if cantidad - a_descontar > 0:
                         db.session.add(StockPendiente(
                             id_factura=id_factura,
                             id_colegio=factura.id_colegio,
                             id_producto=int(item['id_producto']),
-                            talla_individual=sanitize_string(item.get('talla_individual', ''), 20),
-                            cantidad_faltante=faltante,
+                            talla_individual=talla_item,
+                            cantidad_faltante=cantidad - a_descontar,
                         ))
-                else:
-                    db.session.add(StockPendiente(
-                        id_factura=id_factura,
-                        id_colegio=factura.id_colegio,
-                        id_producto=int(item['id_producto']),
-                        talla_individual=sanitize_string(item.get('talla_individual', ''), 20),
-                        cantidad_faltante=cantidad,
-                    ))
 
             factura.total = nuevo_total
             factura.subtotal = nuevo_total
@@ -469,15 +470,16 @@ def anular_factura(id_factura):
     nota = f"[ANULADA por {identity['usuario']} el {timestamp}]"
     factura.observaciones = f"{factura.observaciones or ''} {nota}".strip()
 
-    # Devolver stock
-    for detalle in factura.detalles:
-        stock = Stock.query.filter_by(
-            id_colegio=factura.id_colegio,
-            id_producto=detalle.id_producto,
-            talla_individual=detalle.talla_individual,
-        ).first()
-        if stock:
-            stock.cantidad += detalle.cantidad
+    # Devolver al inventario SOLO lo que esta factura descontó realmente
+    # (kardex): una venta "por entregar" nunca descontó stock y anularla
+    # no debe inflar el inventario. La devolución queda como ENTRADA.
+    for (id_prod, talla), neto in stock_descontado_neto(
+            factura.numero_factura, factura.id_colegio).items():
+        registrar_movimiento(
+            factura.id_colegio, id_prod, talla, 'ENTRADA', neto,
+            usuario=identity['usuario'], motivo='Anulación factura',
+            referencia=factura.numero_factura,
+        )
 
     db.session.commit()
     registrar_auditoria('facturas', id_factura, 'ANULAR', f'Factura {factura.numero_factura}')

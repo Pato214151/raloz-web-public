@@ -223,6 +223,75 @@ def test_anular_factura_inmediata_devuelve_stock(client, auth, datos_base):
     assert Stock.query.filter_by(talla_individual='6').first().cantidad == 5
 
 
+def test_anular_por_entregar_no_devuelve_stock(client, auth, datos_base):
+    """Una venta 'por entregar' nunca descontó stock: anularla no debe inflarlo."""
+    r = client.post('/api/facturas', json=_payload_factura(datos_base), headers=auth)
+    fid = r.get_json()['factura']['id_factura']
+    assert Stock.query.filter_by(talla_individual='6').first().cantidad == 5
+
+    r = client.post(f'/api/facturas/{fid}/anular', headers=auth)
+    assert r.status_code == 200
+    assert Stock.query.filter_by(talla_individual='6').first().cantidad == 5  # sigue igual
+
+
+def test_anular_registra_entrada_en_kardex(client, auth, datos_base):
+    r = client.post('/api/facturas', json=_payload_factura(
+        datos_base, entrega_inmediata=True), headers=auth)
+    f = r.get_json()['factura']
+    client.post(f"/api/facturas/{f['id_factura']}/anular", headers=auth)
+    entrada = MovimientoInventario.query.filter_by(
+        tipo='ENTRADA', referencia=f['numero_factura']).first()
+    assert entrada is not None and entrada.cantidad == 2
+    assert entrada.motivo == 'Anulación factura'
+
+
+def test_anular_tras_reactivar_no_devuelve_doble(client, auth, datos_base):
+    r = client.post('/api/facturas', json=_payload_factura(
+        datos_base, entrega_inmediata=True), headers=auth)
+    fid = r.get_json()['factura']['id_factura']
+    client.post(f'/api/facturas/{fid}/anular', headers=auth)      # 3 → 5
+    client.post(f'/api/facturas/{fid}/reactivar', headers=auth)   # no toca stock
+    client.post(f'/api/facturas/{fid}/anular', headers=auth)      # neto ya es 0
+    assert Stock.query.filter_by(talla_individual='6').first().cantidad == 5
+
+
+def test_editar_factura_inmediata_mantiene_kardex_consistente(client, auth, datos_base):
+    r = client.post('/api/facturas', json=_payload_factura(
+        datos_base, entrega_inmediata=True), headers=auth)
+    f = r.get_json()['factura']
+    assert Stock.query.filter_by(talla_individual='6').first().cantidad == 3
+
+    # Cambiar la cantidad de 2 a 1: devuelve 2 y descuenta 1
+    r = client.put(f"/api/facturas/{f['id_factura']}", json={
+        'detalles': [{
+            'id_producto': datos_base['producto'].id_producto,
+            'talla_individual': '6', 'cantidad': 1, 'precio_unitario': 50000,
+        }],
+    }, headers=auth)
+    assert r.status_code == 200
+    stock = Stock.query.filter_by(talla_individual='6').first()
+    assert stock.cantidad == 4  # 5 − 1
+
+    # Kardex refleja todo: SALIDA 2 (venta), ENTRADA 2 (devolución), SALIDA 1 (edición)
+    ultimo = (MovimientoInventario.query
+              .order_by(MovimientoInventario.id.desc()).first())
+    assert ultimo.stock_resultante == stock.cantidad
+
+
+def test_editar_factura_por_entregar_no_toca_stock(client, auth, datos_base):
+    r = client.post('/api/facturas', json=_payload_factura(datos_base), headers=auth)
+    fid = r.get_json()['factura']['id_factura']
+    r = client.put(f'/api/facturas/{fid}', json={
+        'detalles': [{
+            'id_producto': datos_base['producto'].id_producto,
+            'talla_individual': '6', 'cantidad': 3, 'precio_unitario': 50000,
+        }],
+    }, headers=auth)
+    assert r.status_code == 200
+    assert Stock.query.filter_by(talla_individual='6').first().cantidad == 5
+    assert MovimientoInventario.query.count() == 0
+
+
 def test_reactivar_factura_recalcula_estado(client, auth, factura_pendiente):
     fid = factura_pendiente['id_factura']
     client.post(f'/api/facturas/{fid}/anular', headers=auth)

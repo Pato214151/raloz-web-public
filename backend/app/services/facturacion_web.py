@@ -16,6 +16,7 @@ from flask import current_app
 
 from app import db
 from app.utils.email_service import enviar_email_factura
+from app.utils.inventario import registrar_movimiento
 from app.models import (
     Stock, PedidoWeb, Factura, FacturaDetalle, Pago,
     SerieFacturacion, Cliente, Reserva,
@@ -200,11 +201,16 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
 
         stock_real = stock.cantidad if stock else 0
 
-        # Re-verificar cuánto podemos descontar realmente
+        # Re-verificar cuánto podemos descontar realmente. La SALIDA pasa por
+        # el kardex (la fila ya quedó bloqueada por el FOR UPDATE de arriba).
         cant_descontar = min(stock_esperado, stock_real)
 
         if stock and cant_descontar > 0:
-            stock.cantidad -= cant_descontar
+            registrar_movimiento(
+                pedido.id_colegio, item['id_producto'], item['talla'],
+                'SALIDA', cant_descontar,
+                usuario='TIENDA_WEB', motivo='Venta web', referencia=numero,
+            )
 
         # Si el stock real es menor al esperado → fabricación para la diferencia
         item_actualizado = dict(item)
