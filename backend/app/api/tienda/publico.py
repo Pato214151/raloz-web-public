@@ -918,3 +918,66 @@ def consultar_pedido(referencia):
     return jsonify({'pedido': pedido.to_dict()}), 200
 
 
+def _estado_pedido_texto(pedido, factura, pf):
+    """Texto amigable del estado de un pedido para el cliente."""
+    if pedido.estado == 'pendiente':
+        return '⏳ Pendiente de pago'
+    if pedido.estado in ('fallido', 'cancelado'):
+        return '❌ Pago no completado o cancelado'
+    # pagado
+    if pf and pf.estado == 'en_produccion':
+        return '🧵 En producción (prenda bajo pedido)'
+    if pf and pf.estado == 'listo':
+        return '✅ Listo para entrega'
+    ee = (factura.estado_entrega if factura else None) or 'POR_ENTREGAR'
+    return {
+        'POR_ENTREGAR': '📦 Pagado — preparando tu pedido',
+        'EMPACADO': '📦 Empacado — listo para entregar',
+        'ENTREGADO': '🎉 Entregado',
+    }.get(ee, '📦 Pagado')
+
+
+@tienda_bp.route('/pedidos-por-telefono/<telefono>', methods=['GET'])
+def pedidos_por_telefono(telefono):
+    """Devuelve los pedidos de un cliente buscando por su número (últimos 10 dígitos).
+    Protegido: solo el bot (con el secreto compartido) puede consultarlo, para que
+    nadie pueda enumerar pedidos ajenos por número de teléfono."""
+    _esperado = os.getenv('WA_LOG_TOKEN', '')
+    if not _esperado or request.headers.get('X-Bot-Token', '') != _esperado:
+        return jsonify({'error': 'no autorizado'}), 401
+    import re
+    digitos = re.sub(r'\D', '', telefono or '')
+    if len(digitos) < 7:
+        return jsonify({'pedidos': []}), 200
+    ult10 = digitos[-10:]
+    # Filtro amplio por los últimos 7 dígitos (tolera +57, espacios) y se verifica en Python
+    candidatos = (PedidoWeb.query
+                  .filter(PedidoWeb.telefono_cliente.like(f'%{ult10[-7:]}%'))
+                  .order_by(PedidoWeb.fecha_creacion.desc())
+                  .limit(20).all())
+
+    pedidos = []
+    for p in candidatos:
+        if re.sub(r'\D', '', p.telefono_cliente or '')[-10:] != ult10:
+            continue
+        factura = Factura.query.get(p.id_factura) if p.id_factura else None
+        pf = PedidoFabricacion.query.filter_by(id_pedido_web=p.id_pedido).first()
+        try:
+            items = json.loads(p.items_json) if p.items_json else []
+        except Exception:
+            items = []
+        resumen = ', '.join(f"{i.get('cantidad', 1)}x {i.get('nombre', '')} (T {i.get('talla', '')})"
+                            for i in items[:4])
+        pedidos.append({
+            'referencia': p.referencia,
+            'fecha': p.fecha_creacion.strftime('%d/%m/%Y') if p.fecha_creacion else '',
+            'total': p.total,
+            'estado_texto': _estado_pedido_texto(p, factura, pf),
+            'resumen': resumen,
+        })
+        if len(pedidos) >= 5:
+            break
+
+    return jsonify({'pedidos': pedidos}), 200
+
+

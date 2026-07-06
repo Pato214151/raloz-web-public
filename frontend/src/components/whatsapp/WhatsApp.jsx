@@ -1,7 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Send, Bot, User, RefreshCw, MessageCircle } from 'lucide-react'
+import { Send, Bot, User, RefreshCw, MessageCircle, Image as ImageIcon } from 'lucide-react'
+
+// Respuestas rápidas (plantillas) para el asesor
+const RESPUESTAS_RAPIDAS = [
+  { label: 'Saludo', text: '¡Hola! 😊 ¿En qué te podemos ayudar?' },
+  { label: 'Pedido listo', text: 'Tu pedido ya está listo para recoger en el local 🎉' },
+  { label: 'Ubicación', text: 'Nos encuentras en el C.C. San Andresito de la 68, Local M14, Bogotá. Horario: lunes y sábado de 10:00 a.m. a 5:00 p.m.' },
+  { label: 'Trae al niñ@', text: 'Para tomar bien la talla, trae al niñ@ al local, sin compromiso 👦👧' },
+  { label: 'Gracias', text: '¡Gracias por escribirnos! 🙏 Que tengas un feliz día.' },
+]
 
 // Bandeja de WhatsApp: lista de conversaciones + chat. El bot responde solo
 // mientras la conversación esté en modo "bot"; al responder desde aquí (o al
@@ -45,8 +54,10 @@ export default function WhatsApp() {
   const [mensajes, setMensajes] = useState([])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [enviandoImg, setEnviandoImg] = useState(false)
   const [cargandoConv, setCargandoConv] = useState(true)
   const finRef = useRef(null)
+  const fileRef = useRef(null)
 
   const convActiva = conversaciones.find(c => c.chat_id === activo)
 
@@ -104,6 +115,26 @@ export default function WhatsApp() {
     } catch (err) {
       toast.error(err.response?.data?.error || 'No se pudo enviar')
     } finally { setEnviando(false) }
+  }
+
+  const enviarImagen = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !activo) return
+    const reader = new FileReader()
+    reader.onload = async () => {
+      setEnviandoImg(true)
+      try {
+        await api.post(`/wa/conversaciones/${activo}/enviar-imagen`,
+          { imagen_b64: reader.result, caption: texto.trim() })
+        setTexto('')
+        await cargarMensajes(activo)
+        cargarConversaciones()
+      } catch (err) {
+        toast.error(err.response?.data?.error || 'No se pudo enviar la imagen')
+      } finally { setEnviandoImg(false) }
+    }
+    reader.readAsDataURL(file)
   }
 
   const cambiarModo = async (modo) => {
@@ -216,18 +247,34 @@ export default function WhatsApp() {
             </div>
 
             {/* Enviar */}
-            <form onSubmit={enviar} className="flex items-center gap-2 p-3 border-t border-gray-100">
-              <input
-                value={texto}
-                onChange={e => setTexto(e.target.value)}
-                placeholder="Escribe un mensaje…"
-                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-              <button type="submit" disabled={enviando || !texto.trim()}
-                className="flex items-center gap-1.5 bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition">
-                <Send size={15} /> Enviar
-              </button>
-            </form>
+            <div className="border-t border-gray-100">
+              {/* Respuestas rápidas */}
+              <div className="flex gap-1.5 px-3 pt-2 flex-wrap">
+                {RESPUESTAS_RAPIDAS.map((q, i) => (
+                  <button key={i} type="button" onClick={() => setTexto(q.text)}
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-700 transition">
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+              <form onSubmit={enviar} className="flex items-center gap-2 p-3">
+                <input type="file" accept="image/*" ref={fileRef} onChange={enviarImagen} className="hidden" />
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={enviandoImg}
+                  title="Enviar foto" className="p-2 text-gray-400 hover:text-green-600 rounded-lg disabled:opacity-50">
+                  <ImageIcon size={18} />
+                </button>
+                <input
+                  value={texto}
+                  onChange={e => setTexto(e.target.value)}
+                  placeholder={enviandoImg ? 'Enviando foto…' : 'Escribe un mensaje…'}
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+                <button type="submit" disabled={enviando || !texto.trim()}
+                  className="flex items-center gap-1.5 bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition">
+                  <Send size={15} /> Enviar
+                </button>
+              </form>
+            </div>
           </>
         )}
       </div>

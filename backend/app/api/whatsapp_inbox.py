@@ -13,6 +13,8 @@ necesita WHATSAPP_TOKEN y PHONE_NUMBER_ID en su entorno (las mismas del bot).
 """
 
 import os
+import re
+import base64
 from datetime import datetime
 
 import requests
@@ -183,6 +185,71 @@ def enviar_mensaje(chat_id):
     conv.ultima_fecha = datetime.utcnow()
     db.session.add(WaMensaje(
         chat_id=chat_id, direccion='out', texto=texto, autor=usuario,
+    ))
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@wa_inbox_bp.route('/conversaciones/<chat_id>/enviar-imagen', methods=['POST'])
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def enviar_imagen(chat_id):
+    """Un asesor envía una imagen desde el panel: se sube a Meta y se manda."""
+    data = request.get_json(silent=True) or {}
+    m = re.match(r'data:([^;]+);base64,(.*)', data.get('imagen_b64') or '', re.DOTALL)
+    if not m:
+        return jsonify({'error': 'imagen inválida'}), 400
+    mime, b64 = m.group(1), m.group(2)
+    caption = (data.get('caption') or '').strip()
+    try:
+        raw = base64.b64decode(b64)
+    except Exception:
+        return jsonify({'error': 'base64 inválido'}), 400
+    if len(raw) > 5_000_000:
+        return jsonify({'error': 'imagen muy grande (máx 5 MB)'}), 400
+
+    token = os.getenv('WHATSAPP_TOKEN', '')
+    phone_id = os.getenv('PHONE_NUMBER_ID', '')
+    if not token or not phone_id:
+        return jsonify({'error': 'WHATSAPP_TOKEN / PHONE_NUMBER_ID no configurados'}), 500
+    base = f'https://graph.facebook.com/{GRAPH_VERSION}/{phone_id}'
+
+    # 1) subir la imagen a Meta → media_id
+    try:
+        up = requests.post(
+            f'{base}/media', headers={'Authorization': f'Bearer {token}'},
+            files={'file': ('foto', raw, mime)},
+            data={'messaging_product': 'whatsapp', 'type': mime}, timeout=30)
+    except requests.RequestException as e:
+        return jsonify({'error': f'error subiendo: {e}'}), 502
+    if up.status_code >= 300:
+        return jsonify({'error': 'Meta rechazó la subida', 'detalle': up.text}), 502
+    media_id = (up.json() or {}).get('id')
+    if not media_id:
+        return jsonify({'error': 'sin media_id'}), 502
+
+    # 2) enviar el mensaje de imagen
+    img = {'id': media_id}
+    if caption:
+        img['caption'] = caption
+    try:
+        snd = requests.post(
+            f'{base}/messages', headers={'Authorization': f'Bearer {token}'},
+            json={'messaging_product': 'whatsapp', 'to': chat_id, 'type': 'image', 'image': img},
+            timeout=20)
+    except requests.RequestException as e:
+        return jsonify({'error': f'error enviando: {e}'}), 502
+    if snd.status_code >= 300:
+        return jsonify({'error': 'Meta rechazó el envío', 'detalle': snd.text}), 502
+
+    # 3) registrar en la bandeja
+    usuario = get_current_identity().get('usuario', 'asesor')
+    conv = _upsert_conversacion(chat_id)
+    conv.modo = 'humano'
+    conv.ultimo_mensaje = caption or '📷 Imagen'
+    conv.ultima_fecha = datetime.utcnow()
+    db.session.add(WaMensaje(
+        chat_id=chat_id, direccion='out', texto=caption or '', autor=usuario,
+        media_tipo='image', media_b64=data.get('imagen_b64'),
     ))
     db.session.commit()
     return jsonify({'ok': True})

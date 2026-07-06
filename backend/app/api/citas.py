@@ -72,4 +72,17 @@ def cambiar_estado(id_cita):
         return jsonify({'error': 'cita no encontrada'}), 404
     cita.estado = nuevo
     db.session.commit()
+
+    # Al confirmar, avisar al cliente por WhatsApp (y dejarlo en la bandeja)
+    if nuevo == 'confirmada' and cita.chat_id:
+        from app.services.wa_send import enviar_whatsapp
+        msg = (
+            "✅ *¡Tu cita quedó confirmada!*\n\n"
+            f"📅 {cita.dia}   🕘 {cita.hora}\n"
+            "📍 C.C. San Andresito de la 68, Local M14, Bogotá\n\n"
+            "Trae al niñ@ para tomar bien la talla. Si necesitas cambiarla, "
+            "escríbenos por aquí. ¡Te esperamos! 🙌"
+        )
+        enviar_whatsapp(cita.chat_id, msg, autor='sistema')
+
     return jsonify({'ok': True, 'estado': nuevo})
