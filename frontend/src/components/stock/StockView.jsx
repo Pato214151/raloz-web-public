@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, Plus, X, Printer, AlertTriangle, Activity, ChevronRight, Trash2, Edit2, Check, BarChart3 } from 'lucide-react'
+import { Package, Plus, X, Printer, AlertTriangle, Activity, BarChart3 } from 'lucide-react'
 
 const TALLAS_NORMAL = ['2', '4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'Única']
 const TALLAS_MEDIAS = ['4-6', '6-8', '8-10', '10-12', '12-14']

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Package, Search, Check, X, AlertTriangle, FileText, User, School, Calendar, DollarSign, Hash, Phone, Bell, Printer, CheckCheck } from 'lucide-react'
+import { Package, Search, Check, AlertTriangle, FileText, User, School, Calendar, DollarSign, Phone, Bell, Printer, CheckCheck } from 'lucide-react'
 
 export default function Empaque() {
   const [numeroFactura, setNumeroFactura] = useState('')

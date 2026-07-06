@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { BookOpen, DollarSign, TrendingUp, TrendingDown, AlertCircle, Check, Plus, Printer, History, X } from 'lucide-react'
+import { BookOpen, DollarSign, TrendingUp, TrendingDown, AlertCircle, Plus, Printer, History, X } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 

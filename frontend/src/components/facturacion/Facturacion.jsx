@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
+import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText } from 'lucide-react'
 
 const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
 const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { UserCog, Plus, Shield, Eye } from 'lucide-react'
+import { Plus } from 'lucide-react'
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
