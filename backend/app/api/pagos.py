@@ -13,23 +13,6 @@ from datetime import date
 pagos_bp = Blueprint('pagos', __name__)
 
 
-def _recalcular_factura(factura):
-    """Recalcular totales de factura después de modificar pagos"""
-    total_pagado = sum(p.valor for p in factura.pagos)
-    factura.total_abonado = total_pagado
-    factura.saldo_pendiente = max(factura.total - total_pagado, 0)
-
-    if factura.estado == 'ANULADA':
-        return
-
-    if total_pagado >= factura.total:
-        factura.estado = 'PAGADA'
-    elif total_pagado > 0:
-        factura.estado = 'PENDIENTE'
-    else:
-        factura.estado = 'PENDIENTE'
-
-
 @pagos_bp.route('', methods=['GET'])
 @jwt_required()
 def listar_pagos():
@@ -168,7 +151,7 @@ def editar_pago(id_pago):
             if nueva_fecha:
                 pago.fecha_pago = nueva_fecha
 
-        _recalcular_factura(factura)
+        factura.recalcular_desde_pagos()
 
         db.session.commit()
         registrar_auditoria('pagos', id_pago, 'EDITAR', f'Pago editado por {identity["usuario"]}')
@@ -197,7 +180,7 @@ def eliminar_pago(id_pago):
     info = f'Pago ${pago.valor:,.0f} de factura {factura.numero_factura} eliminado por {identity["usuario"]}'
 
     db.session.delete(pago)
-    _recalcular_factura(factura)
+    factura.recalcular_desde_pagos()
     db.session.commit()
 
     registrar_auditoria('pagos', id_pago, 'ELIMINAR', info)

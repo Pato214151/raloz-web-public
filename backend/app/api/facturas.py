@@ -435,15 +435,7 @@ def editar_factura(id_factura):
 
             factura.total = nuevo_total
             factura.subtotal = nuevo_total
-
-            # Recalcular saldo
-            total_pagado = sum(p.valor for p in factura.pagos)
-            factura.total_abonado = total_pagado
-            factura.saldo_pendiente = max(nuevo_total - total_pagado, 0)
-            if total_pagado >= nuevo_total:
-                factura.estado = 'PAGADA'
-            elif total_pagado > 0:
-                factura.estado = 'PENDIENTE'
+            factura.recalcular_desde_pagos()
 
         db.session.commit()
         registrar_auditoria('facturas', id_factura, 'EDITAR', f'Factura {factura.numero_factura} editada por {identity["usuario"]}')
@@ -504,15 +496,9 @@ def reactivar_factura(id_factura):
     if factura.estado != 'ANULADA':
         return jsonify({'error': 'Solo se pueden reactivar facturas anuladas'}), 400
 
-    # Recalcular estado basado en pagos
-    total_pagado = sum(p.valor for p in factura.pagos)
-    if total_pagado >= factura.total:
-        factura.estado = 'PAGADA'
-    else:
-        factura.estado = 'PENDIENTE'
-
-    factura.total_abonado = total_pagado
-    factura.saldo_pendiente = max(factura.total - total_pagado, 0)
+    # Salir de ANULADA y recalcular estado/saldos desde los pagos
+    factura.estado = 'PENDIENTE'
+    factura.recalcular_desde_pagos()
 
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
     nota = f"[REACTIVADA por {identity['usuario']} el {timestamp}]"
@@ -526,7 +512,7 @@ def reactivar_factura(id_factura):
         'factura': factura.to_dict(),
         'resumen': {
             'estado': factura.estado,
-            'total_pagado': total_pagado,
+            'total_pagado': factura.total_abonado,
             'saldo_pendiente': factura.saldo_pendiente,
         }
     }), 200

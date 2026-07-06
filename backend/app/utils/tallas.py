@@ -99,3 +99,25 @@ def obtener_tallas_individuales_validas() -> list:
 def obtener_tallas_agrupadas_validas() -> list:
     """Obtener lista de tallas agrupadas válidas"""
     return sorted(list(TALLAS_AGRUPADAS))
+
+
+# ═══════════════════════════════════════════════════════════════
+# Regla de MEDIAS y expansión de grupos (compartida por el catálogo
+# del panel — utils/inventario.py — y el de la tienda — api/tienda/publico.py)
+# ═══════════════════════════════════════════════════════════════
+
+def es_producto_medias(tipo_producto) -> bool:
+    """Las medias se manejan por GRUPO (4-6, 6-8, 8-10, 10-12, 12-14): el grupo
+    ES la talla y NO se expande, porque sus grupos chocan con los de ropa
+    (6-8 → 6,8)."""
+    return 'media' in (tipo_producto or '').lower()
+
+
+def expandir_grupo_para_producto(tipo_producto, talla_grupo) -> list:
+    """Tallas individuales que cubre un talla_grupo según el tipo de producto:
+    para medias el grupo es la talla; para el resto se expande (6-8 → [6, 8]).
+    Grupos desconocidos se devuelven tal cual (comportamiento tolerante que ya
+    tenían ambos catálogos)."""
+    if es_producto_medias(tipo_producto):
+        return [talla_grupo]
+    return TALLA_GRUPO_A_INDIVIDUALES.get(talla_grupo, [talla_grupo])
