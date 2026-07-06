@@ -257,6 +257,28 @@ def test_caja_cierre_calcula_diferencia(client, auth):
 # Prendas pendientes
 # ══════════════════════════════════════════════════════════════
 
+def test_entregar_batch_marca_solo_pendientes(client, auth, datos_base):
+    # Dos facturas por entregar → dos prendas pendientes
+    client.post('/api/facturas', json=_payload_factura(datos_base), headers=auth)
+    client.post('/api/facturas', json=_payload_factura(datos_base), headers=auth)
+    prendas = PrendaPendiente.query.all()
+    assert len(prendas) == 2
+    ids = [p.id_pendiente for p in prendas]
+
+    # Una ya está entregada → el batch debe omitirla
+    client.post(f'/api/prendas/{ids[0]}/entregar', headers=auth)
+
+    r = client.post('/api/prendas/entregar-batch', json={'ids': ids}, headers=auth)
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body['entregadas'] == 1 and body['omitidas'] == 1
+    assert all(p.estado == 'ENTREGADO' for p in PrendaPendiente.query.all())
+
+    # Validación de entrada
+    assert client.post('/api/prendas/entregar-batch', json={}, headers=auth).status_code == 400
+    assert client.post('/api/prendas/entregar-batch', json={'ids': ['x']}, headers=auth).status_code == 400
+
+
 def test_entregar_prenda_individual(client, auth, datos_base):
     client.post('/api/facturas', json=_payload_factura(datos_base), headers=auth)
     prenda = PrendaPendiente.query.first()

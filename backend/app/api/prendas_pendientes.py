@@ -108,6 +108,43 @@ def entregar_prenda(id_pendiente):
     return jsonify({'message': 'Prenda marcada como entregada', 'prenda': prenda.to_dict()}), 200
 
 
+@prendas_bp.route('/entregar-batch', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def entregar_prendas_batch():
+    """Marcar varias prendas como entregadas de una vez (botón de entrega
+    masiva del panel). Solo procesa las que siguen PENDIENTES."""
+    data = request.get_json() or {}
+    ids = data.get('ids')
+    if not ids or not isinstance(ids, list):
+        return jsonify({'error': 'ids requerido (lista de prendas)'}), 400
+    try:
+        ids = [int(x) for x in ids]
+    except (ValueError, TypeError):
+        return jsonify({'error': 'ids inválidos'}), 400
+
+    identity = get_current_identity()
+    prendas = PrendaPendiente.query.filter(
+        PrendaPendiente.id_pendiente.in_(ids),
+        PrendaPendiente.estado == 'PENDIENTE',
+    ).all()
+
+    for prenda in prendas:
+        prenda.estado = 'ENTREGADO'
+        prenda.fecha_entrega = date.today()
+    db.session.commit()
+
+    if prendas:
+        registrar_auditoria('prendas_pendientes', prendas[0].id_pendiente, 'ENTREGAR_BATCH',
+                            f'{len(prendas)} prendas entregadas por {identity["usuario"]}')
+
+    return jsonify({
+        'message': f'{len(prendas)} prenda(s) marcada(s) como entregada(s)',
+        'entregadas': len(prendas),
+        'omitidas': len(ids) - len(prendas),
+    }), 200
+
+
 @prendas_bp.route('/<int:id_pendiente>', methods=['PUT'])
 @jwt_required()
 @rol_requerido('administrador', 'vendedor')
