@@ -1,306 +1,316 @@
-# RALOZ COL S.A.S — Arquitectura del Sistema
+# RALOZ COL S.A.S — Mapa técnico del sistema
 
-> Plataforma full-stack de comercio electrónico para uniformes escolares: tienda
-> pública, panel administrativo/POS, pasarela de pagos, facturación electrónica,
-> notificaciones por correo y bot de WhatsApp.
+> Documento de arquitectura operativa: cómo está enlazado todo (datos, backend,
+> flujos de negocio, frontend) y los problemas detectados. Generado del análisis
+> del código el 2026-07-06. La versión portafolio anterior de este archivo quedó
+> en el historial de git; la versión en inglés sigue en [ARCHITECTURE.md](ARCHITECTURE.md).
 
-🇬🇧 *English version: [ARCHITECTURE.md](ARCHITECTURE.md)*
+Piezas del sistema:
 
----
-
-## 📊 De un vistazo
-
-| Métrica | Valor |
-|---|---|
-| Líneas de código | **~23.000** |
-| Backend (Flask) | 8.000 LOC · 20 módulos de API · 25 modelos |
-| Panel admin (React) | 9.200 LOC · 19 dominios de UI |
-| Tienda pública (Vanilla JS) | 6.000 LOC · PWA con offline |
-| Integraciones | MercadoPago · Brevo · Google OAuth · WhatsApp |
-| Despliegue | Render · Cloudflare Pages · Supabase |
-
-**Roles:** administrador · vendedor · cajero · cliente (público)
+| Pieza | Tecnología | Dónde vive | Despliegue |
+|---|---|---|---|
+| Backend + API | Flask / SQLAlchemy / PostgreSQL (Supabase) | `backend/` | Render (auto-deploy desde main) |
+| Panel admin / POS | React + Vite (migración gradual a TS) | `frontend/` | Servido por Flask desde `frontend/dist` |
+| Tienda pública | HTML/CSS/JS estático + PWA | `../../Raloz/` (fuera de este repo) | Cloudflare Pages (ralozcolsas.com) |
+| Bot de WhatsApp | Python (OpenWA o Meta Cloud API) | `../../whatsapp-bot/` | Corre en el PC del negocio |
 
 ---
 
-## 🎯 Qué es
+## 1. Modelo de datos (30 tablas)
 
-Sistema integral para un negocio real de confección y venta de uniformes
-escolares en Bogotá. Cubre todo el ciclo: **catálogo → compra online → pago →
-facturación → inventario → fabricación bajo pedido → entrega → soporte**.
+### Núcleo de ventas
 
-Está compuesto por **tres aplicaciones** que comparten un único backend:
-
-1. **Tienda pública** — donde el cliente compra (sitio estático, ultra-rápido).
-2. **Panel Admin / POS** — donde el equipo gestiona el negocio (SPA React).
-3. **Backend** — el cerebro: API REST, lógica de negocio, integraciones.
-
----
-
-## 🏗️ Arquitectura general
-
-```mermaid
-flowchart TB
-    subgraph Usuarios
-        C1["👨‍👩‍👧 Cliente / Familia"]
-        C2["🧑‍💼 Empleado<br/>(admin · vendedor · cajero)"]
-    end
-
-    subgraph Frontend
-        Store["🛒 Tienda Pública<br/>HTML/CSS/JS · PWA<br/>Cloudflare Pages"]
-        Admin["🖥️ Panel Admin / POS<br/>React + Vite"]
-    end
-
-    subgraph Backend["⚙️ Backend — Flask (Render)"]
-        API["API REST<br/>20 blueprints"]
-        Auth["JWT + Roles<br/>+ rate limiting"]
-        Jobs["⏱️ Daemon<br/>expira reservas<br/>limpia tokens"]
-    end
-
-    DB[("🗄️ PostgreSQL<br/>Supabase")]
-    MP["💳 MercadoPago"]
-    Mail["📧 Brevo (email)"]
-    Bot["🤖 Bot WhatsApp<br/>OpenWA + Python"]
-    WA(["WhatsApp"])
-
-    C1 --> Store
-    C2 --> Admin
-    Store -->|"/api/tienda/* (público)"| API
-    Admin -->|"/api/* (JWT)"| API
-    API --> Auth
-    API --> DB
-    Jobs --> DB
-    Store -->|"checkout"| MP
-    MP -->|"webhook pago"| API
-    API -->|"factura PDF"| Mail
-    API -->|"avisos de pedido"| Bot
-    Bot <--> WA
-    C1 <-.->|"consultas / soporte"| WA
+```
+Colegio ──┬─< PrecioColegio >── Producto      (precio por colegio+producto+talla_grupo)
+          ├─< Stock >────────── Producto      (cantidad por colegio+producto+talla_individual)
+          ├─< MovimientoInventario (kardex)   (ENTRADA/SALIDA/AJUSTE, stock_resultante)
+          └─< Factura ─┬─< FacturaDetalle >── Producto
+                       ├─< Pago
+                       ├─< PrendaPendiente    (prendas vendidas sin entregar — flujo local)
+                       └─< StockPendiente     (mecanismo viejo, solo lo escribe editar_factura)
+Cliente >── Colegio                            (registro 360 del comprador, keyed por teléfono o email)
+SerieFacturacion                               (consecutivo FAC-{año}-{n:06d})
+SerieRemision                                  (definida; sin uso visible en la API)
 ```
 
----
+### Tienda web y fabricación
 
-## 🧰 Stack tecnológico
-
-| Capa | Tecnología | Por qué |
-|---|---|---|
-| **Tienda pública** | HTML5, CSS3, JavaScript (ES Modules), Service Worker | Cero build, carga instantánea, funciona offline |
-| **Panel admin** | React 18, Vite, React Router, Axios | SPA rápida con rutas protegidas por rol |
-| **Backend** | Python, Flask, SQLAlchemy | API REST modular (1 blueprint por dominio) |
-| **Auth** | Flask-JWT-Extended, bcrypt, Google OAuth | Tokens JWT + roles + lista negra (logout real) |
-| **Base de datos** | PostgreSQL (Supabase) | Relacional, SSL, gestionado |
-| **Pagos** | MercadoPago (preferencias + webhooks con firma HMAC) | Estándar en Colombia |
-| **Email** | Brevo API + ReportLab (PDF en memoria) | Facturas PDF sin escribir a disco |
-| **Seguridad** | Flask-Limiter, CORS, headers (HSTS, CSP), bleach | Defensa en profundidad |
-| **Bot WhatsApp** | OpenWA (gateway) + Flask (webhooks) | Contestador + avisos automáticos |
-| **Infra** | Render, Cloudflare Pages, Docker Compose | Despliegue gratis/escalable |
-
----
-
-## 🗃️ Modelo de datos (entidades principales)
-
-```mermaid
-erDiagram
-    COLEGIO    ||--o{ PRECIO_COLEGIO : "tiene precios"
-    COLEGIO    ||--o{ FACTURA : "facturas de"
-    PRODUCTO   ||--o{ PRECIO_COLEGIO : "precio por colegio"
-    PRODUCTO   ||--o{ STOCK : "stock por talla"
-    PRODUCTO   ||--o{ RESERVA : "apartado temporal"
-    CLIENTE    ||--o{ FACTURA : "compra"
-    FACTURA    ||--|{ FACTURA_DETALLE : "líneas"
-    FACTURA    ||--o{ PAGO : "pagos / abonos"
-    PEDIDO_WEB ||--o| FACTURA : "genera al pagar"
-    PEDIDO_WEB ||--o| PEDIDO_FABRICACION : "si requiere confección"
-    USUARIO    ||--o{ AUDITORIA : "registra acciones"
-
-    COLEGIO {
-        int id_colegio
-        string nombre
-    }
-    PRODUCTO {
-        int id_producto
-        string nombre
-        string tipo
-    }
-    PRECIO_COLEGIO {
-        int id_colegio
-        int id_producto
-        string talla_grupo
-        float precio
-    }
-    STOCK {
-        int id_producto
-        string talla
-        int cantidad
-    }
-    FACTURA {
-        int id_factura
-        string numero
-        float total
-        string estado_entrega
-    }
-    PEDIDO_WEB {
-        string referencia
-        string estado
-        float total
-        string telefono_cliente
-    }
+```
+PedidoWeb ──> Colegio (nullable: "Tienda General" p.ej. relojes)
+   │  items_json (snapshot de items con tipo_pedido: normal|mixto|fabricacion|general)
+   │  ──> Factura (id_factura se llena cuando MP aprueba el pago)
+   ├─< PedidoFabricacion (por pedido web con items sin stock; estado en_produccion→listo_para_entrega→entregado)
+Reserva ──> Colegio+Producto (retiene stock 30 min por session_id del carrito)
+StockPendienteFabricacion    (acumulado por colegio+producto+talla; ids_pedidos = CSV de PedidoFabricacion ⚠ sin FK)
+OrdenProduccion ──> Colegio  (órdenes al taller de confección, independiente de pedidos web)
+EmpaquePendiente ──> PrendaPendiente (sin uso visible en la API actual)
 ```
 
-> 💡 **Detalle de diseño:** los precios se guardan por **grupo de talla**
-> (`6-8`, `S-M`) y se expanden a tallas individuales en tiempo de consulta,
-> mientras que el stock se controla por **talla individual**. La conversión vive
-> en `utils/tallas.py`.
+### Operación y soporte
 
----
-
-## 🔄 Flujo estrella: compra online
-
-```mermaid
-sequenceDiagram
-    actor Cliente
-    participant Tienda
-    participant API as Backend
-    participant DB
-    participant MP as MercadoPago
-    participant Mail as Brevo
-    participant Bot as Bot WhatsApp
-
-    Cliente->>Tienda: Elige colegio, prenda y talla
-    Tienda->>API: POST /tienda/reservar
-    API->>DB: Crea Reserva (vence en 5 min)
-    Cliente->>Tienda: Ir a pagar
-    Tienda->>API: POST /tienda/pedido
-    Note over API: El precio se calcula en el<br/>servidor (no se confía en el cliente)
-    API->>MP: Crea preferencia de pago
-    MP-->>Cliente: Página de pago
-    Cliente->>MP: Paga
-    MP->>API: Webhook (firma HMAC validada)
-    API->>DB: Crea Factura + descuenta stock
-    API->>Mail: Envía factura PDF
-    API->>Bot: "Tu orden está en preparación"
-    Bot-->>Cliente: WhatsApp 📦
-    Note over API,Bot: Luego: admin confirma fecha →<br/>el bot avisa al cliente
+```
+CajaDiaria ─< MovimientoCaja        (caja física: monto_inicial + ventas − gastos = esperado)
+Gasto                               (estado_pago: PAGADO | PENDIENTE=deuda)
+Usuario                             (roles: administrador | vendedor | cajero)
+Tarea ──> Usuario (asignada/creada/completada)
+Cita                                (agendadas desde la tienda/bot; sin auth para crear)
+Auditoria                           (log de acciones: tabla, id, acción, detalle)
+TokenRevocado                       (logout JWT)
+WaConversacion ─< WaMensaje         (bandeja de WhatsApp en el panel; modo bot/humano)
 ```
 
-**Resiliencia:** un hilo daemon libera cada 60 s las reservas vencidas, evitando
-que el stock quede bloqueado por carritos abandonados.
+**Convención de tallas** (`utils/tallas.py`): los **precios** se guardan por `talla_grupo`
+(`6-8`, `S-M`…) y el **stock** por `talla_individual` (`6`, `8`, `S`…).
+`TALLA_GRUPO_A_INDIVIDUALES` expande, `TALLA_INDIVIDUAL_A_GRUPO` colapsa.
+**Excepción: las medias** — su grupo (`4-6`, `6-8`…) ES la talla y no se expande
+(chocaría con los grupos de ropa).
 
 ---
 
-## 🤖 Bot de WhatsApp
+## 2. Backend — blueprints (24 módulos, ~137 rutas bajo `/api`)
 
-```mermaid
-flowchart LR
-    Cliente(["👤 Cliente"]) -->|mensaje| OpenWA["OpenWA<br/>(gateway WhatsApp)"]
-    OpenWA -->|webhook| BotPy["bot.py<br/>(máquina de estados)"]
-    BotPy -->|respuesta| OpenWA --> Cliente
-    BotPy -.->|consulta catálogo| API["Backend RALOZ"]
-    API -.->|avisos de pedido| BotPy
+| Prefijo | Archivo | Qué hace | Roles de escritura |
+|---|---|---|---|
+| `/api/auth` | `auth.py` | Login (usuario/Google), refresh, cambiar password. Lockout 5 intentos/5 min | público |
+| `/api/facturas` | `facturas.py` | CRUD factura local: consecutivo, precios autoritativos de BD, anti-sobreventa, abono inicial, conciliación con caja, upsert Cliente | adm/vend/caj (anular: adm) |
+| `/api/pagos` | `pagos.py` | Pagos de saldo de facturas; editar/eliminar (adm) recalculando totales | adm/vend/caj |
+| `/api/caja` | `caja.py` | Abrir/cerrar caja, movimientos manuales, historial | adm/caj |
+| `/api/stock` | `stock.py` | Stock CRUD + entradas + kardex (`/movimientos`), catálogo y balance por colegio | adm/vend/caj |
+| `/api/productos` | `productos.py` | Catálogo maestro + precios | adm |
+| `/api/precios` | `precios.py` | PrecioColegio CRUD + bulk | adm |
+| `/api/colegios` | `colegios.py` | Colegios CRUD | adm |
+| `/api/clientes` | `clientes.py` | Clientes CRUD + historial de compras | cualquier autenticado |
+| `/api/gastos` | `gastos.py` | Gastos y deudas (pagar deuda la convierte en gasto real) | adm/caj |
+| `/api/prendas` | `prendas_pendientes.py` | Prendas vendidas pendientes de entrega (flujo local) | adm/vend |
+| `/api/empaque` | `empaque.py` | Revisión/empaque local: LISTO_EMPAQUE → LISTO_LLAMAR → ENTREGADA | adm/vend |
+| `/api/reportes` | `reportes.py` | Contadora, ventas, top productos, cuentas por cobrar | adm (cuentas-por-cobrar: cualquiera) |
+| `/api/dashboard` | `dashboard.py` | Resumen del día/mes para la portada | autenticado |
+| `/api/ventas` | `ventas.py` | Hoja de ventas diaria + resumen por método | autenticado |
+| `/api/operaciones` | `operaciones.py` | Tablero unificado: prendas pendientes + fabricación + entregas | autenticado |
+| `/api/usuarios` | `usuarios.py` | Gestión de usuarios | adm |
+| `/api/metodos-pago` | `metodos_pago.py` | Métodos de pago CRUD | adm |
+| `/api/tareas` | `tareas.py` | Tareas internas asignables | adm crea; cualquiera completa |
+| `/api/citas` | `citas.py` | Citas (crear: público desde tienda/bot; gestionar: staff) | staff |
+| `/api/ordenes-produccion` | `ordenes_produccion.py` | Órdenes al taller + PDF (ReportLab con logos) | adm |
+| `/api/tienda` | `tienda/publico.py` | **Público**: colegios, catálogo, reservas, crear pedido (preferencia MP), pagar-saldo, webhook MP, consulta de pedido (por referencia o teléfono con token del bot) | público (rate-limited) |
+| `/api/tienda/admin` | `tienda/admin.py` | Pedidos online (marcar pagado manual, generar factura, entrega) y fabricación (marcar listo/entregado, registrar saldo, stock pendiente) | adm/vend |
+| `/api/wa` | `whatsapp_inbox.py` | Bandeja WhatsApp: `/log` y `/modo` para el bot (token compartido `WA_LOG_TOKEN`), resto staff. Enviar usa Graph API de Meta | staff |
 
-    subgraph Capacidades
-        M1["📋 Menú: info, pagos, horarios"]
-        M2["🛒 Guía a la compra (link tienda)"]
-        M3["🧵 Soporte/garantía (pide fotos)"]
-        M4["🔔 Avisos: pagado → listo → entregado"]
-    end
+**Servicios** (`app/services/`): `facturacion_web.py` (clasificar items, PedidoWeb→Factura,
+PedidoFabricacion), `reconciliacion.py` (rescate de webhooks perdidos), `orden_produccion_pdf.py`,
+`wa_send.py`. **Utils**: `decorators.py` (roles+auditoría), `validators.py`, `tallas.py`,
+`inventario.py` (kardex), `email_service.py` (PDF en memoria + Brevo), `whatsapp_notify.py`.
+
+**Daemons en `run.py`** (arrancan con la app): limpiar reservas vencidas (60 s),
+cancelar pedidos abandonados (5 min), reconciliar pagos MP (15 min), telemetría Ducklab (3 min).
+Además `_auto_migrate`: aplica `app/db_migrations.py` (14 migraciones SQL versionadas,
+con advisory lock de PG para multi-worker).
+
+---
+
+## 3. Flujos de negocio de punta a punta
+
+### 3.1 Venta en local (POS)
+
+```
+ENTRA: POST /api/facturas {id_colegio, cliente_*, detalles[{id_producto, talla_individual,
+       cantidad, precio_unitario}], abono, metodo_pago, entrega_inmediata, domicilio, descuento}
+1. Consecutivo: SerieFacturacion con SELECT FOR UPDATE → "FAC-2026-000123"
+2. Precio: se ignora el del cliente si hay PrecioColegio (override queda en Auditoria)
+3. Si entrega_inmediata: verifica stock (409 con faltantes si no alcanza; permitir_sobreventa lo salta)
+4. Crea Factura + FacturaDetalle
+   ├─ entrega_inmediata → registrar_movimiento(SALIDA) → Stock baja + kardex
+   └─ si no → PrendaPendiente (queda "por entregar", SIN tocar stock)
+5. abono > 0 → Pago; si es EFECTIVO y hay CajaDiaria ABIERTA → MovimientoCaja INGRESO
+6. Auditoría + upsert de Cliente (por teléfono, acumula totales)
+SALE: 201 {factura: to_dict_full()}   estado: PAGADA si abono cubre todo, si no PENDIENTE
 ```
 
-El bot maneja conversaciones con **estado por usuario** (menú → soporte →
-garantía), pide fotos para garantías y notifica al asesor. Reutiliza la tienda
-web para la compra en vez de duplicarla.
+Entrega posterior: `POST /api/prendas/<id>/entregar` (una por una) marca la PrendaPendiente
+ENTREGADA. Empaque local: `/api/empaque/*` mueve `Factura.estado_entrega`:
+`LISTO_EMPAQUE → LISTO_LLAMAR → ENTREGADA`.
 
----
+### 3.2 Pedido web (tienda → MercadoPago → factura)
 
-## 🧩 Backend — mapa de módulos (20 blueprints)
-
-| Dominio | Módulos |
-|---|---|
-| **Ventas y pagos** | `facturas` · `pagos` · `ventas` · `caja` · `gastos` |
-| **Inventario** | `stock` · `productos` · `precios` · `colegios` |
-| **Producción** | `pendientes` · `prendas_pendientes` · `empaque` |
-| **Tienda online** | paquete `tienda/`: `publico` (catálogo, reservas, pedidos, webhook MP) + `admin` (gestión de pedidos y fabricación) |
-| **Gestión** | `clientes` · `usuarios` · `tareas` · `dashboard` · `reportes` |
-| **Plataforma** | `auth` (JWT, OAuth, logout) · `metodos_pago` |
-
-Patrón: **1 blueprint por dominio**, modelos SQLAlchemy, decoradores de
-autorización (`@rol_requerido`, `@admin_requerido`) y utilidades compartidas
-(`tallas`, `email_service`, `validators`, `decorators`, `whatsapp_notify`).
-
-El dominio más grande, `tienda`, es un **paquete** dividido por responsabilidad
-(`publico.py` / `admin.py`), con la lógica de negocio (crear factura, clasificar
-items, fabricación) en la capa `app/services/facturacion_web.py` — reutilizada
-tanto por el webhook público como por los endpoints admin.
-
----
-
-## 🔐 Seguridad
-
-Auditoría de seguridad realizada y corregida (jun 2026):
-
-- ✅ **Autenticación:** JWT (acceso 2 h, refresco 30 d), bcrypt, bloqueo de
-  cuenta tras 5 intentos, **logout real** con lista negra de tokens.
-- ✅ **Autorización:** rutas por rol (decoradores `@rol_requerido`); datos
-  financieros solo para administrador; gestión de pedidos online restringida a
-  **administrador + vendedor**.
-- ✅ **Pagos:** precio calculado en servidor; webhook de MercadoPago con
-  **firma HMAC**; idempotencia ante reintentos.
-- ✅ **Hardening:** rate limiting, CORS restringido, headers de seguridad
-  (HSTS, X-Frame-Options, CSP), SRI en CDNs, sanitización (anti-XSS) y
-  parametrización SQL (anti-inyección).
-- ✅ **Datos:** secretos solo en variables de entorno; respaldos automáticos
-  de la base de datos.
-
----
-
-## 🚀 Despliegue
-
-```mermaid
-flowchart LR
-    Dev["💻 git push"] --> GH["GitHub"]
-    GH -->|"repo backend"| Render["Render<br/>Flask + Admin"]
-    GH -->|"repo tienda"| CF["Cloudflare Pages<br/>Tienda pública"]
-    Render --> Supa[("Supabase<br/>PostgreSQL")]
+```
+Cliente en ralozcolsas.com (catálogo GET /api/tienda/catalogo/<colegio>, con fallback
+a Raloz/js/data/* generados si el backend duerme)
+1. POST /api/tienda/reservar (por item) → Reserva 30 min por session_id
+2. POST /api/tienda/pedido {cliente, items, abono_porcentaje 50|100, tipo_entrega}
+   - Clasifica CADA item server-side (_clasificar_item): normal | mixto | fabricacion
+     (según stock real − reservas activas de otros)
+   - Precio autoritativo de PrecioColegio (relojes/"general": precio del frontend)
+   - Si hay fabricación y abono 50% → total_cobrar = 50% del total
+   - Crea PedidoWeb (estado=pendiente) + preferencia MP → SALE: {pago_url, referencia}
+3. Cliente paga en MP → MP llama POST /api/tienda/mp/webhook
+   - Valida firma HMAC (MP_WEBHOOK_SECRET); consulta el pago real a la API de MP
+   - approved → pedido.estado=pagado → _crear_factura_desde_pedido():
+       Factura (usuario_creacion=TIENDA_WEB, estado PAGADA o ABONO) + detalles
+       + descuento de stock con FOR UPDATE re-verificando cantidades (si el stock
+         se agotó entre pedido y pago → reclasifica a fabricación y actualiza items_json)
+       + Pago por el monto de MP + reservas → completadas
+   - Email con PDF (hilo aparte) + WhatsApp "pago confirmado" al cliente
+   - _crear_pedido_fabricacion_si_aplica(): PedidoFabricacion (estado en_produccion,
+     fecha estimada +60 días) + acumula StockPendienteFabricacion
+   - rejected/cancelled → pedido fallido + libera reservas
+   - refunded/charged_back con factura → NO toca stock; avisa al admin por WhatsApp
+   - Errores → HTTP 500 para que MP reintente (idempotente: si ya hay factura, ignora)
+RED DE SEGURIDAD: daemon reconciliar_pagos consulta pagos aprobados de MP (48 h)
+y factura pedidos que el webhook no alcanzó. Admin también puede: marcar-pagado /
+generar-factura manual en el panel.
+ENTREGA: panel actualiza Factura.estado_entrega POR_ENTREGAR → EMPACADO → ENTREGADO
+(con avisos de WhatsApp en cada paso).
 ```
 
-| Componente | Plataforma | Notas |
-|---|---|---|
-| Backend + Panel admin | Render | Gunicorn; migraciones versionadas en el arranque (`schema_migrations`) |
-| Tienda pública | Cloudflare Pages | Sin build; cache-busting por versión |
-| Base de datos | Supabase (PostgreSQL) | SSL obligatorio |
-| Pagos | MercadoPago | Producción + sandbox |
-| Email | Brevo API | PDFs en memoria (Render no persiste disco) |
+### 3.3 Fabricación (prendas por encargo)
 
----
-
-## 💻 Desarrollo local
-
-```bash
-# Backend
-cd backend && python -m venv venv && venv/Scripts/activate
-pip install -r requirements.txt && python run.py        # localhost:5000
-
-# Panel admin
-cd frontend && npm install && npm run dev               # localhost:5173
-
-# Tienda pública (sin build)
-cd Raloz && python serve.py                             # localhost:8080
-
-# Respaldo de la base de datos
-cd backend && python backup_db.py
+```
+Nace del pedido web (items sin stock) — NO del POS local.
+PedidoFabricacion: en_produccion → listo_para_entrega → entregado
+StockPendienteFabricacion: agregado por (colegio, producto, talla) con CSV de pedidos.
+ENTRA: POST /tienda/admin/fabricacion/stock-pendiente/registrar {id_pendiente, cantidad_fabricada}
+  1. Suma la cantidad al Stock real (⚠ directo, sin kardex)
+  2. Baja cantidad_pendiente; si llega a 0 → completado
+  3. Para cada PedidoFabricacion del CSV: si ya no le falta nada → listo_para_entrega
+marcar-listo → WhatsApp al cliente con link de pago del saldo (si debe)
+Paralelo: /api/ordenes-produccion = órdenes al taller (papel/PDF), sin conexión con lo anterior.
 ```
 
+### 3.4 Pagos de saldo y reconciliación
+
+```
+Saldo de factura local:  POST /api/pagos → Pago + recálculo (⚠ NO registra en caja aunque sea efectivo)
+Saldo de pedido web:
+  - Cliente: POST /api/tienda/pagar-saldo {referencia} → link MP "REF-SALDO"
+    (solo si PedidoFabricacion está listo_para_entrega/entregado)
+  - Webhook con referencia *-SALDO → _procesar_pago_saldo: idempotente por
+    mp_saldo_payment_id; si el saldo ya era 0 → alerta de doble pago al admin
+  - En el local: POST /tienda/admin/fabricacion/.../registrar-saldo → Pago + baja
+    saldo en Factura y PedidoFabricacion (⚠ tampoco toca caja)
+Reconciliación: daemon cada 15 min → GET /v1/payments/search de MP (aprobados 48h)
+→ pedidos RALOZ-* sin factura se facturan (los *-SALDO no se reconcilian).
+```
+
+### 3.5 Bot de WhatsApp
+
+Dos transportes con la misma lógica (`responses.py`): `bot.py` (OpenWA local con QR)
+y `bot_meta.py` (Meta Cloud API oficial). Consumen del backend:
+`/api/tienda/colegios`, `/api/tienda/catalogo/<id>` (precios/stock en vivo),
+`/api/tienda/pedidos-por-telefono/<tel>` (con header `X-Bot-Token` = `WA_LOG_TOKEN`),
+`/api/tienda/pagar-saldo`, `/api/citas/nueva`. Loguea conversaciones en `/api/wa/log`
+y consulta `/api/wa/modo/<chat>` (bot vs humano). El backend a su vez notifica a
+clientes vía `utils/whatsapp_notify.py` → Graph API de Meta.
+
 ---
 
-## ✨ Decisiones de ingeniería destacadas
+## 4. Frontend (panel admin)
 
-- **Tienda offline-first:** Service Worker + catálogo estático de respaldo; si el
-  backend está caído (cold start de Render ~90 s), la tienda sigue funcionando.
-- **Precio autoritativo en servidor:** el cliente nunca define el precio que se
-  cobra (se recalcula desde la base de datos).
-- **Facturas PDF en memoria:** generadas con ReportLab sin tocar disco
-  (compatible con el filesystem efímero de Render).
-- **Grupos de talla vs. tallas individuales:** precio por grupo, stock por talla.
-- **Resiliencia de stock:** reservas con expiración automática vía hilo daemon.
-- **Notificaciones desacopladas:** el backend avisa al bot por HTTP con token
-  compartido; si el bot no está, el flujo de negocio no se rompe (best-effort).
+`services/api.ts`: axios con base `/api`, Bearer automático, refresh en 401, redirect a login.
+`AuthContext`: JWT en localStorage, `isAdmin()/isVendedor()/isCajero()`.
+
+| Ruta | Componente | Endpoints que usa | Rol |
+|---|---|---|---|
+| `/` | Dashboard | `/dashboard/resumen` | todos |
+| `/facturacion` | Facturacion | `/colegios /productos /precios /facturas` | todos |
+| `/buscar` | BuscarFacturas | `/facturas* /pagos* /prendas/<id>/entregar` | todos |
+| `/pagos` | Pagos | `/facturas /pagos*` | todos |
+| `/stock` | StockView | `/stock*` (resumen, actividad, catálogo, balance, entrada) | todos |
+| `/ventas` | Ventas | `/ventas/hoja` | todos |
+| `/clientes` | Clientes | `/clientes*` | todos |
+| `/gastos` | Gastos | `/gastos*` | adm, caj |
+| `/caja` | Caja | `/caja/*` | adm, caj |
+| `/pendientes` | Pendientes | `/prendas*` ⚠ usa `/prendas/entregar-batch` que NO existe | todos |
+| `/empaque` | Empaque | `/empaque/*` `/prendas` | todos |
+| `/precios` | Precios | `/precios* /colegios /productos` | adm |
+| `/cuentas` | CuentasPorCobrar | `/reportes/cuentas-por-cobrar` | todos |
+| `/reportes` | Reportes | `/reportes/* /gastos` | adm |
+| `/configuracion` | Configuracion | `/colegios /productos /metodos-pago /usuarios` | adm |
+| `/usuarios` | Usuarios | `/usuarios*` | adm |
+| `/whatsapp` | WhatsApp | `/wa/*` | todos |
+| `/citas` | Citas | `/citas*` | todos |
+| `/tareas` | Tareas | `/tareas*` | todos |
+| `/operaciones` | Operaciones.tsx (tabs: CentroOperaciones + PedidosOnline + PedidosFabricacion + StockPendienteFab) | `/operaciones/tablero /tienda/admin/*` | todos |
+| `/pedidos-online` | PedidosOnline | `/tienda/admin/pedidos*` | todos |
+| `/fabricacion` | PedidosFabricacion | `/tienda/admin/fabricacion/*` | todos |
+| `/fabricacion/stock` | StockPendienteFab | `/tienda/admin/fabricacion/stock-pendiente*` | todos |
+| `/ordenes-produccion` | OrdenesProduccion | `/ordenes-produccion*` | adm |
+
+`Layout.jsx` sondea los badges: `/citas/pendientes/conteo`, `/tienda/admin/pedidos/conteo-nuevos`, `/wa/no-leidos`.
+
+Nota: varias rutas son "todos" en el router pero el backend igual exige rol en la
+escritura (p. ej. un cajero puede VER pedidos online pero el POST le da 403).
+
+---
+
+## 5. Problemas detectados
+
+### A. Bugs (comportamiento roto hoy)
+
+| # | Problema | Dónde | Efecto |
+|---|---|---|---|
+| A1 | El frontend llama `POST /api/prendas/entregar-batch` y **el endpoint no existe** | `Pendientes.jsx:96` | El botón de entrega masiva de prendas devuelve 404 |
+| A2 | `_estado_pedido_texto` compara `pf.estado == 'listo'`, pero los estados reales son `listo_para_entrega`/`entregado` | `tienda/publico.py:930` (y el campo `listo` del cambio sin commitear usa lo mismo) | El cliente/bot nunca ve "✅ Listo para entrega" aunque su pedido lo esté |
+| A3 | Uniforme COMPLETO Niña del Adventista tallas S/M/L/XL cuesta **$9.500–$16.000 MÁS** que la suma de sus piezas | Datos (PrecioColegio) | Cliente que compra el paquete paga de más; el resto de completos tiene descuentos irregulares (−500 a −1.500) |
+
+### B. Inventario — el kardex se puede desincronizar
+
+`utils/inventario.registrar_movimiento()` se declara como "el ÚNICO lugar donde se
+cambia el stock", pero lo saltan **4 flujos** que tocan `Stock.cantidad` directo (sin
+dejar rastro en MovimientoInventario):
+
+1. `facturas.editar_factura` (devuelve y descuenta stock a mano)
+2. `facturas.anular_factura` (devuelve stock)
+3. `facturacion_web._crear_factura_desde_pedido` (ventas web — ninguna venta online queda en el kardex)
+4. `tienda/admin.registrar_fabricacion` (entrada de prendas fabricadas)
+
+Consecuencia: el "Balance por colegio" (`/api/stock/balance`, calculado desde el kardex)
+no cuadra con el stock real.
+
+Además: **anular/editar factura devuelven stock aunque nunca se descontó** — si la
+venta fue "por entregar" (PrendaPendiente), el stock no bajó al vender, pero al anular
+sí sube → inventario inflado.
+
+### C. Caja — pagos de saldo en efectivo no entran
+
+Solo el **abono inicial** de `crear_factura` registra MovimientoCaja. Un pago de saldo
+en efectivo por `/api/pagos` o `/tienda/admin/.../registrar-saldo` **no toca la caja**
+→ al cerrar caja la diferencia da negativa sin que sea un faltante real.
+
+### D. Estados con dos vocabularios
+
+`Factura.estado_entrega` mezcla el flujo local (`POR_ENTREGAR → LISTO_EMPAQUE →
+LISTO_LLAMAR → ENTREGADA`) con el web (`POR_ENTREGAR → EMPACADO → ENTREGADO`).
+`ENTREGADA` ≠ `ENTREGADO`. Efectos: un pedido web procesado con el módulo de empaque
+local desaparece de la vista "activos" de pedidos online (solo filtra
+POR_ENTREGAR/EMPACADO); los textos del bot solo mapean el vocabulario web.
+`Factura.estado` también tiene doble forma para lo mismo: `PENDIENTE` (local) vs
+`ABONO` (web) para facturas parcialmente pagadas.
+
+### E. Lógica duplicada (misma regla en dos sitios que ya divergieron)
+
+| Qué | Copia 1 | Copia 2 | Divergencia |
+|---|---|---|---|
+| Consecutivo de factura | `facturas.crear_factura` (FOR UPDATE, formato fijo) | `facturacion_web` (sin lock, usa `serie.formato`) | La web puede duplicar consecutivo en carrera con el POS |
+| Recalcular totales/estado de factura | `pagos._recalcular_factura` | inline en `facturas.editar/reactivar`, `tienda/admin.registrar_saldo`, `publico._procesar_pago_saldo` | Reglas de estado ligeramente distintas |
+| Upsert de Cliente | `facturas._upsert_cliente_venta` (clave: teléfono) | `facturacion_web` (clave: email→documento) | El mismo comprador queda duplicado entre canal local y web |
+| Expansión de tallas + regla de medias | `inventario.construir_catalogo_colegio` | `publico.catalogo_colegio` | Dos listas de orden de tallas distintas (`_TALLA_ORDEN` vs `_ORDEN_TALLAS`) |
+| Total con domicilio/descuento | `crear_factura` (subtotal − descuento + domicilio) | `editar_factura` (total = suma de líneas, **pierde domicilio y descuento**) | Editar una factura con domicilio corrige mal el total |
+
+### F. Datos por diagnosticar en la BD (script propuesto, solo lectura)
+
+- `StockPendiente`: tabla del mecanismo viejo; probablemente filas huérfanas apuntando
+  a facturas editadas/anuladas. Solo la escribe `editar_factura`; nadie la "cierra".
+- `StockPendienteFabricacion.ids_pedidos`: CSV sin FK → puede referenciar
+  PedidoFabricacion borrados.
+- Facturas cuyo `total_abonado` ≠ suma real de `pagos` (por los caminos que actualizan
+  a mano).
+- Estados fuera de vocabulario en `estado_entrega`.
+
+### G. Menores
+
+- `app/__init__.py:180`: línea comentada `[ARCHIVED] pendientes_bp` referencia un módulo que ya no existe.
+- `PedidoWeb.wompi_status`: nombre legado de la pasarela Wompi guardando estados de MercadoPago.
+- `empaque.obtener_factura_empaque` busca con `ilike '%num%'`: "123" puede traer la factura equivocada.
+- `EmpaquePendiente` y `SerieRemision`: modelos sin uso visible en la API.
+- Tests (103) cubren bien tienda/webhook/reservas/inventario/migraciones, pero **no hay
+  ninguno del flujo POS local** (crear/editar/anular factura, pagos, caja).
