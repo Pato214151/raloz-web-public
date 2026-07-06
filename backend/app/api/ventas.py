@@ -16,9 +16,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
 from app.models import Factura, Pago, Gasto
-from app.utils.decorators import rol_requerido
 from app.utils.validators import validate_date
-from datetime import date, datetime, timedelta
+from datetime import date
 from sqlalchemy import func
 
 ventas_bp = Blueprint('ventas', __name__)

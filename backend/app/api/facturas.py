@@ -10,7 +10,7 @@ from app.models import (Factura, FacturaDetalle, Stock, SerieFacturacion, StockP
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
 from app.utils.inventario import registrar_movimiento
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
-from app.utils.validators import sanitize_string, validate_date, validate_positive_number, validate_required_fields
+from app.utils.validators import sanitize_string, validate_date, validate_required_fields
 from datetime import datetime, date
 
 facturas_bp = Blueprint('facturas', __name__)

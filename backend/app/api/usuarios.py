@@ -5,7 +5,7 @@ API de Gestión de Usuarios (Admin)
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import Usuario, Factura, Pago
+from app.models import Usuario, Factura
 from app.utils.decorators import admin_requerido, registrar_auditoria, get_current_identity
 from app.utils.validators import sanitize_string, validate_email
 from sqlalchemy import func, and_

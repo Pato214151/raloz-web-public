@@ -21,7 +21,7 @@ Roles requeridos:
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import Factura, FacturaDetalle, PrendaPendiente, StockPendiente
+from app.models import Factura, PrendaPendiente
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
 from app.utils.validators import validate_required_fields, validate_positive_number
 from datetime import date

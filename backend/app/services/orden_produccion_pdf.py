@@ -18,7 +18,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage,
 )
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 
 _LOGOS_DIR = os.path.join(os.path.dirname(__file__), '..', 'static', 'logos')
 

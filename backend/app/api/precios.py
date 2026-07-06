@@ -22,7 +22,7 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import PrecioColegio, Colegio, Producto
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
-from app.utils.validators import validate_required_fields, validate_positive_number, sanitize_string
+from app.utils.validators import validate_required_fields, validate_positive_number
 from app.utils.tallas import validar_talla_grupo, obtener_tallas_agrupadas_validas
 
 precios_bp = Blueprint('precios', __name__)

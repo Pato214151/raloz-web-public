@@ -14,9 +14,10 @@ SEGURO POR DEFECTO: sin --confirm solo MUESTRA lo que haría (no borra nada).
   DATABASE_URL="postgresql://..." python limpiar_datos_prueba.py --desde 2026-06-10
 
   # 3) Si el listado es correcto, ejecuta de verdad:
-  DATABASE_URL="postgresql://..." python limpiar_datos_prueba.py --desde 2026-06-10 --confirm --reset-serie
+  DATABASE_URL="postgresql://..." python tools/limpiar_datos_prueba.py --desde 2026-06-10 --confirm --reset-serie
 """
 import argparse
+import os
 import sys
 from datetime import datetime, date
 
@@ -24,6 +25,9 @@ try:
     sys.stdout.reconfigure(encoding='utf-8')
 except Exception:
     pass
+
+# El script vive en tools/; el paquete `app` está un nivel arriba (backend/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app, db
 from app.models import (

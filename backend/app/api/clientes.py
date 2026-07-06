@@ -6,7 +6,6 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
 from app.models import Cliente, Factura
-from app.utils.decorators import rol_requerido
 from app.utils.validators import sanitize_string, validate_email, validate_phone
 from datetime import datetime
 

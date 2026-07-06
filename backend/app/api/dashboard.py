@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from app.utils.decorators import get_current_identity
 from app import db
-from app.models import Factura, Pago, Gasto, StockPendiente, PedidoFabricacion, PrendaPendiente, CajaDiaria
+from app.models import Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria
 from sqlalchemy import func, and_
 from datetime import date, timedelta
 

@@ -12,7 +12,7 @@ from flask_jwt_extended import (
 from app import db, limiter
 from app.models.usuario import Usuario
 from app.utils.decorators import get_current_identity
-from app.utils.validators import validate_email, sanitize_string
+from app.utils.validators import sanitize_string
 import bcrypt
 import os
 from datetime import datetime, timedelta

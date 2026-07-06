@@ -8,7 +8,7 @@ from app import db
 from app.models import Factura, Pago, Gasto, FacturaDetalle
 from app.utils.decorators import rol_requerido
 from sqlalchemy import func, and_
-from datetime import date, timedelta
+from datetime import date
 
 reportes_bp = Blueprint('reportes', __name__)
 
