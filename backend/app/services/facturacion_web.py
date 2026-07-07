@@ -113,7 +113,10 @@ def _crear_factura_desde_pedido(pedido: PedidoWeb) -> Factura:
     abono_pagado    = pedido.total
     saldo_pendiente = max(0, total_orden - abono_pagado)
 
-    serie = SerieFacturacion.query.filter_by(activa=True).first()
+    # with_for_update: bloquea la fila de la serie para que el webhook y una
+    # venta simultánea en el POS no tomen el mismo consecutivo (mismo lock
+    # que usa facturas.crear_factura; en SQLite de tests es no-op).
+    serie = SerieFacturacion.query.filter_by(activa=True).with_for_update().first()
     if not serie:
         # Auto-crear serie si no existe (primera vez que se usa el sistema)
         from datetime import datetime as _dt_now
