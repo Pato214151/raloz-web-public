@@ -149,7 +149,7 @@ def diagnosticar():
                 print(f"  colegio={s.id_colegio} prod={s.id_producto} T{s.talla_individual}: "
                       f"stock={s.cantidad} vs kardex={ultimo_mov[clave]}")
     print(f"  Total tallas desincronizadas: {desync} "
-          f"(esperable: las ventas web y ediciones no pasan por el kardex — ver ARQUITECTURA.md §5.B)")
+          f"(desde la Fase 2 todos los flujos pasan por el kardex; >0 = investigar)")
     hallazgos += desync
 
     # ── 6. Uniformes COMPLETOS vs suma de piezas ───────────────────────────
