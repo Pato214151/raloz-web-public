@@ -44,6 +44,17 @@ class Factura(db.Model):
         db.Index('idx_facturas_saldo', 'saldo_pendiente'),
     )
 
+    def recalcular_desde_pagos(self):
+        """Recalcula total_abonado, saldo_pendiente y estado a partir de los
+        pagos registrados. Única fuente de esa regla (la usan pagos y facturas).
+        No toca facturas ANULADAS. No hace commit."""
+        total_pagado = sum(p.valor for p in self.pagos)
+        self.total_abonado = total_pagado
+        self.saldo_pendiente = max((self.total or 0) - total_pagado, 0)
+        if self.estado == 'ANULADA':
+            return
+        self.estado = 'PAGADA' if total_pagado >= (self.total or 0) else 'PENDIENTE'
+
     def to_dict(self):
         return {
             'id_factura': self.id_factura,

@@ -177,7 +177,6 @@ def create_app(config_name=None):
     app.register_blueprint(clientes_bp, url_prefix='/api/clientes')
     app.register_blueprint(gastos_bp, url_prefix='/api/gastos')
     app.register_blueprint(caja_bp, url_prefix='/api/caja')
-    # [ARCHIVED] app.register_blueprint(pendientes_bp, url_prefix='/api/pendientes')  # ahora usa prendas_bp
     app.register_blueprint(reportes_bp, url_prefix='/api/reportes')
     app.register_blueprint(usuarios_bp, url_prefix='/api/usuarios')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')

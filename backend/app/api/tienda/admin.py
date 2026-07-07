@@ -11,11 +11,13 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required
 
 from app import db
-from app.utils.decorators import registrar_auditoria, rol_requerido
+from app.utils.caja import registrar_ingreso_efectivo
+from app.utils.decorators import registrar_auditoria, rol_requerido, get_current_identity
+from app.utils.inventario import registrar_movimiento
 from app.utils.whatsapp_notify import notificar_whatsapp
 from app.utils.email_service import enviar_email_factura
 from app.models import (
-    PedidoWeb, Factura, Pago, Stock,
+    PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
 )
 from app.services.facturacion_web import (
@@ -405,6 +407,11 @@ def registrar_saldo_fabricacion(id_pedido):
     pf.saldo_pendiente = round(max(0, pf.saldo_pendiente - monto), 2)
     pf.abono_monto     = round(pf.abono_monto + monto, 2)
 
+    # Saldo cobrado en efectivo en el local → también entra a la caja abierta
+    if metodo.upper() == 'EFECTIVO':
+        registrar_ingreso_efectivo(
+            f'Saldo fabricación #{pf.id_pedido}', monto, get_current_identity()['usuario'])
+
     # Actualizar factura y pedido_web asociados
     pedido_web = PedidoWeb.query.get(pf.id_pedido_web) if pf.id_pedido_web else None
     if pedido_web and pedido_web.id_factura:
@@ -478,21 +485,12 @@ def registrar_fabricacion():
 
     spf = StockPendienteFabricacion.query.get_or_404(id_pendiente)
 
-    # 1. Sumar al stock real
-    stock = Stock.query.filter_by(
-        id_colegio=spf.id_colegio,
-        id_producto=spf.id_producto,
-        talla_individual=spf.talla,
-    ).first()
-    if stock:
-        stock.cantidad += cantidad_fab
-    else:
-        db.session.add(Stock(
-            id_colegio=spf.id_colegio,
-            id_producto=spf.id_producto,
-            talla_individual=spf.talla,
-            cantidad=cantidad_fab,
-        ))
+    # 1. Sumar al stock real — ENTRADA registrada en el kardex
+    registrar_movimiento(
+        spf.id_colegio, spf.id_producto, spf.talla, 'ENTRADA', cantidad_fab,
+        usuario=get_current_identity()['usuario'], motivo='Fabricación',
+        referencia=f'SPF-{spf.id_pendiente}',
+    )
 
     # 2. Reducir pendiente o marcar completado
     spf.cantidad_pendiente = max(0, spf.cantidad_pendiente - cantidad_fab)

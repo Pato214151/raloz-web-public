@@ -8,7 +8,7 @@ transacción atómica del caller).
 """
 from app import db
 from app.models import Stock, MovimientoInventario, PrecioColegio, Producto
-from app.utils.tallas import TALLA_GRUPO_A_INDIVIDUALES, TALLA_INDIVIDUAL_A_GRUPO
+from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO, expandir_grupo_para_producto
 
 TIPOS = ('ENTRADA', 'SALIDA', 'AJUSTE')
 
@@ -46,14 +46,8 @@ def construir_catalogo_colegio(colegio_id):
             'producto_tipo': p.producto.tipo if p.producto else None,
             'tallas': set(),
         })
-        # Las medias se manejan por GRUPO (4-6, 6-8, 8-10, 10-12, 12-14): el grupo
-        # ES la talla y NO se expande, porque sus grupos chocan con los de ropa
-        # (6-8 → 6,8). Para el resto sí se expande a tallas individuales.
-        if 'media' in (info['producto_tipo'] or '').lower():
-            info['tallas'].add(p.talla_grupo)
-        else:
-            for t in TALLA_GRUPO_A_INDIVIDUALES.get(p.talla_grupo, [p.talla_grupo]):
-                info['tallas'].add(t)
+        for t in expandir_grupo_para_producto(info['producto_tipo'], p.talla_grupo):
+            info['tallas'].add(t)
 
     catalogo = []
     for pid, info in productos.items():
@@ -134,6 +128,27 @@ def construir_balance_colegio(colegio_id, desde=None, hasta=None):
         'valor_inventario': sum(b['valor_inventario'] for b in balance),
     }
     return balance, totales
+
+
+def stock_descontado_neto(numero_factura, id_colegio):
+    """
+    Cuánto stock descontó REALMENTE una factura, según el kardex:
+    SALIDAs con esa referencia menos ENTRADAs con esa referencia
+    (devoluciones por edición/anulación previas).
+
+    Devuelve dict {(id_producto, talla_individual): neto} solo con netos > 0.
+    Una venta "por entregar" no genera SALIDA al crearse, así que su neto es 0
+    y anularla/editarla no debe devolver nada al inventario.
+    """
+    netos = {}
+    movs = MovimientoInventario.query.filter_by(
+        referencia=numero_factura, id_colegio=id_colegio,
+    ).filter(MovimientoInventario.tipo.in_(('SALIDA', 'ENTRADA'))).all()
+    for m in movs:
+        clave = (m.id_producto, m.talla_individual)
+        delta = m.cantidad if m.tipo == 'SALIDA' else -m.cantidad
+        netos[clave] = netos.get(clave, 0) + delta
+    return {clave: neto for clave, neto in netos.items() if neto > 0}
 
 
 def registrar_movimiento(id_colegio, id_producto, talla, tipo, cantidad,

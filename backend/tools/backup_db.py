@@ -29,7 +29,8 @@ except Exception:
 import psycopg
 from psycopg.sql import SQL, Identifier, Literal
 
-AQUI = Path(__file__).parent
+# El script vive en tools/; el .env y la carpeta backups/ están en backend/
+BACKEND = Path(__file__).resolve().parent.parent
 
 
 def leer_database_url() -> str:
@@ -37,7 +38,7 @@ def leer_database_url() -> str:
     url = os.getenv("DATABASE_URL", "").strip()
     if url:
         return url
-    env_file = AQUI / ".env"
+    env_file = BACKEND / ".env"
     if env_file.exists():
         for linea in env_file.read_text(encoding="utf-8").splitlines():
             linea = linea.strip()
@@ -58,7 +59,7 @@ def main():
     if "sslmode=" not in dsn:
         dsn += ("&" if "?" in dsn else "?") + "sslmode=require"
 
-    out_dir = AQUI / "backups"
+    out_dir = BACKEND / "backups"
     out_dir.mkdir(exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
     out_file = out_dir / f"raloz_backup_{stamp}.sql"
