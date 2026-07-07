@@ -22,7 +22,7 @@ from app.utils.whatsapp_notify import notificar_whatsapp
 from app.utils.validators import sanitize_string, validate_email
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
-    PedidoWeb, Factura, Reserva, PedidoFabricacion,
+    PedidoWeb, Factura, Pago, Reserva, PedidoFabricacion,
 )
 from app.services.facturacion_web import (
     _clasificar_item, _crear_factura_desde_pedido,
@@ -723,6 +723,16 @@ def _procesar_pago_saldo(referencia_saldo, estado_mp, pago_data):
     factura.total_abonado   = round((factura.total_abonado or 0) + monto, 2)
     factura.saldo_pendiente = round(max(0, saldo_actual - monto), 2)
     factura.mp_saldo_payment_id = payment_id
+    # Registrar el Pago para que los reportes y el detalle de la factura
+    # vean este dinero (antes solo se ajustaban los totales y quedaban
+    # facturas con total_abonado > suma de pagos).
+    db.session.add(Pago(
+        id_factura=factura.id_factura,
+        valor=monto,
+        metodo_pago='MP',
+        usuario_registro='TIENDA_WEB',
+        fecha_pago=date.today(),
+    ))
     if factura.saldo_pendiente <= 0:
         factura.estado = 'PAGADA'
     pf = PedidoFabricacion.query.filter_by(id_pedido_web=pedido.id_pedido).first()
