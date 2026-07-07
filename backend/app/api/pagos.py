@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
 from app.models import Factura, Pago
+from app.utils.caja import registrar_ingreso_efectivo
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
 from app.utils.validators import sanitize_string, validate_date
 from datetime import date
@@ -103,6 +104,12 @@ def registrar_pago():
 
     factura.total_abonado = total_pagado + valor
     factura.saldo_pendiente = max(nuevo_saldo, 0)
+
+    # Conciliación con caja: un saldo cobrado en efectivo también entra a la
+    # caja abierta (antes solo entraba el abono inicial y la caja descuadraba).
+    if metodo_pago.upper() == 'EFECTIVO':
+        registrar_ingreso_efectivo(
+            f'Abono factura {factura.numero_factura}', valor, identity['usuario'])
 
     db.session.commit()
     registrar_auditoria('pagos', pago.id_pago, 'CREAR', f'Pago ${valor:,.0f} a factura {factura.numero_factura}')

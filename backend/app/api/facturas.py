@@ -6,8 +6,9 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
 from app.models import (Factura, FacturaDetalle, Stock, SerieFacturacion, StockPendiente,
-                        Pago, PrendaPendiente, Producto, PrecioColegio, CajaDiaria, MovimientoCaja, Cliente)
+                        Pago, PrendaPendiente, Producto, PrecioColegio, Cliente)
 from app.utils.decorators import rol_requerido, registrar_auditoria, get_current_identity
+from app.utils.caja import registrar_ingreso_efectivo
 from app.utils.inventario import registrar_movimiento, stock_descontado_neto
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.validators import sanitize_string, validate_date, validate_required_fields
@@ -292,17 +293,8 @@ def crear_factura():
         # se registra el ingreso para que la caja cuadre sola al cerrar.
         metodo = sanitize_string(data.get('metodo_pago', 'EFECTIVO'), 50)
         if abono > 0 and metodo.upper() == 'EFECTIVO':
-            caja = CajaDiaria.query.filter_by(estado='ABIERTA').first()
-            if caja:
-                ingreso = min(abono, total_con_domicilio)
-                db.session.add(MovimientoCaja(
-                    id_caja=caja.id_caja, tipo='INGRESO',
-                    concepto=f'Venta {numero}', valor=ingreso,
-                    metodo_pago='EFECTIVO', usuario=identity['usuario'],
-                    fecha_hora=datetime.utcnow(),
-                ))
-                caja.total_ventas = (caja.total_ventas or 0) + ingreso
-                caja.monto_esperado = (caja.monto_inicial or 0) + (caja.total_ventas or 0) - (caja.total_gastos or 0)
+            registrar_ingreso_efectivo(
+                f'Venta {numero}', min(abono, total_con_domicilio), identity['usuario'])
 
         db.session.commit()
         registrar_auditoria('facturas', factura.id_factura, 'CREAR', f'Factura {numero}')

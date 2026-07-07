@@ -11,6 +11,7 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required
 
 from app import db
+from app.utils.caja import registrar_ingreso_efectivo
 from app.utils.decorators import registrar_auditoria, rol_requerido, get_current_identity
 from app.utils.inventario import registrar_movimiento
 from app.utils.whatsapp_notify import notificar_whatsapp
@@ -405,6 +406,11 @@ def registrar_saldo_fabricacion(id_pedido):
     monto = min(monto, pf.saldo_pendiente)
     pf.saldo_pendiente = round(max(0, pf.saldo_pendiente - monto), 2)
     pf.abono_monto     = round(pf.abono_monto + monto, 2)
+
+    # Saldo cobrado en efectivo en el local → también entra a la caja abierta
+    if metodo.upper() == 'EFECTIVO':
+        registrar_ingreso_efectivo(
+            f'Saldo fabricación #{pf.id_pedido}', monto, get_current_identity()['usuario'])
 
     # Actualizar factura y pedido_web asociados
     pedido_web = PedidoWeb.query.get(pf.id_pedido_web) if pf.id_pedido_web else None

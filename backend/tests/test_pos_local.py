@@ -207,6 +207,38 @@ def test_eliminar_pago_recalcula_factura(client, auth, factura_pendiente):
     assert f.estado == 'PENDIENTE'
 
 
+def test_pago_saldo_efectivo_entra_a_caja(client, auth, factura_pendiente):
+    """Antes solo el abono inicial entraba a la caja; el saldo en efectivo no."""
+    client.post('/api/caja/abrir', json={'monto_inicial': 10000}, headers=auth)
+    r = client.post('/api/pagos', json={
+        'id_factura': factura_pendiente['id_factura'], 'valor': 70000, 'metodo_pago': 'EFECTIVO',
+    }, headers=auth)
+    assert r.status_code == 201
+    caja = CajaDiaria.query.filter_by(estado='ABIERTA').first()
+    assert caja.total_ventas == 70000
+    assert caja.monto_esperado == 80000
+    mov = MovimientoCaja.query.filter_by(tipo='INGRESO').first()
+    assert mov is not None and 'Abono factura' in mov.concepto
+
+
+def test_pago_saldo_no_efectivo_no_toca_caja(client, auth, factura_pendiente):
+    client.post('/api/caja/abrir', json={'monto_inicial': 10000}, headers=auth)
+    client.post('/api/pagos', json={
+        'id_factura': factura_pendiente['id_factura'], 'valor': 70000, 'metodo_pago': 'NEQUI',
+    }, headers=auth)
+    caja = CajaDiaria.query.filter_by(estado='ABIERTA').first()
+    assert (caja.total_ventas or 0) == 0
+    assert MovimientoCaja.query.count() == 0
+
+
+def test_pago_saldo_efectivo_sin_caja_abierta_no_falla(client, auth, factura_pendiente):
+    r = client.post('/api/pagos', json={
+        'id_factura': factura_pendiente['id_factura'], 'valor': 70000, 'metodo_pago': 'EFECTIVO',
+    }, headers=auth)
+    assert r.status_code == 201
+    assert MovimientoCaja.query.count() == 0
+
+
 # ══════════════════════════════════════════════════════════════
 # Anular / reactivar
 # ══════════════════════════════════════════════════════════════
