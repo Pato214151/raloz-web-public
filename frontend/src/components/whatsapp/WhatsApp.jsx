@@ -4,11 +4,8 @@ import toast from 'react-hot-toast'
 import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft } from 'lucide-react'
 
 // ── Estilos base para el fondo tipo WhatsApp ──
-const WA_BG = 'bg-[#efeae2]'
-const WA_GREEN = 'bg-[#dcf8c6]'
-const WA_HEADER_BG = '#075e54'
-const WA_TAB_BG = '#f0f2f5'
-const WA_CHAT_BAR_BG = '#ffffff'
+const WA_BG = 'wa-chat-bg'
+const WA_TAB_BG = 'bg-[#f0f2f5]'
 
 // Respuestas rápidas (plantillas) para el asesor
 const RESPUESTAS_RAPIDAS = [
@@ -71,7 +68,11 @@ function Media({ id, tipo }) {
       </a>
     )
   }
-  return <a href={src} download className="text-xs underline mb-1 inline-block">📎 Descargar archivo</a>
+  return (
+    <div className="mb-1">
+      <a href={src} download className="text-xs underline">📎 Descargar archivo</a>
+    </div>
+  )
 }
 
 // ── Burbuja de mensaje ──
@@ -412,11 +413,7 @@ export default function WhatsApp() {
       `}>
         {!activo ? (
           /* Empty state desktop */
-          <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5]"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%23ece5dd'/%3E%3Ccircle cx='30' cy='30' r='20' fill='none' stroke='%23d4d1c9' stroke-width='1'/%3E%3Cpath d='M22 26c0-4.4 3.6-8 8-8s8 3.6 8 8' stroke='%23d4d1c9' stroke-width='1' fill='none'/%3E%3Ccircle cx='23' cy='24' r='1.5' fill='%23d4d1c9'/%3E%3Ccircle cx='37' cy='24' r='1.5' fill='%23d4d1c9'/%3E%3C/svg%3E")`,
-              backgroundSize: '60px 60px'
-            }}>
+          <div className="flex-1 flex flex-col items-center justify-center wa-chat-bg">
             <div className="bg-white rounded-2xl p-8 shadow-lg text-center max-w-sm mx-4">
               <div className="w-20 h-20 rounded-full bg-[#dcf8c6] flex items-center justify-center mx-auto mb-4 shadow-sm">
                 <svg width="36" height="36" fill="#075e54" viewBox="0 0 24 24">
@@ -477,11 +474,7 @@ export default function WhatsApp() {
             </div>
 
             {/* Área de mensajes */}
-            <div className={`flex-1 overflow-y-auto p-3 lg:p-4 ${WA_BG}`}
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%23eae3dc'/%3E%3Ccircle cx='20' cy='20' r='18' fill='none' stroke='%23ddd5cc' stroke-width='0.5'/%3E%3C/svg%3E")`,
-                backgroundSize: '40px 40px'
-              }}>
+            <div className={`flex-1 overflow-y-auto p-3 lg:p-4 ${WA_BG}`}>
               {(() => {
                 let ultD = null
                 return mensajes.map(m => {

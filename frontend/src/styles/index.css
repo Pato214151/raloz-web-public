@@ -135,4 +135,11 @@
   }
   .empty-state-title { @apply text-sm font-semibold text-gray-600; }
   .empty-state-sub   { @apply text-xs text-gray-400; }
+
+  /* ── WhatsApp chat backgrounds (SSR-safe: CSS puro, sin SVG inline) ── */
+  .wa-chat-bg {
+    background-color: #efeae2;
+    background-image: radial-gradient(circle, #ddd5cc 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
 }
