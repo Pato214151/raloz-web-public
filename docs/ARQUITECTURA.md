@@ -244,6 +244,17 @@ escritura (p. ej. un cajero puede VER pedidos online pero el POST le da 403).
 
 ## 5. Problemas detectados
 
+> **Actualización Fase 2 (2026-07-06):** corregidos A1 (entregar-batch), A2 (estado
+> 'listo'), A3 (precios Adventista = suma de piezas), B completo (kardex en los 4
+> flujos + devoluciones por neto real + resincronización histórica), C (pagos de
+> saldo en efectivo entran a caja), la duplicación E de recálculo/tallas/consecutivo,
+> y el webhook de saldo ahora crea el registro de Pago. Los datos huérfanos y las
+> 13 facturas descuadradas se repararon con `tools/reparar_datos_fase2.py`
+> (auditado; respaldo previo). Pendientes: unificar vocabulario de estados (D, se
+> puenteó en lectura), upsert de Cliente unificado, y `editar_factura` sigue sin
+> considerar domicilio/descuento al recalcular el total. Factura R-716 tiene
+> sobrepago de $35.800 — revisar devolución con el cliente.
+
 ### A. Bugs (comportamiento roto hoy)
 
 | # | Problema | Dónde | Efecto |
