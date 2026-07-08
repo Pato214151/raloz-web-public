@@ -226,7 +226,7 @@ function ConvItem({ c, activo, onClick }) {
             {c.nombre || c.chat_id}
           </span>
           <span className="text-[11px] text-[#8696a0] shrink-0">
-            {horaCorta(c.ultima_actividad || c.fecha_creacion)}
+            {horaCorta(c.ultima_fecha)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-2 mt-0.5">
