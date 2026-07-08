@@ -1,7 +1,41 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Component } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft } from 'lucide-react'
+import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle } from 'lucide-react'
+
+// ── Error boundary: aísla fallos de render ──
+// Evita que un solo mensaje/chat problemático tumbe toda la bandeja.
+// Se le puede pasar `resetKey`: al cambiar (p.ej. al abrir otro chat) el
+// boundary se reinicia y vuelve a intentar renderizar.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false })
+    }
+  }
+  componentDidCatch(error, info) {
+    // Log para diagnóstico; no relanza para no tumbar el árbol.
+    console.error('[WhatsApp] error de render aislado:', error, info)
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? (
+        <div className="flex items-center gap-1.5 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 my-1">
+          <AlertTriangle size={12} className="shrink-0" />
+          <span>No se pudo cargar este mensaje</span>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // ── Estilos base para el fondo tipo WhatsApp ──
 const WA_BG = 'wa-chat-bg'
@@ -54,17 +88,38 @@ function Media({ id, tipo }) {
   const [err, setErr] = useState(false)
   useEffect(() => {
     let ok = true
+    setSrc(null)
+    setErr(false)
     api.get(`/wa/media/${id}`)
-      .then(r => { if (ok) setSrc(r.data.media_b64) })
+      .then(r => {
+        const b64 = r?.data?.media_b64
+        if (ok) {
+          if (typeof b64 === 'string' && b64) setSrc(b64)
+          else setErr(true)
+        }
+      })
       .catch(() => { if (ok) setErr(true) })
     return () => { ok = false }
   }, [id])
-  if (err) return null
-  if (!src) return null
+  if (err) {
+    return (
+      <div className="mb-1 text-[11px] text-[#8696a0] italic">📎 Adjunto no disponible</div>
+    )
+  }
+  if (!src) {
+    return (
+      <div className="mb-1 text-[11px] text-[#8696a0] italic">Cargando adjunto…</div>
+    )
+  }
   if (tipo === 'image') {
     return (
       <a href={src} target="_blank" rel="noopener" className="block mb-1">
-        <img src={src} alt="adjunto" className="rounded-lg max-w-[260px] max-h-[320px] object-contain" />
+        <img
+          src={src}
+          alt="adjunto"
+          className="rounded-lg max-w-[260px] max-h-[320px] object-contain"
+          onError={() => setErr(true)}
+        />
       </a>
     )
   }
@@ -171,7 +226,7 @@ function ConvItem({ c, activo, onClick }) {
             {c.nombre || c.chat_id}
           </span>
           <span className="text-[11px] text-[#8696a0] shrink-0">
-            {horaCorta(c.ultima_actividad || c.fecha_creacion)}
+            {horaCorta(c.ultima_fecha)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-2 mt-0.5">
@@ -204,7 +259,6 @@ export default function WhatsApp() {
   const [enviandoImg, setEnviandoImg] = useState(false)
   const [cargandoConv, setCargandoConv] = useState(true)
   const [escribiendo, setEscribiendo] = useState(false)
-  const [ultimoDia, setUltimoDia] = useState(null)
   const finRef = useRef(null)
   const fileRef = useRef(null)
   const textareaRef = useRef(null)
@@ -317,14 +371,6 @@ export default function WhatsApp() {
     }
   }
 
-  // Agrupar mensajes por día para separadores
-  const mensajesConSeparador = mensajes.map(m => {
-    const d = new Date(m.fecha).toDateString()
-    const sep = d !== ultimoDia
-    if (sep) setUltimoDia(d)
-    return { ...m, nuevoDia: sep }
-  })
-
   // Totales
   const totalSinLeer = conversaciones.reduce((s, c) => s + (c.no_leidos || 0), 0)
   const totalConv = conversaciones.length
@@ -411,6 +457,24 @@ export default function WhatsApp() {
         flex flex-col flex-1 overflow-hidden
         ${panelMovil === 'chat' ? 'flex' : 'hidden lg:flex'}
       `}>
+        <ErrorBoundary
+          resetKey={activo}
+          fallback={
+            <div className="flex-1 flex flex-col items-center justify-center wa-chat-bg p-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+                <AlertTriangle size={26} className="text-amber-500" />
+              </div>
+              <p className="text-[14px] font-semibold text-gray-700 mb-1">No se pudo mostrar este chat</p>
+              <p className="text-[12px] text-[#8696a0] max-w-xs mb-4">
+                Ocurrió un problema al cargar esta conversación. Puedes abrir otra o volver a la lista.
+              </p>
+              <button onClick={volverALista}
+                className="text-[13px] font-medium px-4 py-2 rounded-full bg-[#25d366] text-white hover:bg-[#20bd5a] transition shadow-sm">
+                Volver a la lista
+              </button>
+            </div>
+          }
+        >
         {!activo ? (
           /* Empty state desktop */
           <div className="flex-1 flex flex-col items-center justify-center wa-chat-bg">
@@ -484,7 +548,9 @@ export default function WhatsApp() {
                   return (
                     <div key={m.id_mensaje}>
                       {sep && <DiaSeparador fecha={m.fecha} />}
-                      <Mensaje m={m} />
+                      <ErrorBoundary resetKey={m.id_mensaje}>
+                        <Mensaje m={m} />
+                      </ErrorBoundary>
                     </div>
                   )
                 })
@@ -550,6 +616,7 @@ export default function WhatsApp() {
             </div>
           </>
         )}
+        </ErrorBoundary>
       </div>
     </div>
   )
