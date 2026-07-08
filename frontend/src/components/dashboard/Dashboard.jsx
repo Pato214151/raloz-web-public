@@ -5,7 +5,7 @@ import api from '../../services/api'
 import {
   DollarSign, CreditCard, TrendingUp, TrendingDown, AlertCircle,
   ShoppingCart, Scissors, RefreshCw, FileText, Search, Package,
-  PackageCheck, Wallet, ArrowRight, BookOpen,
+  PackageCheck, Wallet, ArrowRight, BookOpen, MessageCircle, Users, Clock, Truck,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -66,12 +66,12 @@ function KPICard({ icon: Icon, label, value, sub, color = 'blue', onClick, showA
 
 // ─── Accesos rápidos (filtrados por rol) ─────────────────────────
 const ACCESOS_DEF = [
-  { label: 'Nueva Venta',  icon: FileText,     path: '/facturacion', bg: 'bg-slate-800',   roles: ['administrador', 'vendedor', 'cajero'] },
-  { label: 'Cobros',       icon: CreditCard,   path: '/pagos',       bg: 'bg-violet-600',  roles: ['administrador', 'cajero']            },
-  { label: 'Buscar',       icon: Search,       path: '/buscar',      bg: 'bg-slate-500',   roles: ['administrador', 'vendedor', 'cajero'] },
-  { label: 'Fabricación',  icon: Scissors,     path: '/fabricacion', bg: 'bg-amber-500',   roles: ['administrador', 'vendedor']          },
-  { label: 'Empaque',      icon: PackageCheck, path: '/empaque',     bg: 'bg-teal-600',    roles: ['administrador', 'vendedor', 'cajero'] },
-  { label: 'Stock',        icon: Package,      path: '/stock',       bg: 'bg-emerald-600', roles: ['administrador', 'vendedor']          },
+  { label: 'Nueva Venta',      icon: FileText,     path: '/facturacion',   bg: 'bg-slate-800',   roles: ['administrador', 'vendedor', 'cajero'] },
+  { label: 'Centro Pedidos',  icon: ShoppingCart, path: '/pedidos-online', bg: 'bg-blue-600',    roles: ['administrador', 'vendedor']           },
+  { label: 'Registrar Pago',  icon: CreditCard,  path: '/pagos',          bg: 'bg-violet-600',  roles: ['administrador', 'cajero']            },
+  { label: 'Buscar',          icon: Search,      path: '/buscar',         bg: 'bg-slate-500',   roles: ['administrador', 'vendedor', 'cajero'] },
+  { label: 'WhatsApp',        icon: MessageCircle, path: '/whatsapp',      bg: 'bg-green-600',   roles: ['administrador', 'vendedor', 'cajero'] },
+  { label: 'Clientes',         icon: Users,       path: '/clientes',        bg: 'bg-indigo-600', roles: ['administrador', 'vendedor', 'cajero'] },
 ]
 
 // ─── Skeleton de carga ───────────────────────────────────────────
@@ -242,17 +242,32 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── KPIs: Pendientes ── */}
+      {/* ── Resumen de Pedidos (sección unificada) ── */}
       <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-0.5">Pendientes</p>
+        <div className="flex items-center justify-between mb-2 px-0.5">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pedidos pendientes</p>
+          <button onClick={() => navigate('/pedidos-online')}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1">
+            Ver todo <ArrowRight size={11} />
+          </button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KPICard
-            icon={AlertCircle}
-            label="Por cobrar"
-            value={fmt(data?.total_por_cobrar)}
-            color="red"
-            onClick={() => navigate('/cuentas')}
-            showAlert={(data?.total_por_cobrar || 0) > 0}
+            icon={ShoppingCart}
+            label="Pedidos web"
+            value={data?.pedidos_web_pendientes ?? 0}
+            sub="por procesar"
+            color="blue"
+            onClick={() => navigate('/pedidos-online')}
+            showAlert={(data?.pedidos_web_pendientes || 0) > 0}
+          />
+          <KPICard
+            icon={Scissors}
+            label="En fabricación"
+            value={data?.fabricacion_en_curso ?? 0}
+            sub="pedidos activos"
+            color="amber"
+            onClick={() => navigate('/fabricacion')}
           />
           <KPICard
             icon={Package}
@@ -264,21 +279,12 @@ export default function Dashboard() {
             showAlert={(data?.pendientes_entrega || 0) > 0}
           />
           <KPICard
-            icon={ShoppingCart}
-            label="Pedidos web"
-            value={data?.pedidos_web_pendientes ?? 0}
-            sub="por entregar"
-            color="orange"
-            onClick={() => navigate('/pedidos-online')}
-            showAlert={(data?.pedidos_web_pendientes || 0) > 0}
-          />
-          <KPICard
-            icon={Scissors}
-            label="En fabricación"
-            value={data?.fabricacion_en_curso ?? 0}
-            sub="pedidos activos"
-            color="amber"
-            onClick={() => navigate('/fabricacion')}
+            icon={AlertCircle}
+            label="Por cobrar"
+            value={fmt(data?.total_por_cobrar)}
+            color="red"
+            onClick={() => navigate('/cuentas')}
+            showAlert={(data?.total_por_cobrar || 0) > 0}
           />
         </div>
       </div>

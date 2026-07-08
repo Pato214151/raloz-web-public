@@ -7,9 +7,10 @@ import {
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
   ShoppingCart, Scissors, Truck, Activity, ChevronRight, MessageCircle, CalendarClock,
+  Clock, Inbox, ListTodo, PackageX,
 } from 'lucide-react'
 
-// ─── Grupos de navegación (6 en lugar de 8) ──────────────────────
+// ─── Grupos de navegación reorganizados ─────────────────────────
 const menuGroups = [
   {
     groupId: 'dashboard',
@@ -19,84 +20,102 @@ const menuGroups = [
     ],
   },
   {
+    groupId: 'pedidos',
+    label: 'Pedidos',
+    items: [
+      { path: '/pedidos-online',    label: 'Centro de Pedidos', icon: ShoppingCart, roles: ['administrador', 'vendedor']            },
+      { path: '/fabricacion',      label: 'Fabricación',       icon: Scissors,    roles: ['administrador', 'vendedor']          },
+      { path: '/empaque',          label: 'Empaque',            icon: PackageCheck, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/pendientes',        label: 'Por Entregar',       icon: Clock,       roles: ['administrador', 'vendedor']          },
+    ],
+  },
+  {
     groupId: 'ventas',
     label: 'Ventas',
     items: [
-      { path: '/facturacion', label: 'Nueva Venta',     icon: FileText,    roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/buscar',      label: 'Buscar Facturas', icon: Search,      roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/pagos',       label: 'Registrar Pago',  icon: CreditCard,  roles: ['administrador', 'cajero'] },
-      { path: '/ventas',      label: 'Hoja de Ventas',  icon: TrendingUp,  roles: ['administrador', 'vendedor'] },
-      { path: '/cuentas',     label: 'Por Cobrar',      icon: AlertCircle, roles: ['administrador', 'vendedor'] },
-      { path: '/clientes',    label: 'Clientes',        icon: Users,       roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/whatsapp',    label: 'WhatsApp',        icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/citas',       label: 'Citas',           icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/facturacion', label: 'Nueva Venta',     icon: FileText,     roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/buscar',      label: 'Buscar Facturas', icon: Search,       roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/pagos',       label: 'Registrar Pago',  icon: CreditCard,   roles: ['administrador', 'cajero']            },
+      { path: '/ventas',      label: 'Hoja de Ventas',  icon: TrendingUp,   roles: ['administrador', 'vendedor']          },
+      { path: '/cuentas',     label: 'Por Cobrar',     icon: AlertCircle,  roles: ['administrador', 'vendedor']          },
+      { path: '/clientes',    label: 'Clientes',        icon: Users,        roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
     groupId: 'operaciones',
     label: 'Operaciones',
     items: [
-      { path: '/operaciones',       label: 'Operaciones',        icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/operaciones', label: 'Operaciones', icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
     groupId: 'inventario',
     label: 'Inventario',
     items: [
-      { path: '/stock',   label: 'Stock Actual',     icon: Activity,   roles: ['administrador', 'vendedor'] },
-      { path: '/precios', label: 'Precios Colegios', icon: DollarSign, roles: ['administrador'] },
-      { path: '/ordenes-produccion', label: 'Órdenes Producción', icon: Scissors, roles: ['administrador'] },
+      { path: '/stock',               label: 'Stock Actual',       icon: Activity,   roles: ['administrador', 'vendedor'] },
+      { path: '/precios',             label: 'Precios Colegios',  icon: DollarSign, roles: ['administrador']             },
+      { path: '/ordenes-produccion',  label: 'Órdenes Prod.',    icon: Scissors,   roles: ['administrador']            },
+      { path: '/fabricacion/stock',   label: 'Stock Fabricación', icon: Package,    roles: ['administrador']            },
     ],
   },
   {
     groupId: 'finanzas',
     label: 'Finanzas',
     items: [
-      { path: '/gastos',   label: 'Gastos',   icon: Wallet,    roles: ['administrador', 'cajero'] },
-      { path: '/caja',     label: 'Caja',     icon: BookOpen,  roles: ['administrador', 'cajero'] },
-      { path: '/reportes', label: 'Reportes', icon: BarChart3, roles: ['administrador'] },
+      { path: '/gastos',    label: 'Gastos',   icon: Wallet,    roles: ['administrador', 'cajero']            },
+      { path: '/caja',      label: 'Caja',    icon: BookOpen,  roles: ['administrador', 'cajero']            },
+      { path: '/reportes',  label: 'Reportes', icon: BarChart3, roles: ['administrador']                   },
+    ],
+  },
+  {
+    groupId: 'comunicacion',
+    label: 'Comunicación',
+    items: [
+      { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/citas',    label: 'Citas',    icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
     groupId: 'ajustes',
     label: 'Ajustes',
     items: [
-      { path: '/usuarios',      label: 'Usuarios', icon: UserCog,       roles: ['administrador'] },
-      { path: '/configuracion', label: 'Colegios', icon: Settings,      roles: ['administrador'] },
-      { path: '/tareas',        label: 'Tareas',   icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/usuarios',      label: 'Usuarios',  icon: UserCog,       roles: ['administrador']                        },
+      { path: '/configuracion', label: 'Colegios', icon: Settings,      roles: ['administrador']                       },
+      { path: '/tareas',        label: 'Tareas',   icon: ListTodo,      roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
 ]
 
 // Mapeo ruta → título para el header dinámico
 const PAGE_TITLES = {
-  '/':                   'Dashboard',
-  '/facturacion':        'Nueva Venta',
-  '/buscar':             'Buscar Facturas',
-  '/pagos':              'Registrar Pago',
-  '/ventas':             'Hoja de Ventas',
-  '/cuentas':            'Cuentas por Cobrar',
-  '/clientes':           'Clientes',
-  '/whatsapp':           'WhatsApp',
-  '/citas':              'Citas',
-  '/pedidos-online':     'Pedidos Web',
-  '/fabricacion':        'Fabricación',
-  '/fabricacion/stock':  'Stock Fabricación',
-  '/pendientes':         'Prendas Pendientes',
-  '/empaque':            'Empaque',
-  '/stock':              'Stock Actual',
-  '/precios':            'Precios Colegios',
-  '/ordenes-produccion': 'Órdenes de Producción',
-  '/gastos':             'Gastos',
-  '/caja':               'Caja',
-  '/reportes':           'Reportes',
-  '/usuarios':           'Usuarios',
-  '/configuracion':      'Configuración',
-  '/tareas':             'Tareas',
+  '/':                      'Dashboard',
+  '/facturacion':           'Nueva Venta',
+  '/buscar':                'Buscar Facturas',
+  '/pagos':                 'Registrar Pago',
+  '/ventas':                'Hoja de Ventas',
+  '/cuentas':              'Cuentas por Cobrar',
+  '/clientes':              'Clientes',
+  '/whatsapp':              'WhatsApp',
+  '/citas':                 'Citas',
+  '/pedidos-online':        'Centro de Pedidos',
+  '/fabricacion':           'Fabricación',
+  '/fabricacion/stock':     'Stock Fabricación',
+  '/pendientes':            'Por Entregar',
+  '/empaque':               'Empaque',
+  '/stock':                 'Stock Actual',
+  '/precios':               'Precios Colegios',
+  '/ordenes-produccion':    'Órdenes de Producción',
+  '/gastos':                'Gastos',
+  '/caja':                  'Caja',
+  '/reportes':              'Reportes',
+  '/usuarios':              'Usuarios',
+  '/configuracion':          'Configuración',
+  '/tareas':                'Tareas',
+  '/operaciones':           'Operaciones',
 }
 
 // Grupos que arrancan colapsados por defecto
-const DEFAULT_COLLAPSED = ['inventario', 'ajustes']
+const DEFAULT_COLLAPSED = ['pedidos', 'inventario', 'finanzas', 'comunicacion', 'ajustes']
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -241,14 +260,14 @@ export default function Layout() {
                       }
                     >
                       {({ isActive }) => {
-                        const showBadge = item.path === '/operaciones' && nuevosPedidos > 0
+                        const showPedidosBadge = item.path === '/pedidos-online' && nuevosPedidos > 0
                         const showWaBadge = item.path === '/whatsapp' && waNoLeidos > 0
                         const showCitasBadge = item.path === '/citas' && citasPend > 0
                         return (
                           <>
                             <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
                             <span className="truncate">{item.label}</span>
-                            {showBadge ? (
+                            {showPedidosBadge ? (
                               <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
                                 {nuevosPedidos > 99 ? '99+' : nuevosPedidos}
                               </span>

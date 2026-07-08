@@ -22,6 +22,7 @@ import Configuracion from './components/configuracion/Configuracion'
 import Tareas from './components/tareas/Tareas'
 import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
+import CentroPedidos from './components/pedidos/CentroPedidos'
 import PedidosFabricacion from './components/fabricacion/PedidosFabricacion'
 import StockPendienteFab from './components/fabricacion/StockPendienteFab'
 import OrdenesProduccion from './components/ordenes-produccion/OrdenesProduccion'
@@ -93,7 +94,8 @@ export default function App() {
           <Route path="citas" element={<Citas />} />
           <Route path="tareas" element={<Tareas />} />
           <Route path="operaciones" element={<Operaciones />} />
-          <Route path="pedidos-online" element={<PedidosOnline />} />
+          <Route path="pedidos-online" element={<CentroPedidos />} />
+          <Route path="pedidos-web-legacy" element={<PedidosOnline />} />
           <Route path="fabricacion" element={<PedidosFabricacion />} />
           <Route path="fabricacion/stock" element={<StockPendienteFab />} />
           <Route path="ordenes-produccion" element={
