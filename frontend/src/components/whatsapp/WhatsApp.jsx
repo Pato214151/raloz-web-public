@@ -152,10 +152,10 @@ function Mensaje({ m }) {
             <span className="text-[10px] font-medium opacity-70">{m.autor}</span>
           )}
           <span className="text-[10px]">{horaMensaje(m.fecha)}</span>
-          {esOut && (
-            <span className="text-[10px] ml-0.5">
-              {m.leido ? '✓✓' : m.autor === 'sistema' ? '' : '✓'}
-            </span>
+          {esOut && m.autor !== 'sistema' && (
+            // Un solo ✓ = enviado. El ✓✓ (leído) queda pendiente: requiere que el
+            // bot procese los webhooks de estado de Meta y guardar el wamid al enviar.
+            <span className="text-[10px] ml-0.5">✓</span>
           )}
         </div>
       </div>
