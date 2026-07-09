@@ -217,3 +217,102 @@ Salida:
 - **stdout** en markdown con las alertas activas (sin BAJA — están en CSV).
 - **CSV** con todas las alertas (incluyendo BAJA) en
   `backups/alertas_stock_YYYY-MM-DD.csv`.
+
+---
+
+## Reporte semanal (proyecto #8)
+
+`tools/reporte_semanal.py` resume la **semana anterior** (lunes-lunes)
+para que sepas qué pasó sin entrar al panel. Pensado para correrlo
+**automáticamente cada lunes** después del weekly maintenance, o bajo
+demanda.
+
+### Qué incluye
+
+1. **Ventas POS por colegio** — facturas, unidades, ingresos. Origen
+   `factura_detalle` (que en tu negocio es el grueso).
+2. **Ventas web por colegio** — pedidos pagados.
+3. **Pendientes de entrega** — agrupado por estado (POR_ENTREGAR,
+   LISTO_LLAMAR, EMPACADO) + monto total.
+4. **Saldos pendientes de pago** — top 20 facturas con saldo > 0 (incluye
+   la **factura más vieja** sin cobrar — dime si la quieres ver primero).
+5. **Abonos cobrados en la semana** — pagos recibidos.
+6. **Cruzado con estado de mantenimiento** y **alertas de stock** —
+   para que en un solo email veas si hay hallazgos del weekly maintenance
+   o alertas activas de stock sin abrir el panel.
+
+### Salidas
+
+- **markdown en stdout** — bonito para leer en terminal.
+- **email por Brevo** cuando no se pasa `--no-notify`.
+- **CSV detallado** con `--csv-dir backups/` (todas las facturas
+  pendientes y con saldo, ideal para abrir en Excel y filtrar).
+
+### Uso
+
+```
+# Semana anterior (default)
+python tools/reporte_semanal.py --csv-dir backups/
+
+# Ventana explícita
+python tools/reporte_semanal.py --desde 2025-08-04 --hasta 2025-08-10
+
+# Sin email (solo stdout + CSV)
+python tools/reporte_semanal.py --no-notify --csv-dir backups/
+```
+
+---
+
+## Revisión de precios de uniformes completos (proyecto #4)
+
+`tools/revisar_precios_combos.py` responde la pregunta **"¿el uniforme
+completo está bien de precio comparado con la suma de piezas?"**.
+
+Para cada (colegio, uniforme_completo, talla_grupo):
+
+  - Calcula el **descuento implícito** que estás dando hoy
+    (`1 - combo/suma_piezas`, en `%`).
+  - Compara entre colegios: si la dispersión es **mayor a 3 puntos
+    porcentuales**, marca INCONSISTENTE.
+  - Si todo está dentro de ±3 pp, marca OK.
+
+### Hallazgo típico (verificado contra tu BD)
+
+Tu tienda tiene descuentos **efectivamente nulos** en los uniformes
+completos (0.0 – 0.3 % sobre la suma). El combo cuesta lo mismo que las
+piezas sueltas. Eso es una decisión de negocio: o le pones un descuento
+real (10–15 %) o lo dejas así. El script te da los datos para decidir.
+
+### NO MODIFICA LA BD
+
+Es solo lectura. Las decisiones de precio las aplica **el dueño desde el
+panel** (`Productos > Precios por colegio`). El script te propone el
+precio "justo" según un descuento objetivo (`--descuento-meta` 0.15 =
+15% sobre la suma) y tú decides si lo aplicas.
+
+### Limitación detectada
+
+Solo funciona donde tanto el combo como sus piezas tienen precios
+configurados en `precios_colegio` para la misma talla. Si una pieza no
+tiene precio en esa talla, la fila se ignora (luego completa los precios
+faltantes desde el panel y vuelve a correr).
+
+### Uso
+
+```
+# Análisis exploratorio (default: tolerancia 3 pp)
+python tools/revisar_precios_combos.py --csv-dir backups
+
+# Sugerir precios normalizados con 15% de descuento sobre la suma
+python tools/revisar_precios_combos.py --descuento-meta 0.15
+
+# Cambiar tolerancia (más estricto / más laxo)
+python tools/revisar_precios_combos.py --umbral-pp 1.5
+```
+
+### Salidas
+
+- markdown en stdout: una tabla por combo, otra con las inconsistencias
+  (si las hay), y opcionalmente la propuesta de precios normalizados.
+- CSV completo en `backups/revision_precios_combos_<fecha>.csv` para
+  revisión en Excel.
