@@ -6,3 +6,8 @@ instance/
 .venv/
 venv/
 migrations/
+
+# Mantenimiento semanal: estado incremental + dumps generados (sí se commitean
+# algunos .sql grandes manualmente después; este patrón es para el JSON efímero).
+backups/.last_state.json
+backups/raloz_backup_*.sql
