@@ -99,8 +99,18 @@ jobs:
           if [ "${{ github.event.inputs.no_backup }}" = "true" ]; then ARGS="$ARGS --no-backup"; fi
           if [ "${{ github.event.inputs.no_notify }}" = "true" ]; then ARGS="$ARGS --no-notify"; fi
           # Permitimos un fallo no-bloqueante: la lógica interna escribe su
-          # propio log y notification; aquí solo observamos el exit.
+          # propio log y notification; aquí solo solo observamos el exit.
           python tools/maintenance.py $ARGS || echo "::warning::maintenance retornó código $?"
+
+      - name: Análisis de temporada (recomendación de fabricación)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # Genera el markdown en stdout y los CSVs en backups/.
+          # No envía nada por email — eso lo activa el dueño manualmente
+          # o lo enchufa a otro workflow cuando lo tenga listo.
+          python tools/analisis_temporada.py --csv-dir backups/ --top 30 \
+            || echo "::warning::analisis_temporada retornó código $?"
 
       - name: Empaquetar backups como artifact
         if: always()

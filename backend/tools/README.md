@@ -155,3 +155,65 @@ workflow estacional.
   aparecen como tales aquí — se cuentan como sus piezas individuales.
 - Úsalo como **una pista más**, contrastada con tu experiencia y con el
   cliente.
+
+---
+
+## Alertas de stock bajo (proyecto #7)
+
+`tools/alertas_stock.py` detecta combinaciones (colegio × producto × talla)
+que están **cerca de agotarse** — antes del pico de regreso a clases.
+
+Complementa `analisis_temporada.py`:
+- El análisis mira **"qué fabricar"** mirando el año pasado.
+- Las alertas miran **"qué se va a acabar pronto"** mirando la velocidad
+  de venta de los últimos 90 días.
+
+### Cómo clasifica las alertas
+
+- **CRITICA** — agotado (stock=0) si se vendió algo en 90 días. O
+  ≤ 4 semanas de inventario restante.
+- **ALTA** — entre 4 y 8 semanas de inventario restante.
+- **MEDIA** — stock ≤ umbral sin rotación rápida (vigilar).
+- **BAJA** — agotado sin ventas en 90 días (vigilar aunque no urge).
+
+### Configuración
+
+```
+# Por CLI:
+python tools/alertas_stock.py --umbral 8 --ventana 90 --csv-dir backups/
+
+# Por .env:
+MAINT_STOCK_UMBRAL=5          # default si --umbral no se pasa
+MAINT_STOCK_VENTANA=90        # default días hacia atrás
+```
+
+### Notificación
+
+- Solo envía email si hay **CRÍTICAS nuevas** o CRÍTICAS recurrentes.
+- Reusa `tools/notifier.enviar_email` (Brevo).
+- Estado incremental en `backups/.stock_alerts_state.json` para evitar
+  spam cada lunes.
+- Notificación desactivada por defecto si no hay CRÍTICAS nuevas.
+
+### Integración con weekly maintenance
+
+`tools/maintenance.py` ya invoca `alertas_stock` al final del flujo
+semanal, así cada lunes recibes:
+1. Email del mantenimiento (si hay hallazgos nuevos o backup crítico)
+2. Email de alertas de stock (si hay críticas nuevas)
+… en dos emails separados, cada uno con su lógica propia.
+
+### Uso independiente
+
+```
+# Una corrida para ver qué urge:
+python tools/alertas_stock.py --umbral 5 --no-notify --csv-dir backups/
+
+# Con notificador (necesita BREVO_API_KEY + EMAIL_AVISO_TO en .env):
+python tools/alertas_stock.py --umbral 5 --csv-dir backups/
+```
+
+Salida:
+- **stdout** en markdown con las alertas activas (sin BAJA — están en CSV).
+- **CSV** con todas las alertas (incluyendo BAJA) en
+  `backups/alertas_stock_YYYY-MM-DD.csv`.

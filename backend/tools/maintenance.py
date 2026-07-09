@@ -443,6 +443,16 @@ def main() -> int:
         res = notificar(asunto, cuerpo)
         log(f"Notificación: {res}")
 
+    # Paso extra: alertas de stock (#7) — independiente del backup.
+    # No las mezclamos con el aviso del mantenimiento: cada script decide
+    # si avisar según su propio estado. Si llega a fallar, no abortamos.
+    try:
+        from tools.alertas_stock import main as _run_alertas
+        log("Lanzando alertas_stock (autosuficiente)...")
+        _run_alertas([])   # [] para que no lea sys.argv (le pasamos sin args)
+    except Exception as e:
+        log(f"alertas_stock falló: {e}")
+
     log("=== Mantenimiento finalizado ===")
     return 0 if backup_res.get("ok") and verificacion["ok"] else 1
 
