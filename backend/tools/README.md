@@ -98,3 +98,60 @@ enviar_email("Asunto", "Cuerpo en texto plano")
 ```
 
 > Si más adelante quieres notificaciones a WhatsApp (bot OpenWA) en lugar de email, agregamos otro wrapper `tools/notifier_wa.py` con la misma firma.
+
+---
+
+## Análisis de temporada para fabricación (proyecto #2)
+
+`tools/analisis_temporada.py` corre 4 queries contra la BD y entrega un panorama
+completo del último año más una recomendación de cuántas unidades fabricar por
+colegio × producto × talla individual — **para preparar el regreso a clases**.
+
+### Lo que hace
+
+1. **Panorama general** — KPIs: pedidos web, facturas POS, ingresos, abonos.
+2. **Ingresos por canal y colegio** — sin duplicar facturas (cuidado con los JOIN).
+3. **Top prendas × colegio × talla** — expande grupos (`6-8`, `10-12`...) a tallas individuales para que la rotación sea comparable con tu stock.
+4. **Inventario actual** — agrupa por colegio × producto × talla con totales y destacados (stock bajo < 5, agotado = 0).
+5. **Recomendación de fabricación** — 3 escenarios:
+   - **Conservador** = `vendidas_12m × 1.00 − stock_actual`
+   - **Base**       = `vendidas_12m × 1.15 − stock_actual`
+   - **Optimista**  = `vendidas_12m × 1.30 − stock_actual`
+   (mínimo 0 — si el stock te alcanza, no fabricues).
+6. **Cruza con `backups/.last_state.json`** del weekly maintenance para mostrarte los hallazgos actuales.
+
+### Fuentes de datos y decisiones
+
+- **`factura_detalle` (POS)** es la fuente principal de demanda — la web aún no
+  tiene peso estadístico (en el último año solo hubo 0-2 pedidos).
+- Para los pedidos_web: queda listo para cuando crezca (el código tiene la
+  función `expandir_venta_items` lista, solo hay que cambiar la query).
+- Cruza con el catálogo de productos por colegio (helper
+  `app/utils/tallas.py:expandir_grupo_para_producto`) para que las tallas del
+  JSON (`"6-8"`) se repartan correctamente entre las tallas individuales
+  (`6` y `8`).
+
+### Uso
+
+```
+cd backend
+python tools/analisis_temporada.py                                 # último año (default)
+python tools/analisis_temporada.py --desde 2025-08-01 --hasta 2026-06-30
+python tools/analisis_temporada.py --csv-dir backups/               # +CSVs exportables
+python tools/analisis_temporada.py --escenarios "1.0,1.20,1.40"     # cambia los 3 escenarios
+python tools/analisis_temporada.py --top 50                        # más filas en el Top
+```
+
+Sin tocar la BD: solo lee. Para automatización, lo más fácil es meterlo en
+el mismo GitHub Action que ya tienes (`weekly-maintenance.yml`) o crear otro
+workflow estacional.
+
+### Importante: NO usar como única fuente para comprar tela
+
+- Es matemática sobre lo que se vendió en los últimos 12 meses. No predice
+  demanda futura — un colegio que cambia uniforme o una nueva promoción
+  puede distorsionar las cifras.
+- Los combinados (uniforme completo) y los pedidos por fabricación NO
+  aparecen como tales aquí — se cuentan como sus piezas individuales.
+- Úsalo como **una pista más**, contrastada con tu experiencia y con el
+  cliente.
