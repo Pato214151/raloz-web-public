@@ -39,6 +39,13 @@ from sqlalchemy import text  # noqa: E402
 # Reusa los mapeos del diagnóstico para no duplicar verdad en dos archivos
 from tools.diagnostico_datos import COMBOS_UNIFORME  # noqa: E402
 
+# UTF-8 en consola: evita UnicodeEncodeError con ─/emojis en Windows (cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+except Exception:
+    pass
+
 
 def parsear_args():
     ap = argparse.ArgumentParser()
@@ -127,7 +134,7 @@ def main():
 
     app = create_app()
     with app.app_context():
-        db = app.extensions['migrate'].db if 'migrate' in app.extensions else __import__('app.db', fromlist=['db']).db
+        from app import db  # instancia SQLAlchemy del backend
         productos, colegios, precios = obtener_datos(db)
 
         # Construir la matriz: por cada uniforme + talla_grupo,

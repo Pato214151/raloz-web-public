@@ -36,6 +36,13 @@ from sqlalchemy import text  # noqa: E402
 
 from tools.notifier import enviar_email  # noqa: E402
 
+# UTF-8 en consola: evita UnicodeEncodeError con ─/emojis en Windows (cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+except Exception:
+    pass
+
 BACKEND = Path(__file__).resolve().parents[1]
 STATE_MAIN   = BACKEND / "backups" / ".last_state.json"
 STATE_STOCK  = BACKEND / "backups" / ".stock_alerts_state.json"
@@ -260,7 +267,7 @@ def main():
 
     app = create_app()
     with app.app_context():
-        db = app.extensions['migrate'].db if 'migrate' in app.extensions else __import__('app.db', fromlist=['db']).db
+        from app import db  # instancia SQLAlchemy del backend
 
         # Ventas POS: agrupadas por colegio
         rows_pos = ventas_pos_periodo(db, desde, hasta)
