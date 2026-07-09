@@ -44,6 +44,13 @@ from app.models import (  # noqa: E402
 from app.utils.tallas import expandir_grupo_para_producto  # noqa: E402
 from sqlalchemy import func, text  # noqa: E402
 
+# UTF-8 en consola: evita UnicodeEncodeError con ═/emojis en Windows (cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+except Exception:
+    pass
+
 ESTADO_FILE_DEFAULT = Path(__file__).resolve().parents[1] / "backups" / ".last_state.json"
 
 

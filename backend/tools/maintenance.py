@@ -45,6 +45,13 @@ STATE_FILE = BACKUPS_DIR / ".last_state.json"
 # el directorio backend al sys.path (necesario para "import tools.notifier").
 sys.path.insert(0, str(BACKEND))
 
+# UTF-8 en consola: evita UnicodeEncodeError con emojis/═ en Windows (cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+except Exception:
+    pass
+
 # Reutilizamos el notifier (también lo usa el reporte semanal en el futuro)
 from tools.notifier import enviar_email as _enviar_email_brevo  # type: ignore
 

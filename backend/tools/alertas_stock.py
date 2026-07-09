@@ -52,6 +52,14 @@ from sqlalchemy import text  # noqa: E402
 
 from tools.notifier import enviar_email  # noqa: E402
 
+# UTF-8 en consola: evita UnicodeEncodeError con ═/emojis en Windows (cp1252).
+# En el runner de GitHub (Linux/UTF-8) no cambia nada.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+    sys.stderr.reconfigure(encoding="utf-8")   # type: ignore[attr-defined]
+except Exception:
+    pass
+
 STATE_FILE = Path(__file__).resolve().parents[1] / "backups" / ".stock_alerts_state.json"
 BACKEND = STATE_FILE.parent.parent  # backend/
 
@@ -277,7 +285,7 @@ def main(argv: list | None = None):
 
     app = create_app()
     with app.app_context():
-        db = app.extensions['migrate'].db if 'migrate' in app.extensions else __import__('app.db', fromlist=['db']).db
+        from app import db  # instancia SQLAlchemy del backend
         stock   = stock_por_clave(db)
         vendido = velocidad_90d(db, ventana)
 

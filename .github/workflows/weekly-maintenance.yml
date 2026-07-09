@@ -99,7 +99,7 @@ jobs:
           if [ "${{ github.event.inputs.no_backup }}" = "true" ]; then ARGS="$ARGS --no-backup"; fi
           if [ "${{ github.event.inputs.no_notify }}" = "true" ]; then ARGS="$ARGS --no-notify"; fi
           # Permitimos un fallo no-bloqueante: la lógica interna escribe su
-          # propio log y notification; aquí solo solo observamos el exit.
+          # propio log y notification; aquí solo observamos el exit.
           python tools/maintenance.py $ARGS || echo "::warning::maintenance retornó código $?"
 
       - name: Análisis de temporada (recomendación de fabricación)
