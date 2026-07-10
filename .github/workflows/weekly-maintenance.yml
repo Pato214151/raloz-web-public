@@ -64,12 +64,13 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Instalar dependencias mínimas (sin reporte de PDF)
+      - name: Instalar dependencias del backend
         run: |
           python -m pip install --upgrade pip
-          pip install "psycopg[binary]" "requests" python-dotenv
-          # Reportlab NO hace falta para el mantenimiento semanal (lo usa solo
-          # email_service al mandar facturas con PDF adjunto a clientes).
+          # Instalamos todo el requirements: los scripts de analisis/alertas/reporte
+          # importan la app Flask (from app import create_app), asi que necesitan
+          # Flask y sus dependencias, no solo psycopg.
+          pip install -r requirements.txt
 
       - name: Construir .env desde secrets
         env:
