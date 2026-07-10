@@ -6,6 +6,7 @@ import {
   DollarSign, CreditCard, TrendingUp, TrendingDown, AlertCircle,
   ShoppingCart, Scissors, RefreshCw, FileText, Search, Package,
   PackageCheck, Wallet, ArrowRight, BookOpen, MessageCircle, Users, Clock, Truck,
+  MessageSquare,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -241,6 +242,31 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      {/* ── Canal web (leads) ── */}
+      {isAdmin && (data?.leads_pendientes > 0 || data?.leads_mes > 0) && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={15} className="text-green-600" />
+              <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Canal web — Cotizaciones</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-2xl font-bold text-green-800">{data?.leads_pendientes ?? 0}</p>
+              <p className="text-xs text-green-600">cotizaciones pendientes por atender</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-green-700">{data?.leads_mes ?? 0}</p>
+              <p className="text-xs text-green-600">este mes</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-green-600/80">
+            Llegaron desde el formulario de la tienda web. Si WhatsApp se cae, estos mensajes igual se capturan.
+          </p>
+        </div>
+      )}
 
       {/* ── Resumen de Pedidos (sección unificada) ── */}
       <div>

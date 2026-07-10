@@ -6,9 +6,9 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from app.utils.decorators import get_current_identity
 from app import db
-from app.models import Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria
+from app.models import Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria, Lead
 from sqlalchemy import func, and_
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -90,6 +90,13 @@ def resumen_dashboard():
         PedidoFabricacion.estado.in_(['en_produccion', 'listo_para_entrega'])
     ).count()
 
+    # Leads web pendientes (canal alternativo cuando WhatsApp falla)
+    leads_pendientes = Lead.query.filter_by(estado='pendiente').count()
+    leads_mes = Lead.query.filter(
+        Lead.estado == 'pendiente',
+        Lead.creada >= datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    ).count()
+
     # Cuentas por cobrar — suma directa en DB sin cargar registros ni pagos
     total_por_cobrar = db.session.query(
         func.coalesce(func.sum(Factura.saldo_pendiente), 0)
@@ -130,4 +137,6 @@ def resumen_dashboard():
         'total_por_cobrar': total_por_cobrar,
         'ventas_7_dias': ventas_7_dias,
         'caja': caja_info,
+        'leads_pendientes': leads_pendientes,
+        'leads_mes': leads_mes,
     }), 200
