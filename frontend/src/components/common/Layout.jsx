@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Search, Package, TrendingUp, Users, Wallet,
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
-  ShoppingCart, Scissors, Truck, Activity, ChevronRight, MessageCircle, CalendarClock,
+  ShoppingCart, Scissors, Truck, Activity, ChevronRight,   MessageCircle, CalendarClock, MessageSquare,
   Clock, Inbox, ListTodo, PackageX,
 } from 'lucide-react'
 
@@ -67,12 +67,13 @@ const menuGroups = [
       { path: '/reportes',  label: 'Reportes', icon: BarChart3, roles: ['administrador']                   },
     ],
   },
-  {
+    {
     groupId: 'comunicacion',
     label: 'Comunicación',
     items: [
       { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/citas',    label: 'Citas',    icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/leads',    label: 'Leads',     icon: MessageSquare, roles: ['administrador', 'vendedor'] },
+      { path: '/citas',   label: 'Citas',     icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
@@ -96,7 +97,8 @@ const PAGE_TITLES = {
   '/cuentas':              'Cuentas por Cobrar',
   '/clientes':              'Clientes',
   '/whatsapp':              'WhatsApp',
-  '/citas':                 'Citas',
+  '/leads':                'Leads',
+  '/citas':                'Citas',
   '/pedidos-online':        'Centro de Pedidos',
   '/fabricacion':           'Fabricación',
   '/fabricacion/stock':     'Stock Fabricación',
@@ -175,6 +177,23 @@ export default function Layout() {
     const id = setInterval(cargar, 30000)
     return () => { activo = false; clearInterval(id) }
   }, [])
+
+  // Badge de leads pendientes (canal web + WhatsApp). Refresca cada 45 s.
+  const [leadsPend, setLeadsPend] = useState(0)
+  const puedeVerLeads = ['administrador', 'vendedor'].includes(usuario?.rol)
+  useEffect(() => {
+    if (!puedeVerLeads) return
+    let activo = true
+    const cargar = async () => {
+      try {
+        const res = await api.get('/leads/resumen')
+        if (activo) setLeadsPend(res.data?.pendientes || 0)
+      } catch { /* silencioso */ }
+    }
+    cargar()
+    const id = setInterval(cargar, 45000)
+    return () => { activo = false; clearInterval(id) }
+  }, [puedeVerLeads])
 
   const handleLogout = () => { logout(); navigate('/login') }
   const toggleGroup  = (id) => setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }))
@@ -263,6 +282,7 @@ export default function Layout() {
                         const showPedidosBadge = item.path === '/pedidos-online' && nuevosPedidos > 0
                         const showWaBadge = item.path === '/whatsapp' && waNoLeidos > 0
                         const showCitasBadge = item.path === '/citas' && citasPend > 0
+                        const showLeadsBadge = item.path === '/leads' && leadsPend > 0
                         return (
                           <>
                             <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
@@ -274,6 +294,10 @@ export default function Layout() {
                             ) : showWaBadge ? (
                               <span className="ml-auto bg-green-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
                                 {waNoLeidos > 99 ? '99+' : waNoLeidos}
+                              </span>
+                            ) : showLeadsBadge ? (
+                              <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
+                                {leadsPend > 99 ? '99+' : leadsPend}
                               </span>
                             ) : showCitasBadge ? (
                               <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">

@@ -20,11 +20,14 @@ def listar_leads():
         - limite: cuántos devolver (default 50, máx 200)
     """
     estado = request.args.get('estado', '').strip()
+    origen = request.args.get('origen', '').strip()
     limite = min(int(request.args.get('limite', 50)), 200)
 
     q = Lead.query.order_by(Lead.creada.desc())
     if estado:
         q = q.filter_by(estado=estado)
+    if origen in ('web', 'whatsapp'):
+        q = q.filter_by(origen=origen)
 
     leads = q.limit(limite).all()
 
@@ -67,9 +70,15 @@ def resumen_leads():
     convertidos = Lead.query.filter_by(estado='convertido').count()
     total = Lead.query.count()
 
+    # Desglose por origen (solo pendientes)
+    de_web = Lead.query.filter_by(estado='pendiente', origen='web').count()
+    de_wa  = Lead.query.filter_by(estado='pendiente', origen='whatsapp').count()
+
     return jsonify({
         'pendientes': pendientes,
         'contactados': contactados,
         'convertidos': convertidos,
         'total': total,
+        'pendientes_web': de_web,
+        'pendientes_whatsapp': de_wa,
     }), 200

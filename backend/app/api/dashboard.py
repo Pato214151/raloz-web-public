@@ -92,6 +92,8 @@ def resumen_dashboard():
 
     # Leads web pendientes (canal alternativo cuando WhatsApp falla)
     leads_pendientes = Lead.query.filter_by(estado='pendiente').count()
+    leads_pendientes_web = Lead.query.filter_by(estado='pendiente', origen='web').count()
+    leads_pendientes_whatsapp = Lead.query.filter_by(estado='pendiente', origen='whatsapp').count()
     leads_mes = Lead.query.filter(
         Lead.estado == 'pendiente',
         Lead.creada >= datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -138,5 +140,7 @@ def resumen_dashboard():
         'ventas_7_dias': ventas_7_dias,
         'caja': caja_info,
         'leads_pendientes': leads_pendientes,
+        'leads_pendientes_web': leads_pendientes_web,
+        'leads_pendientes_whatsapp': leads_pendientes_whatsapp,
         'leads_mes': leads_mes,
     }), 200

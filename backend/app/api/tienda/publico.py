@@ -1053,6 +1053,20 @@ def crear_lead():
     db.session.add(lead)
     db.session.commit()
 
+    # Notificar al admin por WhatsApp si es un lead desde la web
+    # (los de WhatsApp ya llegan por el bot, no hace falta re-notificar)
+    if origen == 'web':
+        try:
+            _avisar_admin(
+                f'🌐 *Nuevo lead desde la web*\n'
+                f'Nombre: {nombre or "—no"}\n'
+                f'Tel: {telefono}\n'
+                f'Email: {email or "—no"}\n'
+                f'Mensaje: {mensaje[:200]}'
+            )
+        except Exception as e:
+            logger.warning('No se pudo notificar lead por WhatsApp: %s', e)
+
     # Notificar al asesor por email (no bloquea la respuesta)
     try:
         enviar_email_lead({
