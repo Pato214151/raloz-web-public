@@ -1018,7 +1018,10 @@ def crear_lead():
     mensaje  = sanitize_string(data.get('mensaje', '').strip(), 2000)
     nombre   = sanitize_string(data.get('nombre', '').strip(), 160)
     email    = sanitize_string(data.get('email', '').strip(), 200)
-    origen   = 'web'
+    # El origen lo manda el cliente (web / whatsapp / otro); si no es válido → 'web'
+    origen   = sanitize_string(data.get('origen', 'web').strip(), 20) or 'web'
+    if origen not in ('web', 'whatsapp', 'otro'):
+        origen = 'web'
 
     # Validación mínima
     if not telefono:
@@ -1027,6 +1030,16 @@ def crear_lead():
         return jsonify({'error': 'Mensaje requerido', 'code': 'mensaje_requerido'}), 400
     if len(telefono) < 7:
         return jsonify({'error': 'Teléfono no válido', 'code': 'telefono_invalido'}), 400
+
+    # Deduplicación: si este teléfono ya generó un lead en los últimos 10 minutos,
+    # no creamos otro (evita duplicados por doble-clic o por el bot repitiendo).
+    hace_10min = datetime.utcnow() - timedelta(minutes=10)
+    if Lead.query.filter(Lead.telefono == telefono, Lead.creada >= hace_10min).first():
+        return jsonify({
+            'ok': True,
+            'mensaje': 'Ya recibimos tu solicitud. Te contactamos pronto.',
+            'duplicado': True,
+        }), 200
 
     # Guardar en BD
     lead = Lead(
