@@ -6,6 +6,7 @@ de email. WhatsApp es no-op porque WHATSAPP_BOT_URL no está configurado.
 """
 import json
 import pytest
+from datetime import date
 from app import db
 from app.models import (
     Colegio, Producto, Stock, Reserva, PedidoWeb, Factura,
@@ -62,7 +63,7 @@ def _crear_escenario(stock_inicial=5, cantidad=2, con_reserva=True, tipo_pedido=
 
     id_reserva = None
     if con_reserva:
-        from datetime import datetime, timedelta
+        from datetime import date, datetime, timedelta
         reserva = Reserva(
             session_id='sesion-test', id_colegio=colegio.id_colegio,
             id_producto=producto.id_producto, talla='8', cantidad=cantidad,
@@ -256,3 +257,147 @@ def test_fallo_consultando_mp_pide_reintento(tienda_client, entorno_mp, monkeypa
 
     resp = _webhook(tienda_client)
     assert resp.status_code == 500
+
+
+# ─── Tests del flujo SALDO (pago de cuota restante) ────────────────
+
+def _crear_pedido_con_saldo():
+    """Crea un pedido ya facturado con saldo pendiente (para probar pago de SALDO)."""
+    colegio = Colegio(nombre='COLEGIO SALDO', ciudad='Bogotá')
+    producto = Producto(nombre='Pantalon Saldo', tipo='pantalon')
+    db.session.add_all([colegio, producto])
+    db.session.flush()
+
+    precio = 80000
+    item = {
+        'id_producto': producto.id_producto, 'nombre': 'Pantalon Saldo',
+        'talla': '10', 'cantidad': 1, 'precio_unitario': precio,
+        'subtotal': precio, 'id_reserva': None, 'tipo_pedido': 'normal',
+        'stock_disponible': 1,
+    }
+    pedido = PedidoWeb(
+        referencia='RALOZ-SALDO001',
+        nombre_cliente='Cliente Saldo', email_cliente='saldo@test.com',
+        telefono_cliente='3109999999',
+        id_colegio=colegio.id_colegio, nombre_colegio=colegio.nombre,
+        items_json=json.dumps([item]),
+        total=precio, total_orden=precio, abono_porcentaje=50,
+        tiene_fabricacion=False, estado='pagado',
+    )
+    db.session.add(pedido)
+    db.session.flush()
+
+    # Factura con 50% abonado (saldo restante)
+    factura = Factura(
+        numero_factura='TEST-SALDO-001',
+        id_colegio=colegio.id_colegio,
+        usuario_creacion='TEST',
+        cliente_nombre='Cliente Saldo',
+        fecha_factura=date.today(),
+        total=precio, subtotal=precio,
+        total_abonado=precio * 0.5,
+        saldo_pendiente=precio * 0.5,
+        metodo_pago='MP', estado='PAGADA',
+    )
+    db.session.add(factura)
+    db.session.flush()
+    pedido.id_factura = factura.id_factura
+    db.session.add(Pago(
+        id_factura=factura.id_factura, valor=precio * 0.5,
+        metodo_pago='MP', usuario_registro='TIENDA_WEB',
+        fecha_pago=date.today(),
+    ))
+    db.session.commit()
+    return pedido, factura, producto
+
+
+def _mock_saldo_mp(monkeypatch, referencia, estado='approved', monto=40000):
+    def fake_get(url, **kwargs):
+        return _FakeResponse({
+            'id': 888, 'status': estado,
+            'external_reference': referencia,
+            'payment_type_id': 'credit_card',
+            'transaction_amount': monto,
+        })
+    monkeypatch.setattr(tienda.requests, 'get', fake_get)
+
+
+def _saldo_webhook(client):
+    return client.post('/api/tienda/mp/webhook', json={
+        'type': 'payment', 'data': {'id': '888'},
+    })
+
+
+def test_pago_saldo_aprobado_cancela_saldo(tienda_client, entorno_mp, monkeypatch):
+    """El pago del SALDO (-SALDO) descuenta el saldo pendiente y marca PAGADA."""
+    pedido, factura, _ = _crear_pedido_con_saldo()
+    _mock_saldo_mp(monkeypatch, 'RALOZ-SALDO001-SALDO')
+
+    resp = _saldo_webhook(tienda_client)
+    assert resp.status_code == 200
+
+    db.session.refresh(factura)
+    assert factura.saldo_pendiente == 0
+    assert factura.estado == 'PAGADA'
+    assert factura.mp_saldo_payment_id == '888'
+
+    db.session.refresh(pedido)
+    assert pedido.estado == 'pagado'
+
+    # Se registró el Pago del saldo
+    pagos_saldo = Pago.query.filter_by(id_factura=factura.id_factura).all()
+    assert len(pagos_saldo) == 2  # 1 abono + 1 saldo
+
+
+def test_pago_saldo_idempotente_no_descuenta_dos_veces(tienda_client, entorno_mp, monkeypatch):
+    """MP reintenta el webhook del SALDO: no descuenta dos veces."""
+    pedido, factura, _ = _crear_pedido_con_saldo()
+    _mock_saldo_mp(monkeypatch, 'RALOZ-SALDO001-SALDO')
+
+    assert _saldo_webhook(tienda_client).status_code == 200
+    assert _saldo_webhook(tienda_client).status_code == 200  # reintento
+
+    db.session.refresh(factura)
+    assert factura.saldo_pendiente == 0
+    assert factura.mp_saldo_payment_id == '888'
+    # Solo 2 pagos: abono + un solo pago de saldo
+    assert Pago.query.filter_by(id_factura=factura.id_factura).count() == 2
+
+
+def test_pago_saldo_sin_referencia_existente(tienda_client, entorno_mp, monkeypatch):
+    """Si el pedido base no existe, el webhook de SALDO retorna 200 (no rompe)."""
+    _mock_saldo_mp(monkeypatch, 'RALOZ-NOEXISTE-SALDO')
+    resp = _saldo_webhook(tienda_client)
+    assert resp.status_code == 200
+
+
+def test_contracargo_avisa_admin_y_no_toca_stock(tienda_client, entorno_mp, monkeypatch):
+    """charged_back (contracargo real): avisa admin, no anula factura, no toca stock."""
+    from app.api.tienda import publico as tienda
+    avisos = []
+    monkeypatch.setattr(tienda, '_avisar_admin', lambda texto: avisos.append(texto))
+
+    # Crear pedido ya facturado y pagado
+    _, producto, pedido, _ = _facturar(
+        tienda_client, entorno_mp, monkeypatch,
+        _crear_escenario(stock_inicial=5, cantidad=2))
+    stock_tras_pago = Stock.query.filter_by(
+        id_producto=producto.id_producto, talla_individual='8').first().cantidad
+
+    _mock_pago_mp(monkeypatch, pedido.referencia, estado='charged_back')
+    assert _webhook(tienda_client).status_code == 200
+
+    db.session.refresh(pedido)
+    assert pedido.estado == 'reembolsado'
+
+    db.session.refresh(producto)
+    factura = db.session.get(Factura, pedido.id_factura)
+    assert factura.estado == 'PAGADA'  # intacta
+
+    stock = Stock.query.filter_by(
+        id_producto=producto.id_producto, talla_individual='8').first()
+    assert stock.cantidad == stock_tras_pago  # sin cambios
+
+    assert len(avisos) == 1
+    assert 'contracargo' in avisos[0]
+
