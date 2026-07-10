@@ -747,3 +747,160 @@ def enviar_email_factura(destinatario: str, factura, detalles) -> bool:
         except Exception as e:
             logger.error('[EMAIL-SMTP] Error inesperado: %s', str(e))
             return False
+
+
+
+# ══════════════════════════════════════════════════════════════════
+# NOTIFICACIÓN DE LEAD AL ASESOR
+# ══════════════════════════════════════════════════════════════════
+
+def enviar_email_lead(lead_data: dict) -> bool:
+    """
+    Envía un email al asesor cuando llega un lead desde la tienda web.
+    lead_data: dict con 'nombre', 'telefono', 'email', 'mensaje'
+    """
+    nombre  = lead_data.get('nombre', '—')
+    telefono = lead_data.get('telefono', '—')
+    email   = lead_data.get('email', '—')
+    mensaje = lead_data.get('mensaje', '—')
+
+    cuerpo_html = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <body style="margin:0;padding:0;background:#F8FAFC;font-family:Arial,Helvetica,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:24px 0;">
+      <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+        <tr>
+          <td style="background:#1E293B;padding:28px 32px;">
+            <h1 style="color:#ffffff;margin:0;font-size:26px;letter-spacing:-0.5px;">RALOZ COL SAS</h1>
+            <p style="color:#F59E0B;margin:4px 0 0;font-size:12px;letter-spacing:1px;">
+              UNIFORMES ESCOLARES · BOGOTÁ, COLOMBIA
+            </p>
+          </td>
+        </tr>
+
+        <tr><td style="background:#F59E0B;height:3px;"></td></tr>
+
+        <tr>
+          <td style="padding:32px;">
+            <h2 style="color:#1E293B;margin:0 0 8px;font-size:20px;">
+              📩 Nuevo lead desde la tienda web
+            </h2>
+            <p style="color:#64748B;font-size:15px;line-height:1.6;margin:0 0 24px;">
+              Alguien填写的表格de cotización o asesoría. Contacta lo antes posible.
+            </p>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+              <tr>
+                <td width="120" style="padding:10px 0;color:#64748B;font-size:13px;">Nombre</td>
+                <td style="padding:10px 0;color:#1E293B;font-size:14px;font-weight:bold;">{nombre}</td>
+              </tr>
+              <tr style="background:#F8FAFC;">
+                <td style="padding:10px 0;color:#64748B;font-size:13px;">Teléfono</td>
+                <td style="padding:10px 0;"><a href="https://wa.me/57{telefono}" style="color:#25D366;font-weight:bold;text-decoration:none;">{telefono}</a></td>
+              </tr>
+              <tr>
+                <td style="padding:10px 0;color:#64748B;font-size:13px;">Email</td>
+                <td style="padding:10px 0;"><a href="mailto:{email}" style="color:#1E293B;text-decoration:none;">{email}</a></td>
+              </tr>
+            </table>
+
+            <div style="background:#F8FAFC;border-radius:8px;padding:16px 20px;">
+              <p style="margin:0 0 6px;color:#64748B;font-size:13px;">Mensaje:</p>
+              <p style="margin:0;color:#1E293B;font-size:14px;line-height:1.6;">{mensaje}</p>
+            </div>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+              <tr>
+                <td width="50%" style="padding-right:8px;">
+                  <a href="https://wa.me/57{telefono}" style="display:block;background:#25D366;
+                     color:#fff;text-decoration:none;text-align:center;padding:12px;
+                     border-radius:8px;font-size:14px;font-weight:bold;">
+                    💬 Contactar por WhatsApp
+                  </a>
+                </td>
+                <td width="50%" style="padding-left:8px;">
+                  <a href="mailto:{email}" style="display:block;background:#1E293B;
+                     color:#fff;text-decoration:none;text-align:center;padding:12px;
+                     border-radius:8px;font-size:14px;font-weight:bold;">
+                    ✉️ Responder por email
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#1E293B;padding:20px 32px;text-align:center;">
+            <p style="color:#94A3B8;font-size:12px;margin:0;line-height:1.6;">
+              RALOZ COL SAS · Bogotá, Colombia<br>
+              +57 321 341 2903 · ralozcol@outlook.com
+            </p>
+            <p style="color:#475569;font-size:11px;margin:8px 0 0;">
+              Este correo fue generado automáticamente desde la tienda web.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+      </td></tr>
+    </table>
+    </body>
+    </html>
+    """
+
+    remitente = os.getenv('EMAIL_REMITENTE', 'ralozcol@outlook.com').strip()
+    nombre_rem = os.getenv('EMAIL_NOMBRE', 'RALOZ COL SAS').strip()
+    password   = os.getenv('EMAIL_PASSWORD', '').strip()
+    destinatario = os.getenv('EMAIL_AVISO_TO', remitente).strip()
+
+    brevo_key = os.getenv('BREVO_API_KEY', '').strip()
+
+    if brevo_key:
+        payload = {
+            'sender':      {'name': nombre_rem, 'email': remitente},
+            'to':          [{'email': destinatario}],
+            'replyTo':     {'email': remitente},
+            'subject':     f'📩 Nuevo lead: {nombre} — RALOZ COL SAS',
+            'htmlContent': cuerpo_html,
+        }
+        try:
+            resp = _requests.post(
+                'https://api.brevo.com/v3/smtp/email',
+                headers={'api-key': brevo_key, 'Content-Type': 'application/json'},
+                json=payload,
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                logger.info('[EMAIL-BREVO] Lead notificado: %s', nombre)
+                return True
+            else:
+                logger.error('[EMAIL-BREVO] Error %s: %s', resp.status_code, resp.text[:300])
+                return False
+        except Exception as e:
+            logger.error('[EMAIL-BREVO] Excepción: %s', str(e))
+            return False
+    else:
+        msg = MIMEMultipart('mixed')
+        msg['From']    = f'{nombre_rem} <{remitente}>'
+        msg['To']      = destinatario
+        msg['Subject'] = f'📩 Nuevo lead: {nombre} — RALOZ COL SAS'
+        msg['Reply-To'] = email if email != '—' else remitente
+        msg.attach(MIMEText(cuerpo_html, 'html', 'utf-8'))
+        smtp_host = os.getenv('EMAIL_SMTP_HOST', 'smtp-mail.outlook.com')
+        smtp_port = int(os.getenv('EMAIL_SMTP_PORT', '587'))
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(remitente, password)
+                server.send_message(msg)
+            logger.info('[EMAIL-SMTP] Lead notificado: %s', nombre)
+            return True
+        except Exception as e:
+            logger.error('[EMAIL-SMTP] Error: %s', str(e))
+            return False

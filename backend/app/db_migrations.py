@@ -268,6 +268,23 @@ MIGRACIONES = [
             "ALTER TABLE wa_mensajes ADD COLUMN IF NOT EXISTS media_b64 TEXT",
         ],
     },
+    {
+        'version': '0015',
+        'descripcion': 'Tabla de leads capturados desde la tienda web',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS leads ("
+            "  id_lead SERIAL PRIMARY KEY,"
+            "  nombre VARCHAR(160),"
+            "  telefono VARCHAR(40),"
+            "  email VARCHAR(200),"
+            "  mensaje TEXT,"
+            "  estado VARCHAR(20) DEFAULT 'pendiente',"
+            "  origen VARCHAR(20) DEFAULT 'web',"
+            "  creada TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")",
+            "CREATE INDEX IF NOT EXISTS idx_leads_estado ON leads(estado, creada)",
+        ],
+    },
 ]
 
 

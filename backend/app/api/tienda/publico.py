@@ -23,11 +23,13 @@ from app.utils.validators import sanitize_string, validate_email
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, Pago, Reserva, PedidoFabricacion,
+    Lead,
 )
 from app.services.facturacion_web import (
     _clasificar_item, _crear_factura_desde_pedido,
     _crear_pedido_fabricacion_si_aplica, _lanzar_email_async,
 )
+from app.utils.email_service import enviar_email_lead
 from app.api.tienda import tienda_bp
 
 logger = logging.getLogger(__name__)
@@ -990,5 +992,69 @@ def pedidos_por_telefono(telefono):
             break
 
     return jsonify({'pedidos': pedidos}), 200
+
+
+# ══════════════════════════════════════════════════════════════════
+# LEADS — Cotizaciones y asesoría desde la tienda web
+# ══════════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/lead', methods=['POST'])
+@limiter.limit('20 per minute')
+def crear_lead():
+    """
+    Recibe una solicitud de cotización o asesoría desde la tienda web.
+    Guarda el lead y notifica al asesor por email.
+
+    Body JSON:
+        nombre   (str, opcional): nombre del cliente
+        telefono (str, requerido): teléfono de contacto
+        email    (str, opcional): email
+        mensaje  (str, requerido): consulta del cliente
+        origen   (str, opcional): 'web' por defecto
+    """
+    data = request.get_json(silent=True) or {}
+
+    telefono = sanitize_string(data.get('telefono', '').strip(), 40)
+    mensaje  = sanitize_string(data.get('mensaje', '').strip(), 2000)
+    nombre   = sanitize_string(data.get('nombre', '').strip(), 160)
+    email    = sanitize_string(data.get('email', '').strip(), 200)
+    origen   = 'web'
+
+    # Validación mínima
+    if not telefono:
+        return jsonify({'error': 'Teléfono requerido', 'code': 'telefono_requerido'}), 400
+    if not mensaje:
+        return jsonify({'error': 'Mensaje requerido', 'code': 'mensaje_requerido'}), 400
+    if len(telefono) < 7:
+        return jsonify({'error': 'Teléfono no válido', 'code': 'telefono_invalido'}), 400
+
+    # Guardar en BD
+    lead = Lead(
+        nombre=nombre or None,
+        telefono=telefono,
+        email=email or None,
+        mensaje=mensaje,
+        origen=origen,
+        estado='pendiente',
+    )
+    db.session.add(lead)
+    db.session.commit()
+
+    # Notificar al asesor por email (no bloquea la respuesta)
+    try:
+        enviar_email_lead({
+            'nombre':   nombre,
+            'telefono': telefono,
+            'email':    email,
+            'mensaje':  mensaje,
+        })
+    except Exception as e:
+        logger.warning('No se pudo enviar email de lead: %s', e)
+
+    return jsonify({
+        'ok': True,
+        'mensaje': 'Recibimos tu solicitud. Te contactamos pronto.',
+    }), 201
+
 
 
