@@ -348,6 +348,21 @@ MIGRACIONES = [
             "ON CONFLICT (clave) DO NOTHING",
         ],
     },
+    {
+        'version': '0021',
+        'descripcion': 'Promociones/publicaciones libres para la portada',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS promociones ("
+            "  id_promocion SERIAL PRIMARY KEY,"
+            "  titulo VARCHAR(120) NOT NULL,"
+            "  texto TEXT,"
+            "  foto TEXT,"
+            "  activa BOOLEAN DEFAULT TRUE,"
+            "  orden INTEGER DEFAULT 0,"
+            "  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")",
+        ],
+    },
 ]
 
 

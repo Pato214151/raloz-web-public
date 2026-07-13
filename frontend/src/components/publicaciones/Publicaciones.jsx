@@ -6,6 +6,7 @@ import {
   Shirt, MapPin, Store, AlertTriangle, CalendarClock,
 } from 'lucide-react'
 import { fotoProducto } from '../../data/productoImagenes'
+import PromocionesPanel from './PromocionesPanel'
 
 const COP = (n) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString('es-CO')
@@ -200,6 +201,9 @@ export default function Publicaciones() {
           </button>
         </div>
       </div>
+
+      {/* Ofertas y publicaciones libres para la portada */}
+      <PromocionesPanel />
 
       {/* Resumen (control center) */}
       {!loading && (

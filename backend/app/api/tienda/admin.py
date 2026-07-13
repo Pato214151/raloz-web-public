@@ -22,7 +22,7 @@ from app.models import (
     PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
     ConfigSitio, Colegio, Producto, PrecioColegio, Stock,
-    WaConversacion, Aviso, ReglaAuto,
+    WaConversacion, Aviso, ReglaAuto, Promocion,
 )
 from app.services.wa_send import enviar_whatsapp
 from app.services.facturacion_web import (
@@ -717,3 +717,89 @@ def actualizar_regla(clave):
         regla.config = json.dumps(data['config'])
     db.session.commit()
     return jsonify({'ok': True, 'regla': regla.to_dict()}), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# PROMOCIONES — publicaciones/ofertas libres para la portada
+# ══════════════════════════════════════════════════════════════
+
+_MAX_FOTO = 900_000   # tope del data URL base64 (~650 KB de imagen)
+
+
+def _validar_foto(foto):
+    """Devuelve (foto_ok, error). foto vacía = sin foto (válido)."""
+    if not foto:
+        return None, None
+    foto = str(foto)
+    if not foto.startswith('data:image/'):
+        return None, 'La foto no es una imagen válida'
+    if len(foto) > _MAX_FOTO:
+        return None, 'La foto es muy pesada (usa una más liviana)'
+    return foto, None
+
+
+@tienda_bp.route('/admin/promociones', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def listar_promociones():
+    promos = Promocion.query.order_by(Promocion.orden, Promocion.id_promocion.desc()).all()
+    return jsonify({'promociones': [p.to_dict() for p in promos]}), 200
+
+
+@tienda_bp.route('/admin/promociones', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def crear_promocion():
+    data = request.get_json() or {}
+    titulo = sanitize_string(data.get('titulo', ''), 120)
+    if not titulo:
+        return jsonify({'error': 'El título es obligatorio'}), 400
+    foto, err = _validar_foto(data.get('foto'))
+    if err:
+        return jsonify({'error': err}), 400
+    promo = Promocion(
+        titulo=titulo,
+        texto=str(data.get('texto', ''))[:2000],
+        foto=foto,
+        activa=bool(data.get('activa', True)),
+        orden=int(data.get('orden', 0) or 0),
+    )
+    db.session.add(promo)
+    db.session.commit()
+    return jsonify({'ok': True, 'promocion': promo.to_dict()}), 201
+
+
+@tienda_bp.route('/admin/promociones/<int:id_promo>', methods=['PUT'])
+@jwt_required()
+@rol_requerido('administrador')
+def actualizar_promocion(id_promo):
+    promo = Promocion.query.get_or_404(id_promo)
+    data = request.get_json() or {}
+    if 'titulo' in data:
+        promo.titulo = sanitize_string(data['titulo'], 120) or promo.titulo
+    if 'texto' in data:
+        promo.texto = str(data['texto'])[:2000]
+    if 'activa' in data:
+        promo.activa = bool(data['activa'])
+    if 'orden' in data:
+        try:
+            promo.orden = int(data['orden'])
+        except (TypeError, ValueError):
+            pass
+    if 'foto' in data:
+        foto, err = _validar_foto(data.get('foto'))
+        if err:
+            return jsonify({'error': err}), 400
+        promo.foto = foto   # None si vino vacío → quita la foto
+    db.session.commit()
+    return jsonify({'ok': True, 'promocion': promo.to_dict()}), 200
+
+
+@tienda_bp.route('/admin/promociones/<int:id_promo>', methods=['DELETE'])
+@jwt_required()
+@rol_requerido('administrador')
+def eliminar_promocion(id_promo):
+    promo = Promocion.query.get_or_404(id_promo)
+    db.session.delete(promo)
+    db.session.commit()
+    return jsonify({'ok': True}), 200

@@ -282,3 +282,49 @@ def test_reglas_listar_y_togglear(tienda_client):
     d = r.get_json()['regla']
     assert d['activa'] is True
     assert d['config']['umbral'] == 3
+
+
+# ── Promociones / publicaciones libres ──────────────────────────────
+
+def test_crear_y_listar_promocion(tienda_client):
+    r = tienda_client.post('/api/tienda/admin/promociones',
+                           json={'titulo': 'Oferta de hoy', 'texto': '2 pares por $80.000'},
+                           headers=_auth_admin())
+    assert r.status_code == 201
+    pid = r.get_json()['promocion']['id_promocion']
+
+    # aparece en el endpoint público
+    pub = tienda_client.get('/api/tienda/promociones').get_json()['promociones']
+    assert any(p['id_promocion'] == pid and p['titulo'] == 'Oferta de hoy' for p in pub)
+
+
+def test_promocion_inactiva_no_sale_en_publico(tienda_client):
+    r = tienda_client.post('/api/tienda/admin/promociones',
+                           json={'titulo': 'Oculta', 'activa': False},
+                           headers=_auth_admin())
+    pid = r.get_json()['promocion']['id_promocion']
+    pub = tienda_client.get('/api/tienda/promociones').get_json()['promociones']
+    assert all(p['id_promocion'] != pid for p in pub)
+
+
+def test_promocion_sin_titulo_400(tienda_client):
+    r = tienda_client.post('/api/tienda/admin/promociones', json={'titulo': ''},
+                           headers=_auth_admin())
+    assert r.status_code == 400
+
+
+def test_promocion_foto_invalida_400(tienda_client):
+    r = tienda_client.post('/api/tienda/admin/promociones',
+                           json={'titulo': 'X', 'foto': 'no-es-imagen'},
+                           headers=_auth_admin())
+    assert r.status_code == 400
+
+
+def test_eliminar_promocion(tienda_client):
+    r = tienda_client.post('/api/tienda/admin/promociones',
+                           json={'titulo': 'Borrar'}, headers=_auth_admin())
+    pid = r.get_json()['promocion']['id_promocion']
+    d = tienda_client.delete(f'/api/tienda/admin/promociones/{pid}', headers=_auth_admin())
+    assert d.status_code == 200
+    pub = tienda_client.get('/api/tienda/promociones').get_json()['promociones']
+    assert all(p['id_promocion'] != pid for p in pub)

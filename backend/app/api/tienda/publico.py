@@ -23,7 +23,7 @@ from app.utils.validators import sanitize_string, validate_email
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, Pago, Reserva, PedidoFabricacion,
-    Lead, ConfigSitio,
+    Lead, ConfigSitio, Promocion,
 )
 from app.services.facturacion_web import (
     _clasificar_item, _crear_factura_desde_pedido,
@@ -186,6 +186,16 @@ def config_publica():
             'activo': ConfigSitio.get('banner_activo', '1') == '1',
         },
     }), 200
+
+
+@tienda_bp.route('/promociones', methods=['GET'])
+def promociones_publicas():
+    """Ofertas/publicaciones activas para la portada de la tienda."""
+    promos = (Promocion.query
+              .filter_by(activa=True)
+              .order_by(Promocion.orden, Promocion.id_promocion.desc())
+              .all())
+    return jsonify({'promociones': [p.to_dict() for p in promos]}), 200
 
 
 # ══════════════════════════════════════════════════════════════

@@ -31,6 +31,7 @@ from app.models.lead import Lead
 from app.models.config_sitio import ConfigSitio
 from app.models.aviso import Aviso
 from app.models.regla_auto import ReglaAuto
+from app.models.promocion import Promocion
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -41,5 +42,5 @@ __all__ = [
     'PedidoFabricacion', 'StockPendienteFabricacion', 'TokenRevocado',
     'MovimientoInventario', 'OrdenProduccion',
     'WaConversacion', 'WaMensaje', 'Cita', 'Lead', 'ConfigSitio', 'Aviso',
-    'ReglaAuto',
+    'ReglaAuto', 'Promocion',
 ]
