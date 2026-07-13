@@ -69,6 +69,56 @@ def test_catalogo_oculta_productos_pausados(tienda_client):
     assert fila['orden'] == 1
 
 
+def _reservar(client, colegio, prod, talla='8'):
+    return client.post('/api/tienda/reservar', json={
+        'session_id': 'sess-test', 'id_colegio': colegio.id_colegio,
+        'id_producto': prod.id_producto, 'talla': talla, 'cantidad': 1,
+    })
+
+
+def test_reservar_rechaza_producto_pausado(tienda_client):
+    """Pausar = nada de compras: un producto pausado no se puede reservar."""
+    colegio = Colegio(nombre='COL RES', ciudad='Bogotá')
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('Pausado', activo=False)
+    db.session.add(Stock(id_colegio=colegio.id_colegio, id_producto=prod.id_producto,
+                         talla_individual='8', cantidad=5))
+    db.session.commit()
+
+    r = _reservar(tienda_client, colegio, prod)
+    assert r.status_code == 409
+
+
+def test_reservar_rechaza_colegio_pausado(tienda_client):
+    """Colegio desactivado → toda su tienda bloqueada para comprar."""
+    colegio = Colegio(nombre='COL OFF', ciudad='Bogotá', activo=False)
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('Activo', activo=True)
+    db.session.add(Stock(id_colegio=colegio.id_colegio, id_producto=prod.id_producto,
+                         talla_individual='8', cantidad=5))
+    db.session.commit()
+
+    r = _reservar(tienda_client, colegio, prod)
+    assert r.status_code == 409
+
+
+def test_reservar_ok_todo_activo(tienda_client):
+    """Con producto y colegio activos + stock, la reserva funciona normal."""
+    colegio = Colegio(nombre='COL ON', ciudad='Bogotá', activo=True)
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('Disponible', activo=True)
+    db.session.add(Stock(id_colegio=colegio.id_colegio, id_producto=prod.id_producto,
+                         talla_individual='8', cantidad=5))
+    db.session.commit()
+
+    r = _reservar(tienda_client, colegio, prod)
+    assert r.status_code in (200, 201)      # 201 reserva nueva, 200 si ya existía
+    assert r.get_json().get('ok') is True
+
+
 def test_catalogo_ordena_por_campo_orden(tienda_client):
     colegio = Colegio(nombre='COL ORDEN', ciudad='Bogotá')
     db.session.add(colegio)

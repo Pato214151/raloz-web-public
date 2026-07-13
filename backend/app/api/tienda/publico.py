@@ -204,6 +204,15 @@ def reservar_producto():
     except (ValueError, TypeError):
         return jsonify({'error': 'Datos inválidos'}), 400
 
+    # "Pausar = nada de compras": si el producto o el colegio están pausados,
+    # no se puede reservar (ni comprar), aunque llegue una petición directa.
+    producto = Producto.query.get(id_producto)
+    if not producto or not producto.activo:
+        return jsonify({'error': 'Este producto no está disponible'}), 409
+    colegio = Colegio.query.get(id_colegio)
+    if not colegio or not colegio.activo:
+        return jsonify({'error': 'Este colegio no está disponible por ahora'}), 409
+
     stock = Stock.query.filter_by(
         id_colegio=id_colegio,
         id_producto=id_producto,

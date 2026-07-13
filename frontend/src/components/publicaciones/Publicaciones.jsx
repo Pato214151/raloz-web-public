@@ -5,6 +5,7 @@ import {
   Megaphone, Star, Eye, EyeOff, Save, Loader2, Search,
   Shirt, MapPin, Store, AlertTriangle,
 } from 'lucide-react'
+import { fotoProducto } from '../../data/productoImagenes'
 
 const COP = (n) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString('es-CO')
@@ -249,9 +250,20 @@ export default function Publicaciones() {
                         <Star className="w-5 h-5" fill={p.destacado ? 'currentColor' : 'none'} />
                       </button>
 
-                      {/* "Foto" (ícono por tipo) */}
-                      <div className={`w-full aspect-square rounded-lg grid place-items-center ${tipoColor(p.tipo)}`}>
-                        <Shirt className="w-12 h-12 opacity-70" />
+                      {/* Foto del producto (con ícono por tipo de respaldo) */}
+                      <div className={`relative w-full aspect-square rounded-lg overflow-hidden ${tipoColor(p.tipo)}`}>
+                        <div className="absolute inset-0 grid place-items-center">
+                          <Shirt className="w-12 h-12 opacity-70" />
+                        </div>
+                        {fotoProducto(col.id_colegio, p.id_producto) && (
+                          <img
+                            src={fotoProducto(col.id_colegio, p.id_producto)}
+                            alt={p.nombre}
+                            loading="lazy"
+                            className="relative w-full h-full object-cover bg-white"
+                            onError={(e) => e.currentTarget.remove()}
+                          />
+                        )}
                       </div>
 
                       <div>
