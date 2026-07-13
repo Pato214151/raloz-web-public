@@ -601,6 +601,9 @@ def publicaciones_admin():
                 'orden':       prod.orden or 0,
                 'precio_min':  min(lista_precios) if lista_precios else None,
                 'stock_total': stock_map.get((c.id_colegio, pid), 0),
+                'publicar_desde': prod.publicar_desde.isoformat() if prod.publicar_desde else None,
+                'publicar_hasta': prod.publicar_hasta.isoformat() if prod.publicar_hasta else None,
+                'en_ventana':  prod.en_ventana(),
             })
         productos.sort(key=lambda x: (x['orden'], x['nombre']))
 

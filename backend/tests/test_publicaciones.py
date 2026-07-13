@@ -3,6 +3,8 @@ Fase 1 — Publicaciones y config del sitio.
 Verifica que la tienda respete el estado 'activo', exponga 'destacado'/'orden'
 y que el endpoint público /config sirva el banner editable desde el panel.
 """
+from datetime import datetime, timedelta
+
 from app import db
 from app.models import Colegio, Producto, PrecioColegio, Stock, ConfigSitio
 
@@ -134,6 +136,53 @@ def test_reservar_ok_todo_activo(tienda_client):
     r = _reservar(tienda_client, colegio, prod)
     assert r.status_code in (200, 201)      # 201 reserva nueva, 200 si ya existía
     assert r.get_json().get('ok') is True
+
+
+def test_programacion_oculta_producto_futuro(tienda_client):
+    """Un producto programado para el futuro no aparece en el catálogo todavía."""
+    colegio = Colegio(nombre='COL PROG', ciudad='Bogotá')
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('Promo Futura', activo=True)
+    prod.publicar_desde = datetime.utcnow() + timedelta(days=5)   # aún no
+    _publicar(colegio, prod)
+    db.session.commit()
+
+    data = tienda_client.get(f'/api/tienda/catalogo/{colegio.id_colegio}').get_json()
+    nombres = [p['nombre'] for p in data['productos']]
+    assert 'Promo Futura' not in nombres     # oculto hasta su fecha
+
+
+def test_programacion_muestra_producto_en_ventana(tienda_client):
+    """Dentro de la ventana (desde ayer, hasta mañana) el producto aparece disponible."""
+    colegio = Colegio(nombre='COL PROG2', ciudad='Bogotá')
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('En Ventana', activo=True)
+    prod.publicar_desde = datetime.utcnow() - timedelta(days=1)
+    prod.publicar_hasta = datetime.utcnow() + timedelta(days=1)
+    _publicar(colegio, prod)
+    db.session.commit()
+
+    data = tienda_client.get(f'/api/tienda/catalogo/{colegio.id_colegio}').get_json()
+    por_nombre = {p['nombre']: p for p in data['productos']}
+    assert 'En Ventana' in por_nombre
+    assert por_nombre['En Ventana']['disponible'] is True
+
+
+def test_programacion_vencida_bloquea_compra(tienda_client):
+    """Una ventana ya vencida bloquea la reserva (409)."""
+    colegio = Colegio(nombre='COL PROG3', ciudad='Bogotá')
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('Vencida', activo=True)
+    prod.publicar_hasta = datetime.utcnow() - timedelta(days=1)   # ya terminó
+    db.session.add(Stock(id_colegio=colegio.id_colegio, id_producto=prod.id_producto,
+                         talla_individual='8', cantidad=5))
+    db.session.commit()
+
+    r = _reservar(tienda_client, colegio, prod)
+    assert r.status_code == 409
 
 
 def test_catalogo_ordena_por_campo_orden(tienda_client):

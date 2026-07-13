@@ -309,6 +309,14 @@ MIGRACIONES = [
             "ON CONFLICT (clave) DO NOTHING",
         ],
     },
+    {
+        'version': '0018',
+        'descripcion': 'Programar publicaciones por fecha (publicar_desde/hasta)',
+        'sql': [
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS publicar_desde TIMESTAMP",
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS publicar_hasta TIMESTAMP",
+        ],
+    },
 ]
 
 

@@ -77,16 +77,22 @@ def catalogo_colegio(id_colegio):
     productos_meta = {}   # pid → {nombre, tipo}
     precios_por_pid = {}  # pid → {talla_grupo: precio_unitario}
     for precio in precios:
+        prod = precio.producto
+        en_ventana = prod.en_ventana()
+        # Programado fuera de ventana (aún activo): aún no se publica o ya terminó
+        # → se oculta por completo (distinto del pausado manual, que se muestra).
+        if prod.activo and not en_ventana:
+            continue
         # Los pausados SÍ se devuelven, pero marcados como no disponibles para que
         # la tienda los muestre atenuados y sin compra (colegio pausado → todo no disp).
         pid = precio.id_producto
         if pid not in productos_meta:
             productos_meta[pid] = {
-                'nombre':     precio.producto.nombre,
-                'tipo':       precio.producto.tipo,
-                'destacado':  bool(precio.producto.destacado),
-                'orden':      precio.producto.orden or 0,
-                'disponible': bool(precio.producto.activo) and bool(colegio.activo),
+                'nombre':     prod.nombre,
+                'tipo':       prod.tipo,
+                'destacado':  bool(prod.destacado),
+                'orden':      prod.orden or 0,
+                'disponible': bool(prod.activo) and bool(colegio.activo) and en_ventana,
             }
         precios_por_pid.setdefault(pid, {})[precio.talla_grupo] = precio.precio_unitario
 
@@ -215,7 +221,7 @@ def reservar_producto():
     # "Pausar = nada de compras": si el producto o el colegio están pausados,
     # no se puede reservar (ni comprar), aunque llegue una petición directa.
     producto = Producto.query.get(id_producto)
-    if not producto or not producto.activo:
+    if not producto or not producto.activo or not producto.en_ventana():
         return jsonify({'error': 'Este producto no está disponible'}), 409
     colegio = Colegio.query.get(id_colegio)
     if not colegio or not colegio.activo:

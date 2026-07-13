@@ -3,12 +3,14 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
   Megaphone, Star, Eye, EyeOff, Save, Loader2, Search,
-  Shirt, MapPin, Store, AlertTriangle,
+  Shirt, MapPin, Store, AlertTriangle, CalendarClock,
 } from 'lucide-react'
 import { fotoProducto } from '../../data/productoImagenes'
 
 const COP = (n) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString('es-CO')
+
+const soloFecha = (iso) => (iso ? String(iso).slice(0, 10) : '')
 
 // Color del ícono según el tipo de prenda (mismo criterio que la tienda)
 function tipoColor(tipo = '') {
@@ -29,6 +31,7 @@ export default function Publicaciones() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [vista, setVista] = useState('todos') // todos | publicados | pausados | destacados
+  const [schedId, setSchedId] = useState(null) // id del producto con el panel de fechas abierto
 
   useEffect(() => { cargar() }, [])
 
@@ -357,10 +360,17 @@ export default function Publicaciones() {
                       </div>
 
                       <div className="pt-2.5 border-t border-gray-100 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${p.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {p.activo ? 'Publicada' : 'Pausada'}
-                          </span>
+                        <div className="flex items-center flex-wrap justify-between gap-2">
+                          <div className="flex items-center flex-wrap gap-1.5">
+                            <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${p.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {p.activo ? 'Publicada' : 'Pausada'}
+                            </span>
+                            {(p.publicar_desde || p.publicar_hasta) && (
+                              <span className={`text-[10px] font-semibold px-2 py-1 rounded-full inline-flex items-center gap-1 ${p.en_ventana === false ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600'}`}>
+                                <CalendarClock className="w-3 h-3" /> {p.en_ventana === false ? 'Programada' : 'Con fecha'}
+                              </span>
+                            )}
+                          </div>
                           <label className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400">
                             Orden
                             <input
@@ -385,6 +395,38 @@ export default function Publicaciones() {
                           {p.activo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           {p.activo ? 'Pausar' : 'Publicar'}
                         </button>
+                        {/* Programar por fecha (plegable) */}
+                        <button
+                          type="button"
+                          onClick={() => setSchedId(schedId === p.id_producto ? null : p.id_producto)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-lg text-blue-600 hover:bg-blue-50"
+                        >
+                          <CalendarClock className="w-3.5 h-3.5" />
+                          {(p.publicar_desde || p.publicar_hasta) ? 'Editar programación' : 'Programar'}
+                        </button>
+                        {schedId === p.id_producto && (
+                          <div className="space-y-2 pt-1 border-t border-dashed border-gray-100">
+                            <label className="block text-[11px] text-gray-500">
+                              Publicar desde
+                              <input
+                                type="date"
+                                defaultValue={soloFecha(p.publicar_desde)}
+                                onChange={(e) => updateProducto(p.id_producto, { publicar_desde: e.target.value || null })}
+                                className="mt-0.5 w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              />
+                            </label>
+                            <label className="block text-[11px] text-gray-500">
+                              Ocultar después de
+                              <input
+                                type="date"
+                                defaultValue={soloFecha(p.publicar_hasta)}
+                                onChange={(e) => updateProducto(p.id_producto, { publicar_hasta: e.target.value || null })}
+                                className="mt-0.5 w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              />
+                            </label>
+                            <p className="text-[10px] text-gray-400">Déjalo vacío para quitar la programación.</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -2,6 +2,8 @@
 API de Productos
 """
 
+from datetime import datetime
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
@@ -72,6 +74,17 @@ def actualizar_producto(id_producto):
             producto.orden = int(data['orden'])
         except (TypeError, ValueError):
             pass
+    # Programación por fecha (ISO 'YYYY-MM-DD' o 'YYYY-MM-DDTHH:MM'); vacío = quitar
+    for campo in ('publicar_desde', 'publicar_hasta'):
+        if campo in data:
+            val = data[campo]
+            if not val:
+                setattr(producto, campo, None)
+            else:
+                try:
+                    setattr(producto, campo, datetime.fromisoformat(str(val).replace('Z', '')))
+                except ValueError:
+                    pass
 
     db.session.commit()
     return jsonify({'message': 'Producto actualizado', 'producto': producto.to_dict()}), 200
