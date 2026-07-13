@@ -19,6 +19,7 @@ import Usuarios from './components/usuarios/Usuarios'
 import CuentasPorCobrar from './components/reportes/CuentasPorCobrar'
 import Reportes from './components/reportes/Reportes'
 import Configuracion from './components/configuracion/Configuracion'
+import Publicaciones from './components/publicaciones/Publicaciones'
 import Tareas from './components/tareas/Tareas'
 import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
@@ -84,6 +85,9 @@ export default function App() {
           <Route path="cuentas" element={<CuentasPorCobrar />} />
           <Route path="reportes" element={
             <ProtectedRoute roles={['administrador']}><Reportes /></ProtectedRoute>
+          } />
+          <Route path="publicaciones" element={
+            <ProtectedRoute roles={['administrador']}><Publicaciones /></ProtectedRoute>
           } />
           <Route path="configuracion" element={
             <ProtectedRoute roles={['administrador']}><Configuracion /></ProtectedRoute>
