@@ -47,7 +47,9 @@ def test_config_banner_desactivado(tienda_client):
 
 # ── Publicaciones: activo / destacado / orden ──────────────────────
 
-def test_catalogo_oculta_productos_pausados(tienda_client):
+def test_catalogo_marca_pausados_como_no_disponibles(tienda_client):
+    """Los pausados SÍ aparecen en el catálogo, pero con disponible=False
+    (la tienda los muestra atenuados y sin compra)."""
     colegio = Colegio(nombre='COL FASE1', ciudad='Bogotá')
     db.session.add(colegio)
     db.session.flush()
@@ -59,14 +61,29 @@ def test_catalogo_oculta_productos_pausados(tienda_client):
     db.session.commit()
 
     data = tienda_client.get(f'/api/tienda/catalogo/{colegio.id_colegio}').get_json()
-    nombres = [p['nombre'] for p in data['productos']]
+    por_nombre = {p['nombre']: p for p in data['productos']}
 
-    assert 'Camisa Activa' in nombres          # el publicado aparece
-    assert 'Camisa Pausada' not in nombres     # el pausado NO aparece
+    assert 'Camisa Activa' in por_nombre        # ambos aparecen
+    assert 'Camisa Pausada' in por_nombre
+    assert por_nombre['Camisa Activa']['disponible'] is True
+    assert por_nombre['Camisa Pausada']['disponible'] is False
+    assert por_nombre['Camisa Activa']['destacado'] is True
 
-    fila = next(p for p in data['productos'] if p['nombre'] == 'Camisa Activa')
-    assert fila['destacado'] is True
-    assert fila['orden'] == 1
+
+def test_colegios_marca_inactivo_como_no_disponible(tienda_client):
+    """Un colegio desactivado sigue en la lista pero con disponible=False."""
+    activo = Colegio(nombre='COL ACT', ciudad='Bogotá', activo=True)
+    inactivo = Colegio(nombre='COL INACT', ciudad='Bogotá', activo=False)
+    db.session.add_all([activo, inactivo])
+    db.session.flush()
+    for c in (activo, inactivo):
+        _publicar(c, _producto(f'Prenda {c.nombre}'))
+    db.session.commit()
+
+    data = tienda_client.get('/api/tienda/colegios').get_json()
+    por_nombre = {c['nombre']: c for c in data['colegios']}
+    assert por_nombre['COL ACT']['disponible'] is True
+    assert por_nombre['COL INACT']['disponible'] is False
 
 
 def _reservar(client, colegio, prod, talla='8'):

@@ -46,13 +46,20 @@ _ORDEN_TALLAS = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL']
 
 @tienda_bp.route('/colegios', methods=['GET'])
 def listar_colegios():
-    """Retorna colegios activos que tienen productos con precio y stock"""
-    colegios = Colegio.query.filter_by(activo=True).order_by(Colegio.nombre).all()
+    """Retorna los colegios que tienen productos. Los desactivados desde el panel
+    se devuelven marcados como no disponibles (`disponible: false`): la tienda los
+    muestra pero atenuados y sin permitir compra."""
+    colegios = Colegio.query.order_by(Colegio.nombre).all()
     resultado = []
     for c in colegios:
         tiene_productos = PrecioColegio.query.filter_by(id_colegio=c.id_colegio).first()
         if tiene_productos:
-            resultado.append({'id_colegio': c.id_colegio, 'nombre': c.nombre, 'ciudad': c.ciudad})
+            resultado.append({
+                'id_colegio': c.id_colegio,
+                'nombre': c.nombre,
+                'ciudad': c.ciudad,
+                'disponible': bool(c.activo),
+            })
     return jsonify({'colegios': resultado}), 200
 
 
@@ -70,16 +77,16 @@ def catalogo_colegio(id_colegio):
     productos_meta = {}   # pid → {nombre, tipo}
     precios_por_pid = {}  # pid → {talla_grupo: precio_unitario}
     for precio in precios:
-        # Solo productos publicados (activo). Los pausados no aparecen en la tienda.
-        if not precio.producto.activo:
-            continue
+        # Los pausados SÍ se devuelven, pero marcados como no disponibles para que
+        # la tienda los muestre atenuados y sin compra (colegio pausado → todo no disp).
         pid = precio.id_producto
         if pid not in productos_meta:
             productos_meta[pid] = {
-                'nombre':    precio.producto.nombre,
-                'tipo':      precio.producto.tipo,
-                'destacado': bool(precio.producto.destacado),
-                'orden':     precio.producto.orden or 0,
+                'nombre':     precio.producto.nombre,
+                'tipo':       precio.producto.tipo,
+                'destacado':  bool(precio.producto.destacado),
+                'orden':      precio.producto.orden or 0,
+                'disponible': bool(precio.producto.activo) and bool(colegio.activo),
             }
         precios_por_pid.setdefault(pid, {})[precio.talla_grupo] = precio.precio_unitario
 
@@ -146,6 +153,7 @@ def catalogo_colegio(id_colegio):
             'tipo':        meta['tipo'],
             'destacado':   meta['destacado'],
             'orden':       meta['orden'],
+            'disponible':  meta['disponible'],
             'tallas':      tallas,
             'fabricacion': todas_sin_stock,
         })
