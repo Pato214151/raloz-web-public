@@ -333,6 +333,21 @@ MIGRACIONES = [
             ")",
         ],
     },
+    {
+        'version': '0020',
+        'descripcion': 'Motor de reglas de automatización (Fase 3)',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS reglas_auto ("
+            "  clave VARCHAR(50) PRIMARY KEY,"
+            "  activa BOOLEAN DEFAULT FALSE,"
+            "  config TEXT,"
+            "  ultima_ejecucion TIMESTAMP"
+            ")",
+            "INSERT INTO reglas_auto (clave, activa, config) VALUES "
+            "('alerta_stock_bajo', FALSE, '{\"umbral\": 5}') "
+            "ON CONFLICT (clave) DO NOTHING",
+        ],
+    },
 ]
 
 

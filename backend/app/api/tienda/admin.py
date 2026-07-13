@@ -22,7 +22,7 @@ from app.models import (
     PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
     ConfigSitio, Colegio, Producto, PrecioColegio, Stock,
-    WaConversacion, Aviso,
+    WaConversacion, Aviso, ReglaAuto,
 )
 from app.services.wa_send import enviar_whatsapp
 from app.services.facturacion_web import (
@@ -689,3 +689,31 @@ def enviar_aviso():
         'fallidos': fallidos,
         'aviso': aviso.to_dict(),
     }), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# REGLAS DE AUTOMATIZACIÓN (Fase 3)
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/admin/reglas', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def listar_reglas():
+    reglas = ReglaAuto.query.order_by(ReglaAuto.clave).all()
+    return jsonify({'reglas': [r.to_dict() for r in reglas]}), 200
+
+
+@tienda_bp.route('/admin/reglas/<clave>', methods=['PUT'])
+@jwt_required()
+@rol_requerido('administrador')
+def actualizar_regla(clave):
+    regla = ReglaAuto.query.get(clave)
+    if not regla:
+        return jsonify({'error': 'Regla no encontrada'}), 404
+    data = request.get_json() or {}
+    if 'activa' in data:
+        regla.activa = bool(data['activa'])
+    if 'config' in data and isinstance(data['config'], dict):
+        regla.config = json.dumps(data['config'])
+    db.session.commit()
+    return jsonify({'ok': True, 'regla': regla.to_dict()}), 200

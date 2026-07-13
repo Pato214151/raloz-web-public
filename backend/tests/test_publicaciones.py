@@ -8,7 +8,11 @@ from datetime import datetime, timedelta
 from flask_jwt_extended import create_access_token
 
 from app import db
-from app.models import Colegio, Producto, PrecioColegio, Stock, ConfigSitio, WaConversacion, Aviso
+from app.models import (
+    Colegio, Producto, PrecioColegio, Stock, ConfigSitio,
+    WaConversacion, Aviso, ReglaAuto,
+)
+from app.services.reglas import productos_stock_bajo
 
 
 def _auth_admin():
@@ -243,3 +247,38 @@ def test_enviar_aviso_sin_texto_400(tienda_client):
     r = tienda_client.post('/api/tienda/admin/avisos', json={'texto': '  '},
                            headers=_auth_admin())
     assert r.status_code == 400
+
+
+# ── Fase 3: motor de reglas ─────────────────────────────────────────
+
+def test_productos_stock_bajo_lista(tienda_client):
+    colegio = Colegio(nombre='COL SB', ciudad='Bogotá', activo=True)
+    db.session.add(colegio)
+    db.session.flush()
+    prod = _producto('Camisa SB', activo=True)
+    db.session.add(Stock(id_colegio=colegio.id_colegio, id_producto=prod.id_producto,
+                         talla_individual='8', cantidad=3))    # bajo
+    db.session.add(Stock(id_colegio=colegio.id_colegio, id_producto=prod.id_producto,
+                         talla_individual='10', cantidad=50))  # ok
+    db.session.commit()
+
+    bajos = productos_stock_bajo(umbral=5)
+    assert all(b['cantidad'] <= 5 for b in bajos)
+    assert ('8', 3) in [(b['talla'], b['cantidad']) for b in bajos if b['producto'] == 'Camisa SB']
+
+
+def test_reglas_listar_y_togglear(tienda_client):
+    db.session.add(ReglaAuto(clave='alerta_stock_bajo', activa=False, config='{"umbral": 5}'))
+    db.session.commit()
+
+    r = tienda_client.get('/api/tienda/admin/reglas', headers=_auth_admin())
+    assert r.status_code == 200
+    assert any(x['clave'] == 'alerta_stock_bajo' for x in r.get_json()['reglas'])
+
+    r = tienda_client.put('/api/tienda/admin/reglas/alerta_stock_bajo',
+                          json={'activa': True, 'config': {'umbral': 3}},
+                          headers=_auth_admin())
+    assert r.status_code == 200
+    d = r.get_json()['regla']
+    assert d['activa'] is True
+    assert d['config']['umbral'] == 3

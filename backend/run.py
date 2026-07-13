@@ -114,6 +114,30 @@ def _job_reconciliar_pagos():
 threading.Thread(target=_job_reconciliar_pagos, daemon=True, name='reconciliacion-pagos').start()
 
 
+# ─── Job: motor de reglas de automatización (cada 6 h) ───────────
+def _job_reglas_auto():
+    """Evalúa las reglas activas del panel (Fase 3). Cada regla se auto-limita
+    (ej: la alerta de stock sale máx 1 vez al día)."""
+    from sqlalchemy import text
+    from app.services.reglas import evaluar_reglas
+    time.sleep(90)  # espera inicial
+    while True:
+        try:
+            with app.app_context():
+                tengo_lock = db.session.execute(
+                    text("SELECT pg_try_advisory_xact_lock(1004)")
+                ).scalar()
+                if tengo_lock:
+                    evaluar_reglas()
+                db.session.commit()
+        except Exception as e:
+            logger.error('[REGLAS-JOB] Error: %s', str(e))
+        time.sleep(21600)  # cada 6 horas
+
+
+threading.Thread(target=_job_reglas_auto, daemon=True, name='reglas-auto').start()
+
+
 # ─── Ducklab: latido de telemetría al portal (cada 3 min) ────────
 # Reporta "online" + versión al portal Ducklab para el monitoreo en vivo y el
 # dead-man switch. Se ACTIVA SOLO si DUCKLAB_API_KEY y DUCKLAB_TELEMETRY_URL

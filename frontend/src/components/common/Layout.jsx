@@ -7,7 +7,7 @@ import {
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
   ShoppingCart, Scissors, Truck, Activity, ChevronRight,   MessageCircle, CalendarClock, MessageSquare,
-  Clock, Inbox, ListTodo, PackageX, Megaphone,
+  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap,
 } from 'lucide-react'
 
 // ─── Grupos de navegación reorganizados ─────────────────────────
@@ -54,6 +54,7 @@ const menuGroups = [
     items: [
       { path: '/stock',               label: 'Stock Actual',       icon: Activity,   roles: ['administrador', 'vendedor'] },
       { path: '/publicaciones',       label: 'Publicaciones',     icon: Megaphone,  roles: ['administrador']             },
+      { path: '/automatizacion',      label: 'Automatización',    icon: Zap,        roles: ['administrador']             },
       { path: '/precios',             label: 'Precios Colegios',  icon: DollarSign, roles: ['administrador']             },
       { path: '/ordenes-produccion',  label: 'Órdenes Prod.',    icon: Scissors,   roles: ['administrador']            },
       { path: '/fabricacion/stock',   label: 'Stock Fabricación', icon: Package,    roles: ['administrador']            },
@@ -108,6 +109,7 @@ const PAGE_TITLES = {
   '/empaque':               'Empaque',
   '/stock':                 'Stock Actual',
   '/publicaciones':         'Publicaciones',
+  '/automatizacion':        'Automatización',
   '/avisos':                'Avisos',
   '/precios':               'Precios Colegios',
   '/ordenes-produccion':    'Órdenes de Producción',

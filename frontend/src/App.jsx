@@ -21,6 +21,7 @@ import Reportes from './components/reportes/Reportes'
 import Configuracion from './components/configuracion/Configuracion'
 import Publicaciones from './components/publicaciones/Publicaciones'
 import Avisos from './components/avisos/Avisos'
+import Automatizacion from './components/automatizacion/Automatizacion'
 import Tareas from './components/tareas/Tareas'
 import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
@@ -92,6 +93,9 @@ export default function App() {
           } />
           <Route path="avisos" element={
             <ProtectedRoute roles={['administrador']}><Avisos /></ProtectedRoute>
+          } />
+          <Route path="automatizacion" element={
+            <ProtectedRoute roles={['administrador']}><Automatizacion /></ProtectedRoute>
           } />
           <Route path="configuracion" element={
             <ProtectedRoute roles={['administrador']}><Configuracion /></ProtectedRoute>
