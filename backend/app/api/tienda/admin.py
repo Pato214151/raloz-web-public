@@ -9,6 +9,7 @@ from datetime import datetime, date
 
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required
+from sqlalchemy import func
 
 from app import db
 from app.utils.caja import registrar_ingreso_efectivo
@@ -20,7 +21,7 @@ from app.utils.validators import sanitize_string
 from app.models import (
     PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
-    ConfigSitio,
+    ConfigSitio, Colegio, Producto, PrecioColegio, Stock,
 )
 from app.services.facturacion_web import (
     _crear_factura_desde_pedido, _crear_pedido_fabricacion_si_aplica,
@@ -553,3 +554,62 @@ def actualizar_config_admin():
         ConfigSitio.set('banner_activo', '1' if data['banner_activo'] else '0')
     db.session.commit()
     return jsonify({'message': 'Configuración actualizada'}), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# PUBLICACIONES — vista organizada por colegio para el panel
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/admin/publicaciones', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def publicaciones_admin():
+    """Devuelve TODOS los colegios (activos e inactivos) y, por cada uno, sus
+    productos con estado de publicación, precio mínimo y stock total. Alimenta
+    el centro de Publicaciones (grid por colegio)."""
+    colegios = Colegio.query.order_by(Colegio.nombre).all()
+
+    # Batch: todos los productos en un dict para no consultar 1 x 1
+    prods = {p.id_producto: p for p in Producto.query.all()}
+
+    # Batch: stock total por (colegio, producto)
+    stock_rows = db.session.query(
+        Stock.id_colegio, Stock.id_producto,
+        func.coalesce(func.sum(Stock.cantidad), 0),
+    ).group_by(Stock.id_colegio, Stock.id_producto).all()
+    stock_map = {(c, p): int(s) for c, p, s in stock_rows}
+
+    resultado = []
+    for c in colegios:
+        precios = PrecioColegio.query.filter_by(id_colegio=c.id_colegio).all()
+        por_prod = {}   # pid → [precios]
+        for pr in precios:
+            if pr.precio_unitario and pr.precio_unitario > 0:
+                por_prod.setdefault(pr.id_producto, []).append(pr.precio_unitario)
+
+        productos = []
+        for pid, lista_precios in por_prod.items():
+            prod = prods.get(pid)
+            if not prod:
+                continue
+            productos.append({
+                'id_producto': pid,
+                'nombre':      prod.nombre,
+                'tipo':        prod.tipo,
+                'activo':      prod.activo,
+                'destacado':   bool(prod.destacado),
+                'orden':       prod.orden or 0,
+                'precio_min':  min(lista_precios) if lista_precios else None,
+                'stock_total': stock_map.get((c.id_colegio, pid), 0),
+            })
+        productos.sort(key=lambda x: (x['orden'], x['nombre']))
+
+        resultado.append({
+            'id_colegio': c.id_colegio,
+            'nombre':     c.nombre,
+            'ciudad':     c.ciudad,
+            'activo':     c.activo,
+            'productos':  productos,
+        })
+
+    return jsonify({'colegios': resultado}), 200
