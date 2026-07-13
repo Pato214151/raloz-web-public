@@ -5,8 +5,15 @@ y que el endpoint público /config sirva el banner editable desde el panel.
 """
 from datetime import datetime, timedelta
 
+from flask_jwt_extended import create_access_token
+
 from app import db
-from app.models import Colegio, Producto, PrecioColegio, Stock, ConfigSitio
+from app.models import Colegio, Producto, PrecioColegio, Stock, ConfigSitio, WaConversacion, Aviso
+
+
+def _auth_admin():
+    token = create_access_token(identity='admin', additional_claims={'rol': 'administrador'})
+    return {'Authorization': f'Bearer {token}'}
 
 
 def _producto(nombre, tipo='camisa', activo=True, destacado=False, orden=0):
@@ -198,3 +205,41 @@ def test_catalogo_ordena_por_campo_orden(tienda_client):
     nombres = [p['nombre'] for p in data['productos']]
     # 'Zeta' (orden 1) va antes que 'Alfa' (orden 2) aunque alfabéticamente sea al revés
     assert nombres == ['Zeta', 'Alfa']
+
+
+# ── Avisos / campañas por WhatsApp ──────────────────────────────────
+
+def test_avisos_cuenta_destinatarios(tienda_client):
+    ahora = datetime.utcnow()
+    db.session.add(WaConversacion(chat_id='573001', ultima_fecha=ahora))              # activo (24h)
+    db.session.add(WaConversacion(chat_id='573002', ultima_fecha=ahora - timedelta(hours=48)))  # viejo
+    db.session.commit()
+
+    r = tienda_client.get('/api/tienda/admin/avisos', headers=_auth_admin())
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d['destinatarios']['todos'] == 2
+    assert d['destinatarios']['activos'] == 1
+
+
+def test_enviar_aviso_registra_historial(tienda_client):
+    db.session.add(WaConversacion(chat_id='573009', ultima_fecha=datetime.utcnow()))
+    db.session.commit()
+
+    r = tienda_client.post(
+        '/api/tienda/admin/avisos',
+        json={'texto': 'Hola, llegó la nueva colección', 'segmento': 'activos'},
+        headers=_auth_admin(),
+    )
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d['total'] == 1
+    # Sin WHATSAPP_TOKEN el envío "falla" pero el aviso queda registrado en el historial
+    assert Aviso.query.count() == 1
+    assert Aviso.query.first().texto.startswith('Hola')
+
+
+def test_enviar_aviso_sin_texto_400(tienda_client):
+    r = tienda_client.post('/api/tienda/admin/avisos', json={'texto': '  '},
+                           headers=_auth_admin())
+    assert r.status_code == 400

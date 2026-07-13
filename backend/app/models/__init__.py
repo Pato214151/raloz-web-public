@@ -29,6 +29,7 @@ from app.models.whatsapp import WaConversacion, WaMensaje
 from app.models.cita import Cita
 from app.models.lead import Lead
 from app.models.config_sitio import ConfigSitio
+from app.models.aviso import Aviso
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -38,5 +39,5 @@ __all__ = [
     'EmpaquePendiente', 'SerieRemision', 'Tarea', 'PedidoWeb', 'Reserva',
     'PedidoFabricacion', 'StockPendienteFabricacion', 'TokenRevocado',
     'MovimientoInventario', 'OrdenProduccion',
-    'WaConversacion', 'WaMensaje', 'Cita', 'Lead', 'ConfigSitio',
+    'WaConversacion', 'WaMensaje', 'Cita', 'Lead', 'ConfigSitio', 'Aviso',
 ]

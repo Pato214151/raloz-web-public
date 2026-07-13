@@ -5,10 +5,10 @@ Gestión de pedidos online y de fabricación. Requieren JWT + rol
 """
 import json
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from flask import request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 
 from app import db
@@ -22,7 +22,9 @@ from app.models import (
     PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
     ConfigSitio, Colegio, Producto, PrecioColegio, Stock,
+    WaConversacion, Aviso,
 )
+from app.services.wa_send import enviar_whatsapp
 from app.services.facturacion_web import (
     _crear_factura_desde_pedido, _crear_pedido_fabricacion_si_aplica,
 )
@@ -616,3 +618,74 @@ def publicaciones_admin():
         })
 
     return jsonify({'colegios': resultado}), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# AVISOS / CAMPAÑAS — notas masivas por WhatsApp (Fase 2)
+# WhatsApp Cloud API solo permite texto libre a quien escribió en las
+# últimas 24h; a los más viejos hay que usar plantillas aprobadas.
+# ══════════════════════════════════════════════════════════════
+
+_MAX_AVISO = 300   # tope de destinatarios por envío (evita timeouts)
+
+
+def _destinatarios_aviso(segmento):
+    """Lista de chat_ids destino según el segmento, del más reciente al más viejo."""
+    q = WaConversacion.query
+    if segmento == 'activos':
+        q = q.filter(WaConversacion.ultima_fecha >= datetime.utcnow() - timedelta(hours=24))
+    q = q.order_by(WaConversacion.ultima_fecha.desc()).limit(_MAX_AVISO)
+    return [c.chat_id for c in q.all()]
+
+
+@tienda_bp.route('/admin/avisos', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def listar_avisos():
+    """Conteo de destinatarios por segmento + historial de avisos enviados."""
+    corte24 = datetime.utcnow() - timedelta(hours=24)
+    activos = WaConversacion.query.filter(WaConversacion.ultima_fecha >= corte24).count()
+    todos   = WaConversacion.query.count()
+    historial = [a.to_dict() for a in
+                 Aviso.query.order_by(Aviso.fecha.desc()).limit(20).all()]
+    return jsonify({
+        'destinatarios': {'activos': activos, 'todos': todos},
+        'historial': historial,
+    }), 200
+
+
+@tienda_bp.route('/admin/avisos', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def enviar_aviso():
+    """Envía una nota por WhatsApp al segmento elegido y registra el envío."""
+    data = request.get_json() or {}
+    texto = str(data.get('texto', '')).strip()[:4000]
+    segmento = data.get('segmento', 'activos')
+    if not texto:
+        return jsonify({'error': 'Escribe el mensaje del aviso'}), 400
+    if segmento not in ('activos', 'todos'):
+        segmento = 'activos'
+
+    destinatarios = _destinatarios_aviso(segmento)
+    enviados = 0
+    for chat_id in destinatarios:
+        if enviar_whatsapp(chat_id, texto, autor='aviso'):
+            enviados += 1
+    fallidos = len(destinatarios) - enviados
+
+    aviso = Aviso(
+        texto=texto, segmento=segmento, total=len(destinatarios),
+        enviados=enviados, fallidos=fallidos,
+        autor=str(get_jwt_identity() or '')[:80],
+    )
+    db.session.add(aviso)
+    db.session.commit()
+
+    return jsonify({
+        'ok': True,
+        'total': len(destinatarios),
+        'enviados': enviados,
+        'fallidos': fallidos,
+        'aviso': aviso.to_dict(),
+    }), 200

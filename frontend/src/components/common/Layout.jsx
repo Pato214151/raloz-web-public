@@ -73,6 +73,7 @@ const menuGroups = [
     label: 'Comunicación',
     items: [
       { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/avisos',   label: 'Avisos', icon: Megaphone, roles: ['administrador'] },
       { path: '/leads',    label: 'Leads',     icon: MessageSquare, roles: ['administrador', 'vendedor'] },
       { path: '/citas',   label: 'Citas',     icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
@@ -107,6 +108,7 @@ const PAGE_TITLES = {
   '/empaque':               'Empaque',
   '/stock':                 'Stock Actual',
   '/publicaciones':         'Publicaciones',
+  '/avisos':                'Avisos',
   '/precios':               'Precios Colegios',
   '/ordenes-produccion':    'Órdenes de Producción',
   '/gastos':                'Gastos',

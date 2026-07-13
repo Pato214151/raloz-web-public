@@ -317,6 +317,22 @@ MIGRACIONES = [
             "ALTER TABLE productos ADD COLUMN IF NOT EXISTS publicar_hasta TIMESTAMP",
         ],
     },
+    {
+        'version': '0019',
+        'descripcion': 'Historial de avisos/campañas por WhatsApp',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS avisos ("
+            "  id_aviso SERIAL PRIMARY KEY,"
+            "  texto TEXT NOT NULL,"
+            "  segmento VARCHAR(30),"
+            "  total INTEGER DEFAULT 0,"
+            "  enviados INTEGER DEFAULT 0,"
+            "  fallidos INTEGER DEFAULT 0,"
+            "  autor VARCHAR(80),"
+            "  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")",
+        ],
+    },
 ]
 
 

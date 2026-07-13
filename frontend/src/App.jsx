@@ -20,6 +20,7 @@ import CuentasPorCobrar from './components/reportes/CuentasPorCobrar'
 import Reportes from './components/reportes/Reportes'
 import Configuracion from './components/configuracion/Configuracion'
 import Publicaciones from './components/publicaciones/Publicaciones'
+import Avisos from './components/avisos/Avisos'
 import Tareas from './components/tareas/Tareas'
 import Operaciones from './components/operaciones/Operaciones'
 import PedidosOnline from './components/pedidos/PedidosOnline'
@@ -88,6 +89,9 @@ export default function App() {
           } />
           <Route path="publicaciones" element={
             <ProtectedRoute roles={['administrador']}><Publicaciones /></ProtectedRoute>
+          } />
+          <Route path="avisos" element={
+            <ProtectedRoute roles={['administrador']}><Avisos /></ProtectedRoute>
           } />
           <Route path="configuracion" element={
             <ProtectedRoute roles={['administrador']}><Configuracion /></ProtectedRoute>
