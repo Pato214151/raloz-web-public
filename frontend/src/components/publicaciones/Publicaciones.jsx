@@ -28,6 +28,7 @@ export default function Publicaciones() {
   const [colegios, setColegios] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
+  const [vista, setVista] = useState('todos') // todos | publicados | pausados | destacados
 
   useEffect(() => { cargar() }, [])
 
@@ -104,7 +105,35 @@ export default function Publicaciones() {
     }
   }
 
-  const filtro = q.toLowerCase()
+  const busq = q.toLowerCase()
+
+  // Cada producto dentro de un colegio es una "publicación" (como en ML).
+  const listings = colegios.flatMap((c) => c.productos)
+  const stats = {
+    activas: listings.filter((p) => p.activo).length,
+    pausadas: listings.filter((p) => !p.activo).length,
+    destacadas: listings.filter((p) => p.destacado).length,
+    colegiosActivos: colegios.filter((c) => c.activo).length,
+    colegiosTotal: colegios.length,
+  }
+
+  const matchVista = (p) =>
+    vista === 'todos' ? true
+    : vista === 'publicados' ? p.activo
+    : vista === 'pausados' ? !p.activo
+    : vista === 'destacados' ? p.destacado
+    : true
+
+  const FILTROS = [
+    { id: 'todos', label: 'Todas', n: listings.length },
+    { id: 'publicados', label: 'Publicadas', n: stats.activas },
+    { id: 'pausados', label: 'Pausadas', n: stats.pausadas },
+    { id: 'destacados', label: 'Destacadas', n: stats.destacadas },
+  ]
+
+  const hayResultados = colegios.some((c) =>
+    c.productos.some((p) => (p.nombre || '').toLowerCase().includes(busq) && matchVista(p)),
+  )
 
   return (
     <div className="space-y-6">
@@ -169,16 +198,57 @@ export default function Publicaciones() {
         </div>
       </div>
 
+      {/* Resumen (control center) */}
+      {!loading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: 'Publicadas', val: stats.activas, icon: Eye, cls: 'text-green-600 bg-green-50' },
+            { label: 'Pausadas', val: stats.pausadas, icon: EyeOff, cls: 'text-gray-500 bg-gray-100' },
+            { label: 'Destacadas', val: stats.destacadas, icon: Star, cls: 'text-amber-500 bg-amber-50' },
+            { label: 'Colegios activos', val: `${stats.colegiosActivos}/${stats.colegiosTotal}`, icon: Store, cls: 'text-blue-600 bg-blue-50' },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${s.cls}`}><s.icon className="w-5 h-5" /></div>
+              <div>
+                <div className="text-xl font-bold text-gray-800 tabular-nums leading-none">{s.val}</div>
+                <div className="text-xs text-gray-400 mt-1">{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Filtros rápidos */}
+      {!loading && (
+        <div className="flex flex-wrap gap-2">
+          {FILTROS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setVista(f.id)}
+              className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                vista === f.id
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300'
+              }`}
+            >
+              {f.label}
+              <span className={`text-xs tabular-nums px-1.5 rounded-full ${vista === f.id ? 'bg-blue-500' : 'bg-gray-100 text-gray-500'}`}>{f.n}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-20 text-gray-400">
           <Loader2 className="w-7 h-7 animate-spin" />
         </div>
       ) : (
         colegios.map((col) => {
-          const prods = col.productos.filter((p) =>
-            (p.nombre || '').toLowerCase().includes(filtro),
+          const prods = col.productos.filter(
+            (p) => (p.nombre || '').toLowerCase().includes(busq) && matchVista(p),
           )
-          if (filtro && prods.length === 0) return null
+          if (prods.length === 0 && (busq || vista !== 'todos')) return null
           const publicados = col.productos.filter((p) => p.activo).length
 
           return (
@@ -252,6 +322,11 @@ export default function Publicaciones() {
 
                       {/* Foto del producto (con ícono por tipo de respaldo) */}
                       <div className={`relative w-full aspect-square rounded-lg overflow-hidden ${tipoColor(p.tipo)}`}>
+                        {p.destacado && (
+                          <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100/95 px-1.5 py-0.5 rounded-full shadow-sm">
+                            <Star className="w-3 h-3" fill="currentColor" /> Destacada
+                          </span>
+                        )}
                         <div className="absolute inset-0 grid place-items-center">
                           <Shirt className="w-12 h-12 opacity-70" />
                         </div>
@@ -315,6 +390,12 @@ export default function Publicaciones() {
             </section>
           )
         })
+      )}
+
+      {!loading && !hayResultados && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 py-12 text-center text-gray-400 text-sm">
+          No hay publicaciones que coincidan con el filtro o la búsqueda.
+        </div>
       )}
 
       <p className="text-xs text-gray-400">
