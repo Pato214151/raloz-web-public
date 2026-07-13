@@ -23,7 +23,7 @@ from app.utils.validators import sanitize_string, validate_email
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, Pago, Reserva, PedidoFabricacion,
-    Lead,
+    Lead, ConfigSitio,
 )
 from app.services.facturacion_web import (
     _clasificar_item, _crear_factura_desde_pedido,
@@ -70,11 +70,16 @@ def catalogo_colegio(id_colegio):
     productos_meta = {}   # pid → {nombre, tipo}
     precios_por_pid = {}  # pid → {talla_grupo: precio_unitario}
     for precio in precios:
+        # Solo productos publicados (activo). Los pausados no aparecen en la tienda.
+        if not precio.producto.activo:
+            continue
         pid = precio.id_producto
         if pid not in productos_meta:
             productos_meta[pid] = {
-                'nombre': precio.producto.nombre,
-                'tipo':   precio.producto.tipo,
+                'nombre':    precio.producto.nombre,
+                'tipo':      precio.producto.tipo,
+                'destacado': bool(precio.producto.destacado),
+                'orden':     precio.producto.orden or 0,
             }
         precios_por_pid.setdefault(pid, {})[precio.talla_grupo] = precio.precio_unitario
 
@@ -139,13 +144,33 @@ def catalogo_colegio(id_colegio):
             'id_producto': pid,
             'nombre':      meta['nombre'],
             'tipo':        meta['tipo'],
+            'destacado':   meta['destacado'],
+            'orden':       meta['orden'],
             'tallas':      tallas,
             'fabricacion': todas_sin_stock,
         })
 
+    # Orden de aparición configurado en el panel (orden asc, luego alfabético)
+    catalogo.sort(key=lambda p: (p['orden'], p['nombre']))
+
     return jsonify({
         'colegio': {'id_colegio': colegio.id_colegio, 'nombre': colegio.nombre},
         'productos': catalogo
+    }), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# CONFIG PÚBLICA — ajustes del sitio editables desde el panel
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/config', methods=['GET'])
+def config_publica():
+    """Config que la tienda lee para pintarse (banner, etc.). Sin auth."""
+    return jsonify({
+        'banner': {
+            'texto':  ConfigSitio.get('banner_texto', ''),
+            'activo': ConfigSitio.get('banner_activo', '1') == '1',
+        },
     }), 200
 
 

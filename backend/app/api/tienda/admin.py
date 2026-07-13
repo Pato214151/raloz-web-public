@@ -16,9 +16,11 @@ from app.utils.decorators import registrar_auditoria, rol_requerido, get_current
 from app.utils.inventario import registrar_movimiento
 from app.utils.whatsapp_notify import notificar_whatsapp
 from app.utils.email_service import enviar_email_factura
+from app.utils.validators import sanitize_string
 from app.models import (
     PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
+    ConfigSitio,
 )
 from app.services.facturacion_web import (
     _crear_factura_desde_pedido, _crear_pedido_fabricacion_si_aplica,
@@ -523,3 +525,31 @@ def registrar_fabricacion():
     return jsonify({'ok': True, 'cantidad_pendiente': spf.cantidad_pendiente}), 200
 
 
+
+# ══════════════════════════════════════════════════════════════
+# CONFIG DEL SITIO — banner editable (Fase 1: Publicaciones)
+# ══════════════════════════════════════════════════════════════
+
+@tienda_bp.route('/admin/config', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor')
+def obtener_config_admin():
+    """Lee la config del sitio para el panel."""
+    return jsonify({
+        'banner_texto':  ConfigSitio.get('banner_texto', ''),
+        'banner_activo': ConfigSitio.get('banner_activo', '1') == '1',
+    }), 200
+
+
+@tienda_bp.route('/admin/config', methods=['PUT'])
+@jwt_required()
+@rol_requerido('administrador')
+def actualizar_config_admin():
+    """Actualiza la config del sitio (solo administrador)."""
+    data = request.get_json() or {}
+    if 'banner_texto' in data:
+        ConfigSitio.set('banner_texto', sanitize_string(data['banner_texto'], 300))
+    if 'banner_activo' in data:
+        ConfigSitio.set('banner_activo', '1' if data['banner_activo'] else '0')
+    db.session.commit()
+    return jsonify({'message': 'Configuración actualizada'}), 200

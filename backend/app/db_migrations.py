@@ -285,6 +285,30 @@ MIGRACIONES = [
             "CREATE INDEX IF NOT EXISTS idx_leads_estado ON leads(estado, creada)",
         ],
     },
+    {
+        'version': '0016',
+        'descripcion': 'Publicaciones: destacar y ordenar productos en la tienda',
+        'sql': [
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS destacado BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE productos ADD COLUMN IF NOT EXISTS orden INTEGER DEFAULT 0",
+        ],
+    },
+    {
+        'version': '0017',
+        'descripcion': 'Config del sitio (banner editable desde el panel)',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS config_sitio ("
+            "  clave VARCHAR(60) PRIMARY KEY,"
+            "  valor TEXT,"
+            "  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")",
+            "INSERT INTO config_sitio (clave, valor) VALUES "
+            "('banner_texto', 'Temporada 2026 — Uniformes en stock para Marillac, Adventista y Manyanet') "
+            "ON CONFLICT (clave) DO NOTHING",
+            "INSERT INTO config_sitio (clave, valor) VALUES ('banner_activo', '1') "
+            "ON CONFLICT (clave) DO NOTHING",
+        ],
+    },
 ]
 
 

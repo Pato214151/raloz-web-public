@@ -1,0 +1,84 @@
+"""
+Fase 1 — Publicaciones y config del sitio.
+Verifica que la tienda respete el estado 'activo', exponga 'destacado'/'orden'
+y que el endpoint público /config sirva el banner editable desde el panel.
+"""
+from app import db
+from app.models import Colegio, Producto, PrecioColegio, Stock, ConfigSitio
+
+
+def _producto(nombre, tipo='camisa', activo=True, destacado=False, orden=0):
+    p = Producto(nombre=nombre, tipo=tipo, activo=activo,
+                 destacado=destacado, orden=orden)
+    db.session.add(p)
+    db.session.flush()
+    return p
+
+
+def _publicar(colegio, producto, precio=50000, talla='8', stock=5):
+    db.session.add(PrecioColegio(
+        id_colegio=colegio.id_colegio, id_producto=producto.id_producto,
+        talla_grupo=talla, precio_unitario=precio,
+    ))
+    db.session.add(Stock(
+        id_colegio=colegio.id_colegio, id_producto=producto.id_producto,
+        talla_individual=talla, cantidad=stock,
+    ))
+
+
+# ── Config del sitio (banner) ──────────────────────────────────────
+
+def test_config_publica_devuelve_banner(tienda_client):
+    ConfigSitio.set('banner_texto', 'Temporada 2026 en stock')
+    ConfigSitio.set('banner_activo', '1')
+    db.session.commit()
+
+    data = tienda_client.get('/api/tienda/config').get_json()
+    assert data['banner']['texto'] == 'Temporada 2026 en stock'
+    assert data['banner']['activo'] is True
+
+
+def test_config_banner_desactivado(tienda_client):
+    ConfigSitio.set('banner_activo', '0')
+    db.session.commit()
+    data = tienda_client.get('/api/tienda/config').get_json()
+    assert data['banner']['activo'] is False
+
+
+# ── Publicaciones: activo / destacado / orden ──────────────────────
+
+def test_catalogo_oculta_productos_pausados(tienda_client):
+    colegio = Colegio(nombre='COL FASE1', ciudad='Bogotá')
+    db.session.add(colegio)
+    db.session.flush()
+
+    activo   = _producto('Camisa Activa',  activo=True,  destacado=True, orden=1)
+    pausado  = _producto('Camisa Pausada', activo=False)
+    _publicar(colegio, activo)
+    _publicar(colegio, pausado)
+    db.session.commit()
+
+    data = tienda_client.get(f'/api/tienda/catalogo/{colegio.id_colegio}').get_json()
+    nombres = [p['nombre'] for p in data['productos']]
+
+    assert 'Camisa Activa' in nombres          # el publicado aparece
+    assert 'Camisa Pausada' not in nombres     # el pausado NO aparece
+
+    fila = next(p for p in data['productos'] if p['nombre'] == 'Camisa Activa')
+    assert fila['destacado'] is True
+    assert fila['orden'] == 1
+
+
+def test_catalogo_ordena_por_campo_orden(tienda_client):
+    colegio = Colegio(nombre='COL ORDEN', ciudad='Bogotá')
+    db.session.add(colegio)
+    db.session.flush()
+
+    _publicar(colegio, _producto('Zeta', orden=1))
+    _publicar(colegio, _producto('Alfa', orden=2))
+    db.session.commit()
+
+    data = tienda_client.get(f'/api/tienda/catalogo/{colegio.id_colegio}').get_json()
+    nombres = [p['nombre'] for p in data['productos']]
+    # 'Zeta' (orden 1) va antes que 'Alfa' (orden 2) aunque alfabéticamente sea al revés
+    assert nombres == ['Zeta', 'Alfa']

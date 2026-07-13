@@ -65,6 +65,13 @@ def actualizar_producto(id_producto):
         producto.tipo = sanitize_string(data['tipo'], 100)
     if 'activo' in data:
         producto.activo = bool(data['activo'])
+    if 'destacado' in data:
+        producto.destacado = bool(data['destacado'])
+    if 'orden' in data:
+        try:
+            producto.orden = int(data['orden'])
+        except (TypeError, ValueError):
+            pass
 
     db.session.commit()
     return jsonify({'message': 'Producto actualizado', 'producto': producto.to_dict()}), 200
