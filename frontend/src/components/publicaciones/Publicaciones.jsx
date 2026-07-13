@@ -138,25 +138,25 @@ export default function Publicaciones() {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
+          <div className="p-2 bg-blue-100 rounded-lg shrink-0">
             <Megaphone className="w-6 h-6 text-blue-700" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Publicaciones</h1>
-            <p className="text-gray-600 text-sm">
-              Controla la tienda online: colegios, productos y el banner — todo desde aquí.
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Publicaciones</h1>
+            <p className="text-gray-600 text-xs sm:text-sm">
+              Controla la tienda online: colegios, productos y el banner.
             </p>
           </div>
         </div>
-        <div className="relative">
+        <div className="relative w-full sm:w-64 shrink-0">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar producto…"
-            className="pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
         </div>
       </div>
@@ -259,9 +259,9 @@ export default function Publicaciones() {
               }`}
             >
               {/* Cabecera del colegio */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${col.activo ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-400'}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-gray-100">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`p-2 rounded-lg shrink-0 ${col.activo ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-400'}`}>
                     <Store className="w-5 h-5" />
                   </div>
                   <div>
@@ -285,10 +285,10 @@ export default function Publicaciones() {
                 <button
                   type="button"
                   onClick={() => toggleColegio(col)}
-                  className={`inline-flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg transition-colors ${
+                  className={`w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-2 text-sm font-semibold px-3 py-2.5 rounded-lg border transition-colors ${
                     col.activo
-                      ? 'text-gray-600 hover:bg-gray-100'
-                      : 'text-white bg-green-600 hover:bg-green-700'
+                      ? 'text-gray-700 border-gray-200 hover:bg-gray-100'
+                      : 'text-white bg-green-600 border-green-600 hover:bg-green-700'
                   }`}
                 >
                   <span className={`relative w-11 h-6 rounded-full transition-colors ${col.activo ? 'bg-green-500' : 'bg-gray-300'}`}>
@@ -302,11 +302,11 @@ export default function Publicaciones() {
               {prods.length === 0 ? (
                 <p className="text-center text-gray-400 py-8 text-sm">Sin productos con precio configurado.</p>
               ) : (
-                <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4 ${col.activo ? '' : 'opacity-60'}`}>
+                <div className={`grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 p-3 sm:p-4 ${col.activo ? '' : 'opacity-60'}`}>
                   {prods.map((p) => (
                     <div
                       key={p.id_producto}
-                      className={`relative border rounded-xl p-4 flex flex-col gap-3 transition-shadow hover:shadow-md ${
+                      className={`relative border rounded-xl p-3 sm:p-4 flex flex-col gap-2.5 sm:gap-3 transition-shadow hover:shadow-md ${
                         p.activo ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50'
                       }`}
                     >
@@ -315,7 +315,7 @@ export default function Publicaciones() {
                         type="button"
                         onClick={() => updateProducto(p.id_producto, { destacado: !p.destacado })}
                         title={p.destacado ? 'Quitar de destacados' : 'Destacar'}
-                        className={`absolute top-3 right-3 p-1 rounded-lg ${p.destacado ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
+                        className={`absolute top-2 right-2 z-20 p-1.5 rounded-full bg-white/85 backdrop-blur shadow-sm transition-colors ${p.destacado ? 'text-amber-500' : 'text-gray-400 hover:text-amber-400'}`}
                       >
                         <Star className="w-5 h-5" fill={p.destacado ? 'currentColor' : 'none'} />
                       </button>
@@ -356,30 +356,33 @@ export default function Publicaciones() {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
-                        <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${p.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {p.activo ? 'Publicada' : 'Pausada'}
-                        </span>
-                        <label className="flex items-center gap-1 text-[11px] text-gray-400">
-                          Orden
-                          <input
-                            type="number"
-                            defaultValue={p.orden || 0}
-                            onBlur={(e) => {
-                              const v = parseInt(e.target.value, 10) || 0
-                              if (v !== (p.orden || 0)) updateProducto(p.id_producto, { orden: v })
-                            }}
-                            className="w-12 text-center border border-gray-200 rounded-md px-1 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                          />
-                        </label>
+                      <div className="pt-2.5 border-t border-gray-100 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${p.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {p.activo ? 'Publicada' : 'Pausada'}
+                          </span>
+                          <label className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-400">
+                            Orden
+                            <input
+                              type="number"
+                              defaultValue={p.orden || 0}
+                              onBlur={(e) => {
+                                const v = parseInt(e.target.value, 10) || 0
+                                if (v !== (p.orden || 0)) updateProducto(p.id_producto, { orden: v })
+                              }}
+                              className="w-12 text-center border border-gray-200 rounded-md px-1 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                          </label>
+                        </div>
+                        {/* Botón grande: fácil de tocar en el celular */}
                         <button
                           type="button"
                           onClick={() => updateProducto(p.id_producto, { activo: !p.activo })}
-                          className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg ${
-                            p.activo ? 'text-gray-600 hover:bg-gray-100' : 'text-white bg-green-600 hover:bg-green-700'
+                          className={`w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold py-2 rounded-lg transition-colors ${
+                            p.activo ? 'text-gray-700 bg-gray-100 hover:bg-gray-200' : 'text-white bg-green-600 hover:bg-green-700'
                           }`}
                         >
-                          {p.activo ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          {p.activo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           {p.activo ? 'Pausar' : 'Publicar'}
                         </button>
                       </div>
