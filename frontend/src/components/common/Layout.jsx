@@ -74,6 +74,7 @@ const menuGroups = [
     label: 'Comunicación',
     items: [
       { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/escribir-cliente', label: 'Escribir a cliente', icon: Search, roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/avisos',   label: 'Avisos', icon: Megaphone, roles: ['administrador'] },
       { path: '/leads',    label: 'Leads',     icon: MessageSquare, roles: ['administrador', 'vendedor'] },
       { path: '/citas',   label: 'Citas',     icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
@@ -100,6 +101,7 @@ const PAGE_TITLES = {
   '/cuentas':              'Cuentas por Cobrar',
   '/clientes':              'Clientes',
   '/whatsapp':              'WhatsApp',
+  '/escribir-cliente':      'Escribir a cliente',
   '/leads':                'Leads',
   '/citas':                'Citas',
   '/pedidos-online':        'Centro de Pedidos',

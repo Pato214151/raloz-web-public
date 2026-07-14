@@ -9,7 +9,7 @@ from datetime import datetime, date, timedelta
 
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app import db
 from app.utils.caja import registrar_ingreso_efectivo
@@ -23,6 +23,7 @@ from app.models import (
     PedidoFabricacion, StockPendienteFabricacion,
     ConfigSitio, Colegio, Producto, PrecioColegio, Stock,
     WaConversacion, Aviso, ReglaAuto, Promocion, Suscriptor,
+    Cliente, Lead,
 )
 from app.services.wa_send import enviar_whatsapp
 from app.services.facturacion_web import (
@@ -809,3 +810,49 @@ def eliminar_promocion(id_promo):
     db.session.delete(promo)
     db.session.commit()
     return jsonify({'ok': True}), 200
+
+
+# ══════════════════════════════════════════════════════════════
+# BUSCAR CONTACTO — encontrar a un cliente/papá para escribirle
+# ══════════════════════════════════════════════════════════════
+
+def _buscar_contactos(q):
+    """Busca por nombre o teléfono en clientes, pedidos, leads, suscriptores y
+    conversaciones. Dedup por teléfono. Devuelve máx 30."""
+    like = f'%{q}%'
+    qdig = ''.join(ch for ch in q if ch.isdigit())
+    encontrados = {}   # telefono_normalizado -> dict
+
+    def add(nombre, telefono, origen):
+        tel = ''.join(ch for ch in (telefono or '') if ch.isdigit())
+        if len(tel) < 7:
+            return
+        if tel not in encontrados:
+            encontrados[tel] = {'nombre': (nombre or '').strip(), 'telefono': tel, 'origen': origen}
+
+    for c in Cliente.query.filter(or_(Cliente.nombre.ilike(like), Cliente.telefono.ilike(like))).limit(30):
+        add(c.nombre, c.telefono, 'cliente')
+    for p in (PedidoWeb.query
+              .filter(or_(PedidoWeb.nombre_cliente.ilike(like), PedidoWeb.telefono_cliente.ilike(like)))
+              .order_by(PedidoWeb.fecha_creacion.desc()).limit(30)):
+        add(p.nombre_cliente, p.telefono_cliente, 'pedido')
+    for l in Lead.query.filter(or_(Lead.nombre.ilike(like), Lead.telefono.ilike(like))).limit(30):
+        add(l.nombre, l.telefono, 'contacto web')
+    for s in Suscriptor.query.filter(or_(Suscriptor.nombre.ilike(like), Suscriptor.telefono.ilike(like))).limit(30):
+        add(s.nombre, s.telefono, 'suscriptor')
+    filtro_wa = or_(WaConversacion.nombre.ilike(like),
+                    WaConversacion.chat_id.ilike(f'%{qdig}%')) if qdig else WaConversacion.nombre.ilike(like)
+    for w in WaConversacion.query.filter(filtro_wa).limit(30):
+        add(w.nombre, w.chat_id, 'whatsapp')
+
+    return list(encontrados.values())[:30]
+
+
+@tienda_bp.route('/admin/buscar-contacto', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def buscar_contacto():
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify({'contactos': []}), 200
+    return jsonify({'contactos': _buscar_contactos(q)}), 200

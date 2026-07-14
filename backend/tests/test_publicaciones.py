@@ -362,3 +362,22 @@ def test_suscripcion_idempotente(tienda_client):
         tienda_client.post('/api/tienda/suscripcion',
                            json={'telefono': '3007776666', 'acepta': True})
     assert Suscriptor.query.filter_by(telefono='3007776666').count() == 1
+
+
+# ── Buscar contacto para escribirle por WhatsApp ────────────────────
+
+def test_buscar_contacto_por_nombre_y_numero(tienda_client):
+    db.session.add(WaConversacion(chat_id='573001112233', nombre='Juan Perez'))
+    db.session.commit()
+
+    r = tienda_client.get('/api/tienda/admin/buscar-contacto?q=Juan', headers=_auth_admin())
+    assert r.status_code == 200
+    assert any(c['telefono'] == '573001112233' for c in r.get_json()['contactos'])
+
+    r2 = tienda_client.get('/api/tienda/admin/buscar-contacto?q=1112233', headers=_auth_admin())
+    assert any('1112233' in c['telefono'] for c in r2.get_json()['contactos'])
+
+
+def test_buscar_contacto_query_corta_vacia(tienda_client):
+    r = tienda_client.get('/api/tienda/admin/buscar-contacto?q=a', headers=_auth_admin())
+    assert r.get_json()['contactos'] == []

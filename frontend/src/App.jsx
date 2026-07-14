@@ -30,6 +30,7 @@ import PedidosFabricacion from './components/fabricacion/PedidosFabricacion'
 import StockPendienteFab from './components/fabricacion/StockPendienteFab'
 import OrdenesProduccion from './components/ordenes-produccion/OrdenesProduccion'
 import WhatsApp from './components/whatsapp/WhatsApp'
+import BuscarContacto from './components/whatsapp/BuscarContacto'
 import Citas from './components/citas/Citas'
 import Leads from './components/leads/Leads'
 
@@ -104,6 +105,7 @@ export default function App() {
             <ProtectedRoute roles={['administrador']}><Usuarios /></ProtectedRoute>
           } />
           <Route path="whatsapp" element={<WhatsApp />} />
+          <Route path="escribir-cliente" element={<BuscarContacto />} />
           <Route path="citas" element={<Citas />} />
           <Route path="leads" element={<Leads />} />
           <Route path="tareas" element={<Tareas />} />
