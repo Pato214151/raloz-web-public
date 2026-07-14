@@ -328,3 +328,37 @@ def test_eliminar_promocion(tienda_client):
     assert d.status_code == 200
     pub = tienda_client.get('/api/tienda/promociones').get_json()['promociones']
     assert all(p['id_promocion'] != pid for p in pub)
+
+
+# ── Suscripción / consentimiento (opt-in) ───────────────────────────
+
+def test_suscripcion_requiere_consentimiento(tienda_client):
+    r = tienda_client.post('/api/tienda/suscripcion',
+                           json={'telefono': '3001234567', 'acepta': False})
+    assert r.status_code == 400
+
+
+def test_suscripcion_numero_invalido(tienda_client):
+    r = tienda_client.post('/api/tienda/suscripcion',
+                           json={'telefono': '123', 'acepta': True})
+    assert r.status_code == 400
+
+
+def test_suscripcion_ok_y_segmento_avisos(tienda_client):
+    from app.models import Suscriptor
+    r = tienda_client.post('/api/tienda/suscripcion',
+                           json={'telefono': '3009998888', 'nombre': 'Ana', 'acepta': True})
+    assert r.status_code == 200
+    assert Suscriptor.query.filter_by(telefono='3009998888').first() is not None
+
+    # aparece en el conteo de destinatarios del segmento suscriptores
+    data = tienda_client.get('/api/tienda/admin/avisos', headers=_auth_admin()).get_json()
+    assert data['destinatarios']['suscriptores'] >= 1
+
+
+def test_suscripcion_idempotente(tienda_client):
+    from app.models import Suscriptor
+    for _ in range(2):
+        tienda_client.post('/api/tienda/suscripcion',
+                           json={'telefono': '3007776666', 'acepta': True})
+    assert Suscriptor.query.filter_by(telefono='3007776666').count() == 1

@@ -15,7 +15,7 @@ const fmtFecha = (iso) => {
 export default function Avisos() {
   const [texto, setTexto] = useState('')
   const [segmento, setSegmento] = useState('activos')
-  const [dest, setDest] = useState({ activos: 0, todos: 0 })
+  const [dest, setDest] = useState({ activos: 0, todos: 0, suscriptores: 0 })
   const [historial, setHistorial] = useState([])
   const [loading, setLoading] = useState(true)
   const [enviando, setEnviando] = useState(false)
@@ -26,7 +26,7 @@ export default function Avisos() {
     setLoading(true)
     try {
       const { data } = await api.get('/tienda/admin/avisos')
-      setDest(data.destinatarios || { activos: 0, todos: 0 })
+      setDest(data.destinatarios || { activos: 0, todos: 0, suscriptores: 0 })
       setHistorial(data.historial || [])
     } catch {
       toast.error('No se pudo cargar avisos')
@@ -35,7 +35,7 @@ export default function Avisos() {
     }
   }
 
-  const nDest = segmento === 'activos' ? dest.activos : dest.todos
+  const nDest = dest[segmento] ?? 0
 
   async function enviar() {
     if (!texto.trim()) { toast.error('Escribe el mensaje'); return }
@@ -98,6 +98,7 @@ export default function Avisos() {
         <div className="flex flex-col sm:flex-row gap-2">
           {[
             { id: 'activos', label: 'Activos (24h)', n: dest.activos, hint: 'Reciben seguro' },
+            { id: 'suscriptores', label: 'Suscriptores', n: dest.suscriptores, hint: 'Aceptaron recibir info' },
             { id: 'todos', label: 'Todos', n: dest.todos, hint: 'Los viejos quizá no' },
           ].map((s) => (
             <button

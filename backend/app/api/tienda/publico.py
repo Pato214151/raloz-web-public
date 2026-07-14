@@ -23,7 +23,7 @@ from app.utils.validators import sanitize_string, validate_email
 from app.models import (
     Colegio, Producto, PrecioColegio, Stock,
     PedidoWeb, Factura, Pago, Reserva, PedidoFabricacion,
-    Lead, ConfigSitio, Promocion,
+    Lead, ConfigSitio, Promocion, Suscriptor,
 )
 from app.services.facturacion_web import (
     _clasificar_item, _crear_factura_desde_pedido,
@@ -196,6 +196,34 @@ def promociones_publicas():
               .order_by(Promocion.orden, Promocion.id_promocion.desc())
               .all())
     return jsonify({'promociones': [p.to_dict() for p in promos]}), 200
+
+
+@tienda_bp.route('/suscripcion', methods=['POST'])
+@limiter.limit("10 per minute")
+def suscribir():
+    """Opt-in de marketing: el cliente deja su WhatsApp y AUTORIZA recibir
+    información (consentimiento, Ley 1581). Guarda/actualiza el suscriptor."""
+    data = request.get_json() or {}
+    telefono = ''.join(ch for ch in str(data.get('telefono', '')) if ch.isdigit())
+    acepta = bool(data.get('acepta'))
+    if len(telefono) < 7:
+        return jsonify({'error': 'Escribe un número de WhatsApp válido'}), 400
+    if not acepta:
+        return jsonify({'error': 'Debes autorizar el tratamiento de tus datos'}), 400
+
+    nombre = sanitize_string(data.get('nombre', ''), 160)
+    sus = Suscriptor.query.filter_by(telefono=telefono).first()
+    if sus:
+        sus.activo = True
+        sus.acepta_datos = True
+        if nombre:
+            sus.nombre = nombre
+    else:
+        sus = Suscriptor(telefono=telefono, nombre=nombre or None,
+                         acepta_datos=True, activo=True)
+        db.session.add(sus)
+    db.session.commit()
+    return jsonify({'ok': True}), 200
 
 
 # ══════════════════════════════════════════════════════════════

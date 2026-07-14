@@ -363,6 +363,20 @@ MIGRACIONES = [
             ")",
         ],
     },
+    {
+        'version': '0022',
+        'descripcion': 'Suscriptores con consentimiento (opt-in de la tienda)',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS suscriptores ("
+            "  id_suscriptor SERIAL PRIMARY KEY,"
+            "  telefono VARCHAR(40) UNIQUE NOT NULL,"
+            "  nombre VARCHAR(160),"
+            "  acepta_datos BOOLEAN DEFAULT TRUE,"
+            "  activo BOOLEAN DEFAULT TRUE,"
+            "  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")",
+        ],
+    },
 ]
 
 

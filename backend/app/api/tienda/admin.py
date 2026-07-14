@@ -22,7 +22,7 @@ from app.models import (
     PedidoWeb, Factura, Pago,
     PedidoFabricacion, StockPendienteFabricacion,
     ConfigSitio, Colegio, Producto, PrecioColegio, Stock,
-    WaConversacion, Aviso, ReglaAuto, Promocion,
+    WaConversacion, Aviso, ReglaAuto, Promocion, Suscriptor,
 )
 from app.services.wa_send import enviar_whatsapp
 from app.services.facturacion_web import (
@@ -630,7 +630,12 @@ _MAX_AVISO = 300   # tope de destinatarios por envío (evita timeouts)
 
 
 def _destinatarios_aviso(segmento):
-    """Lista de chat_ids destino según el segmento, del más reciente al más viejo."""
+    """Lista de teléfonos destino según el segmento."""
+    if segmento == 'suscriptores':
+        subs = (Suscriptor.query
+                .filter_by(activo=True, acepta_datos=True)
+                .order_by(Suscriptor.fecha.desc()).limit(_MAX_AVISO).all())
+        return [s.telefono for s in subs]
     q = WaConversacion.query
     if segmento == 'activos':
         q = q.filter(WaConversacion.ultima_fecha >= datetime.utcnow() - timedelta(hours=24))
@@ -646,10 +651,11 @@ def listar_avisos():
     corte24 = datetime.utcnow() - timedelta(hours=24)
     activos = WaConversacion.query.filter(WaConversacion.ultima_fecha >= corte24).count()
     todos   = WaConversacion.query.count()
+    suscriptores = Suscriptor.query.filter_by(activo=True, acepta_datos=True).count()
     historial = [a.to_dict() for a in
                  Aviso.query.order_by(Aviso.fecha.desc()).limit(20).all()]
     return jsonify({
-        'destinatarios': {'activos': activos, 'todos': todos},
+        'destinatarios': {'activos': activos, 'todos': todos, 'suscriptores': suscriptores},
         'historial': historial,
     }), 200
 
@@ -664,7 +670,7 @@ def enviar_aviso():
     segmento = data.get('segmento', 'activos')
     if not texto:
         return jsonify({'error': 'Escribe el mensaje del aviso'}), 400
-    if segmento not in ('activos', 'todos'):
+    if segmento not in ('activos', 'todos', 'suscriptores'):
         segmento = 'activos'
 
     destinatarios = _destinatarios_aviso(segmento)
