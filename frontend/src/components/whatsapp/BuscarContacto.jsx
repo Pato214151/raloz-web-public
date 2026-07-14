@@ -117,11 +117,21 @@ export default function BuscarContacto() {
       toast.success('¡Enviado desde tu WhatsApp Business!')
       setMsg('')
       setOpenTel(null)
-    } catch {
-      toast.error(
-        'WhatsApp no dejó enviarlo desde el sistema: solo se puede si el cliente te escribió en las últimas 24 h. Usa el botón verde “WhatsApp” para escribirle desde tu teléfono.',
-        { duration: 8000 },
-      )
+    } catch (err) {
+      const data = err?.response?.data || {}
+      const detalle = String(data.detalle || data.error || '').toLowerCase()
+      if (/re-?engage|24|outside|window|allowed window/.test(detalle)) {
+        toast.error(
+          'WhatsApp solo deja escribir desde el sistema si el cliente te escribió en las últimas 24 h. Usa el botón verde “WhatsApp”.',
+          { duration: 8000 },
+        )
+      } else if (data.error && /no configurad/i.test(data.error)) {
+        toast.error('El envío desde el sistema no está configurado en el backend (falta el token de WhatsApp). Usa el botón verde “WhatsApp” por ahora.', { duration: 9000 })
+      } else {
+        // Muestra el error REAL para poder diagnosticar
+        const extra = data.detalle ? ' — ' + String(data.detalle).slice(0, 160) : ''
+        toast.error(`No se pudo enviar: ${data.error || 'error desconocido'}${extra}`, { duration: 10000 })
+      }
     } finally {
       setSending(false)
     }
