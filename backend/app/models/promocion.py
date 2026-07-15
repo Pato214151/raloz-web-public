@@ -23,5 +23,5 @@ class Promocion(db.Model):
             'foto': self.foto,
             'activa': bool(self.activa),
             'orden': self.orden or 0,
-            'fecha': self.fecha.isoformat() if self.fecha else None,
+            'fecha': self.fecha.isoformat() + 'Z' if self.fecha else None,
         }

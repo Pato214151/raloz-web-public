@@ -21,5 +21,5 @@ class Suscriptor(db.Model):
             'nombre': self.nombre,
             'acepta_datos': bool(self.acepta_datos),
             'activo': bool(self.activo),
-            'fecha': self.fecha.isoformat() if self.fecha else None,
+            'fecha': self.fecha.isoformat() + 'Z' if self.fecha else None,
         }

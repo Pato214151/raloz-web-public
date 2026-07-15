@@ -20,7 +20,8 @@ class WaConversacion(db.Model):
             'chat_id': self.chat_id,
             'nombre': self.nombre,
             'ultimo_mensaje': self.ultimo_mensaje,
-            'ultima_fecha': self.ultima_fecha.isoformat() if self.ultima_fecha else None,
+            # 'Z' marca que es UTC: sin eso el navegador la toma como hora local (+5 h en CO)
+            'ultima_fecha': self.ultima_fecha.isoformat() + 'Z' if self.ultima_fecha else None,
             'no_leidos': self.no_leidos or 0,
             'modo': self.modo or 'bot',
         }
@@ -48,7 +49,7 @@ class WaMensaje(db.Model):
             'direccion': self.direccion,
             'texto': self.texto,
             'autor': self.autor,
-            'fecha': self.fecha.isoformat() if self.fecha else None,
+            'fecha': self.fecha.isoformat() + 'Z' if self.fecha else None,
             'media_tipo': self.media_tipo,
             'tiene_media': bool(self.media_b64),
         }

@@ -24,5 +24,5 @@ class ReglaAuto(db.Model):
             'clave': self.clave,
             'activa': bool(self.activa),
             'config': self.get_config(),
-            'ultima_ejecucion': self.ultima_ejecucion.isoformat() if self.ultima_ejecucion else None,
+            'ultima_ejecucion': self.ultima_ejecucion.isoformat() + 'Z' if self.ultima_ejecucion else None,
         }

@@ -381,3 +381,17 @@ def test_buscar_contacto_por_nombre_y_numero(tienda_client):
 def test_buscar_contacto_query_corta_vacia(tienda_client):
     r = tienda_client.get('/api/tienda/admin/buscar-contacto?q=a', headers=_auth_admin())
     assert r.get_json()['contactos'] == []
+
+
+# ── Zona horaria: las fechas deben ir marcadas como UTC ─────────────
+
+def test_fechas_se_serializan_como_utc(tienda_client):
+    """Sin la 'Z' el navegador interpreta la hora UTC como local (+5 h en Colombia)."""
+    conv = WaConversacion(chat_id='573005550000', ultima_fecha=datetime.utcnow())
+    db.session.add(conv)
+    aviso = Aviso(texto='hola', segmento='activos', total=0, enviados=0, fallidos=0)
+    db.session.add(aviso)
+    db.session.commit()
+
+    assert conv.to_dict()['ultima_fecha'].endswith('Z')
+    assert aviso.to_dict()['fecha'].endswith('Z')

@@ -25,5 +25,5 @@ class Aviso(db.Model):
             'enviados': self.enviados,
             'fallidos': self.fallidos,
             'autor': self.autor,
-            'fecha': self.fecha.isoformat() if self.fecha else None,
+            'fecha': self.fecha.isoformat() + 'Z' if self.fecha else None,
         }
