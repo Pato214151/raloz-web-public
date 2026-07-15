@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Zap, PackageX, Loader2 } from 'lucide-react'
+import { Zap, PackageX, Loader2, Bot } from 'lucide-react'
 
 // Metadatos de presentación de cada regla (el backend solo guarda la clave)
 const REGLAS_INFO = {
@@ -9,7 +9,13 @@ const REGLAS_INFO = {
     titulo: 'Alerta de stock bajo',
     desc: 'Te avisa por WhatsApp cuando hay productos con pocas unidades. Máximo una vez al día.',
     icon: PackageX,
-    campoUmbral: true,
+    campo: { clave: 'umbral', etiqueta: 'Avisar cuando el stock sea de o menos:', unidad: 'unidades', def: 5 },
+  },
+  volver_a_bot: {
+    titulo: 'Devolver el chat al bot',
+    desc: 'Cuando respondes desde el panel, el bot deja de atender a ese cliente. Esta regla lo reactiva solo si nadie del equipo escribe en unas horas.',
+    icon: Bot,
+    campo: { clave: 'horas', etiqueta: 'Reactivar el bot después de:', unidad: 'horas sin respuesta', def: 12 },
   },
 }
 
@@ -102,21 +108,22 @@ export default function Automatizacion() {
                   </button>
                 </div>
 
-                {/* Config: umbral */}
-                {info.campoUmbral && (
-                  <label className="flex items-center gap-2 text-sm text-gray-500 mt-4 pt-4 border-t border-gray-100">
-                    Avisar cuando el stock sea de o menos:
+                {/* Config del parámetro de la regla */}
+                {info.campo && (
+                  <label className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-4 pt-4 border-t border-gray-100">
+                    {info.campo.etiqueta}
                     <input
                       type="number"
                       min={1}
-                      defaultValue={r.config?.umbral ?? 5}
+                      defaultValue={r.config?.[info.campo.clave] ?? info.campo.def}
                       onBlur={(e) => {
-                        const v = parseInt(e.target.value, 10) || 5
-                        if (v !== (r.config?.umbral ?? 5)) actualizar(r.clave, { config: { ...r.config, umbral: v } })
+                        const actual = r.config?.[info.campo.clave] ?? info.campo.def
+                        const v = parseInt(e.target.value, 10) || info.campo.def
+                        if (v !== actual) actualizar(r.clave, { config: { ...r.config, [info.campo.clave]: v } })
                       }}
                       className="w-16 text-center border border-gray-200 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
-                    unidades
+                    {info.campo.unidad}
                   </label>
                 )}
               </div>

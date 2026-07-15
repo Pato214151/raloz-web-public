@@ -395,3 +395,56 @@ def test_fechas_se_serializan_como_utc(tienda_client):
 
     assert conv.to_dict()['ultima_fecha'].endswith('Z')
     assert aviso.to_dict()['fecha'].endswith('Z')
+
+
+# ── Regla: devolver chats a modo bot ────────────────────────────────
+
+def _regla_volver(horas=12):
+    r = ReglaAuto(clave='volver_a_bot', activa=True, config='{"horas": %d}' % horas)
+    db.session.add(r)
+    db.session.commit()
+    return r
+
+
+def test_volver_a_bot_devuelve_chat_viejo(tienda_client):
+    """Chat en modo humano cuyo último mensaje de asesor es viejo → vuelve a bot."""
+    from app.models import WaMensaje
+    from app.services.reglas import _regla_volver_a_bot
+    conv = WaConversacion(chat_id='573001110000', modo='humano', ultima_fecha=datetime.utcnow())
+    db.session.add(conv)
+    db.session.add(WaMensaje(chat_id='573001110000', direccion='out', texto='hola',
+                             autor='admin', fecha=datetime.utcnow() - timedelta(hours=20)))
+    db.session.commit()
+
+    _regla_volver_a_bot(_regla_volver(horas=12))
+    assert WaConversacion.query.get('573001110000').modo == 'bot'
+
+
+def test_volver_a_bot_respeta_chat_reciente(tienda_client):
+    """Si el asesor escribió hace poco, el chat sigue en modo humano."""
+    from app.models import WaMensaje
+    from app.services.reglas import _regla_volver_a_bot
+    conv = WaConversacion(chat_id='573002220000', modo='humano', ultima_fecha=datetime.utcnow())
+    db.session.add(conv)
+    db.session.add(WaMensaje(chat_id='573002220000', direccion='out', texto='hola',
+                             autor='admin', fecha=datetime.utcnow() - timedelta(hours=1)))
+    db.session.commit()
+
+    _regla_volver_a_bot(_regla_volver(horas=12))
+    assert WaConversacion.query.get('573002220000').modo == 'humano'
+
+
+def test_volver_a_bot_ignora_mensajes_del_bot(tienda_client):
+    """Un mensaje reciente del BOT no cuenta como atención humana."""
+    from app.models import WaMensaje
+    from app.services.reglas import _regla_volver_a_bot
+    conv = WaConversacion(chat_id='573003330000', modo='humano', ultima_fecha=datetime.utcnow())
+    db.session.add(conv)
+    db.session.add(WaMensaje(chat_id='573003330000', direccion='out', texto='auto',
+                             autor='bot', fecha=datetime.utcnow()))          # reciente, pero del bot
+    db.session.add(WaMensaje(chat_id='573003330000', direccion='out', texto='hola',
+                             autor='admin', fecha=datetime.utcnow() - timedelta(hours=30)))
+    db.session.commit()
+
+    _regla_volver_a_bot(_regla_volver(horas=12))
+    assert WaConversacion.query.get('573003330000').modo == 'bot'

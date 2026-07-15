@@ -377,6 +377,15 @@ MIGRACIONES = [
             ")",
         ],
     },
+    {
+        'version': '0023',
+        'descripcion': 'Regla: devolver chats de modo humano a modo bot tras N horas',
+        'sql': [
+            "INSERT INTO reglas_auto (clave, activa, config) VALUES "
+            "('volver_a_bot', TRUE, '{\"horas\": 12}') "
+            "ON CONFLICT (clave) DO NOTHING",
+        ],
+    },
 ]
 
 
