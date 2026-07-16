@@ -448,3 +448,22 @@ def test_volver_a_bot_ignora_mensajes_del_bot(tienda_client):
 
     _regla_volver_a_bot(_regla_volver(horas=12))
     assert WaConversacion.query.get('573003330000').modo == 'bot'
+
+
+# ── Exportar WhatsApp a CSV ──────────────────────────────────────────
+
+def test_exportar_csv_whatsapp(tienda_client):
+    from app.models import WaMensaje
+    from app.api.whatsapp_inbox import generar_csv_whatsapp
+    db.session.add(WaConversacion(chat_id='573001234567', nombre='María P'))
+    db.session.add(WaMensaje(chat_id='573001234567', direccion='in', texto='Hola, precios?',
+                             autor='cliente', fecha=datetime(2026, 7, 15, 16, 9)))  # UTC → 11:09 Bogotá
+    db.session.commit()
+
+    csv_txt = generar_csv_whatsapp()
+    assert 'Fecha (Bogotá)' in csv_txt          # encabezado
+    assert '573001234567' in csv_txt
+    assert 'María P' in csv_txt
+    assert 'Hola, precios?' in csv_txt
+    assert '2026-07-15 11:09' in csv_txt         # convertido a hora de Bogotá (UTC-5)
+    assert 'Entrante' in csv_txt

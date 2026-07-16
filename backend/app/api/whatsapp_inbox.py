@@ -14,11 +14,13 @@ necesita WHATSAPP_TOKEN y PHONE_NUMBER_ID en su entorno (las mismas del bot).
 
 import os
 import re
+import csv
+import io
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 
 from app import db
 from app.models import WaConversacion, WaMensaje
@@ -252,3 +254,37 @@ def enviar_imagen(chat_id):
     ))
     db.session.commit()
     return jsonify({'ok': True})
+
+
+def generar_csv_whatsapp():
+    """Arma un CSV (texto) con todas las conversaciones y mensajes, hora de Bogotá.
+    No incluye las imágenes en sí (solo marca si el mensaje traía adjunto)."""
+    nombres = {c.chat_id: (c.nombre or '') for c in WaConversacion.query.all()}
+
+    buf = io.StringIO()
+    buf.write('﻿')   # BOM para que Excel muestre bien tildes y ñ
+    w = csv.writer(buf)
+    w.writerow(['Fecha (Bogotá)', 'Teléfono', 'Nombre', 'Dirección', 'Autor', 'Mensaje', 'Adjunto'])
+
+    for m in WaMensaje.query.order_by(WaMensaje.chat_id, WaMensaje.fecha).all():
+        # Bogotá = UTC-5 (sin horario de verano)
+        fecha_bog = (m.fecha - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M') if m.fecha else ''
+        direccion = 'Entrante' if m.direccion == 'in' else 'Saliente'
+        w.writerow([
+            fecha_bog, m.chat_id, nombres.get(m.chat_id, ''),
+            direccion, m.autor or '', m.texto or '', getattr(m, 'media_tipo', None) or '',
+        ])
+    return buf.getvalue()
+
+
+@wa_inbox_bp.route('/exportar', methods=['GET'])
+@rol_requerido('administrador', 'vendedor')
+def exportar_conversaciones():
+    """Descarga TODAS las conversaciones y mensajes de WhatsApp en un CSV
+    (compatible con Excel, hora de Bogotá)."""
+    nombre_archivo = f"whatsapp_raloz_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(
+        generar_csv_whatsapp(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename="{nombre_archivo}"'},
+    )

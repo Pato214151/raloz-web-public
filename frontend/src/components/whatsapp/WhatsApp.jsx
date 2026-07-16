@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle } from 'lucide-react'
+import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download } from 'lucide-react'
 
 // ── Error boundary: aísla fallos de render ──
 // Evita que un solo mensaje/chat problemático tumbe toda la bandeja.
@@ -266,6 +266,27 @@ export default function WhatsApp() {
   const convActiva = conversaciones.find(c => c.chat_id === activo)
   const [panelMovil, setPanelMovil] = useState('lista')
 
+  const [descargando, setDescargando] = useState(false)
+  const descargarTodo = async () => {
+    setDescargando(true)
+    try {
+      const res = await api.get('/wa/exportar', { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `whatsapp_raloz_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Descargando el historial de WhatsApp')
+    } catch {
+      toast.error('No se pudo descargar')
+    } finally {
+      setDescargando(false)
+    }
+  }
+
   const cargarConversaciones = useCallback(async () => {
     try {
       const res = await api.get('/wa/conversaciones')
@@ -404,10 +425,16 @@ export default function WhatsApp() {
               </p>
             </div>
           </div>
-          <button onClick={cargarConversaciones} title="Actualizar"
-            className="p-2 text-[#8696a0] hover:text-[#075e54] hover:bg-gray-100 rounded-full transition">
-            <RefreshCw size={16} className={cargandoConv ? 'animate-spin' : ''} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={descargarTodo} disabled={descargando} title="Descargar historial (CSV)"
+              className="p-2 text-[#8696a0] hover:text-[#075e54] hover:bg-gray-100 rounded-full transition disabled:opacity-50">
+              {descargando ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}
+            </button>
+            <button onClick={cargarConversaciones} title="Actualizar"
+              className="p-2 text-[#8696a0] hover:text-[#075e54] hover:bg-gray-100 rounded-full transition">
+              <RefreshCw size={16} className={cargandoConv ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
 
         {/* Search bar (visual, funcionalmente no filtra aún) */}
