@@ -48,7 +48,7 @@ flowchart TB
 
     subgraph Frontend
         Store["🛒 Public Store<br/>HTML/CSS/JS · PWA<br/>Cloudflare Pages"]
-        Admin["🖥️ Admin / POS<br/>React + Vite"]
+        Admin["🖥️ Admin / POS<br/>React + Vite · installable PWA"]
     end
 
     subgraph Backend["⚙️ Backend — Flask (Render)"]
@@ -295,4 +295,10 @@ cd backend && python backup_db.py
 - **Stock resilience:** reservations with automatic expiry via a daemon thread.
 - **Decoupled notifications:** the backend calls the bot over HTTP with a shared
   token; if the bot is down, the business flow doesn't break (best-effort).
+- **Installable admin PWA:** the React panel installs to a phone's home screen
+  (manifest + service worker in `frontend/public/`); the SW never caches `/api/*`
+  (JWT/live data), registers only in production, and auto-reloads on new versions.
+- **80mm thermal POS ticket:** `Facturacion.jsx › imprimirRecibo()` prints a
+  client-side receipt (company data, items, totals, warranty terms) to a SAT Q22;
+  from a phone it prints via the RawBT Android app over Bluetooth.
 ```

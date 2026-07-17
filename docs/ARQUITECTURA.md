@@ -124,6 +124,8 @@ ENTRA: POST /api/facturas {id_colegio, cliente_*, detalles[{id_producto, talla_i
 5. abono > 0 → Pago; si es EFECTIVO y hay CajaDiaria ABIERTA → MovimientoCaja INGRESO
 6. Auditoría + upsert de Cliente (por teléfono, acumula totales)
 SALE: 201 {factura: to_dict_full()}   estado: PAGADA si abono cubre todo, si no PENDIENTE
+7. El frontend ofrece "Imprimir ticket" → recibo térmico 80 mm (SAT Q22) con empresa,
+   ítems, totales y términos de garantía (client-side, window.print; no toca backend)
 ```
 
 Entrega posterior: `POST /api/prendas/<id>/entregar` (una por una) marca la PrendaPendiente
@@ -207,6 +209,10 @@ clientes vía `utils/whatsapp_notify.py` → Graph API de Meta.
 
 `services/api.ts`: axios con base `/api`, Bearer automático, refresh en 401, redirect a login.
 `AuthContext`: JWT en localStorage, `isAdmin()/isVendedor()/isCajero()`.
+
+**PWA (app instalable):** el panel se instala en el celular (standalone, sin tienda de apps) desde `raloz-web.onrender.com`. Archivos en `frontend/public/`: `manifest.webmanifest` (shortcuts a Vender/Facturas/WhatsApp/Stock/Gastos/Reportes) + `sw.js` + íconos. El service worker **nunca cachea `/api/*`** (JWT/datos en vivo); navegaciones red-primero, assets cache-primero; subir `CACHE_VERSION` para forzar update. Se registra en `main.jsx` solo en producción y recarga solo al activar una versión nueva. Flask sirve `sw.js`/manifest como archivos reales (catch-all comprueba `os.path.isfile`).
+
+**Ticket térmico (POS):** tras crear una venta, `Facturacion.jsx › imprimirRecibo()` abre una ventana de impresión con layout **80 mm** (impresora **SAT Q22**): datos de empresa (`localStorage.raloz_empresa`), ítems, totales/abono/saldo y términos de garantía. Desde el celular se imprime vía la app **RawBT** por Bluetooth. Es distinto del PDF de factura que se manda por correo (ese va por el webhook con ReportLab).
 
 | Ruta | Componente | Endpoints que usa | Rol |
 |---|---|---|---|

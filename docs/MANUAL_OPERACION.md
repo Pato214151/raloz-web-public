@@ -4,7 +4,7 @@ Guía práctica para operar el negocio día a día y para mantener el sistema.
 Dividido en dos partes: **Operación diaria** (para todo el equipo) y
 **Administración y técnica** (para el dueño / responsable de TI).
 
-> Última actualización: 2026-07-09.
+> Última actualización: 2026-07-17.
 
 ---
 
@@ -32,12 +32,36 @@ Servicios de apoyo: **UptimeRobot** (mantiene despiertos el bot y el backend),
 
 > Si la primera carga tarda unos segundos, es normal (el servidor estaba en reposo).
 
+### 1.1 Instalar el panel como app en el celular
+El panel se puede instalar como **app** en la pantalla de inicio (se abre a pantalla
+completa, sin barra del navegador). No está en Play Store / App Store: se instala
+desde el navegador.
+
+- **Android (Chrome):** abre `raloz-web.onrender.com`, menú **⋮** → **"Instalar aplicación"**
+  (o "Agregar a pantalla de inicio").
+- **iPhone (Safari):** botón **Compartir** (cuadro con flecha) → **"Agregar a pantalla de inicio"**.
+
+Ya instalada, si mantienes presionado el ícono aparecen accesos directos: **Vender,
+Facturas, WhatsApp, Stock, Gastos, Reportes**. La app se actualiza sola cuando se
+publica una versión nueva.
+
 ## 2. Vender y cobrar
 - **Nueva Venta** (`/facturacion`): arma la factura, elige colegio, productos y tallas.
+  Al guardar, aparece **"Imprimir ticket"** → recibo térmico de **80 mm** (impresora
+  SAT Q22) con los datos de la empresa, lo comprado, totales y la garantía.
 - **Registrar Pago** (`/pagos`): abona a una factura (total o parcial).
 - **Buscar Facturas** (`/buscar`): encuentra una venta por número o cliente.
 - **Por Cobrar** (`/cuentas`): quién debe y cuánto.
 - **Caja** (`/caja`): abre/cierra caja y ve movimientos del día.
+
+### 2.1 Imprimir el ticket desde el celular
+La SAT Q22 es de **80 mm**. Desde el celular (Android) se imprime con la app **RawBT**:
+1. Empareja la Q22 en **Ajustes → Bluetooth** (PIN típico `0000` o `1234`).
+2. Instala **RawBT** (Play Store, gratis) y en sus ajustes elige la Q22 por Bluetooth.
+3. En el panel toca **"Imprimir ticket"** → elige **RawBT** → sale el recibo.
+
+> Desde iPhone esto no funciona (iOS no permite RawBT): imprime desde el computador
+> de la taquilla o usa un Android para la impresora.
 
 ## 3. Pedidos (del pedido a la entrega)
 Menú **Pedidos**:
