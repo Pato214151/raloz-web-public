@@ -14,3 +14,21 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </React.StrictMode>
 )
+
+// PWA: registrar el service worker solo en producción (en dev interfiere con Vite/HMR)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // Si aparece una versión nueva, recargar cuando quede activa
+      reg.addEventListener('updatefound', () => {
+        const nuevo = reg.installing
+        if (!nuevo) return
+        nuevo.addEventListener('statechange', () => {
+          if (nuevo.state === 'activated' && navigator.serviceWorker.controller) {
+            window.location.reload()
+          }
+        })
+      })
+    }).catch(() => { /* sin PWA si falla el registro; la app sigue funcionando */ })
+  })
+}
