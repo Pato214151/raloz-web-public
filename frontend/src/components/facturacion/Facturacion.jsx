@@ -243,60 +243,62 @@ export default function Facturacion() {
     if (!w) { toast.error('Habilita las ventanas emergentes para imprimir el recibo'); return }
 
     const itemsHTML = recibo.items.map(it =>
-      `<tr><td>${it.nombre}</td><td class="c">${it.talla}</td><td class="c">${it.cantidad}</td>` +
-      `<td class="r">${money(it.precio)}</td><td class="r">${money(it.cantidad * it.precio)}</td></tr>`
+      `<div class="it"><div class="itn">${it.nombre}${it.talla ? ' · T' + it.talla : ''}</div>` +
+      `<div class="row"><span>${it.cantidad} x ${money(it.precio)}</span><span>${money(it.cantidad * it.precio)}</span></div></div>`
     ).join('')
 
-    w.document.write(`<!DOCTYPE html><html><head><title>Recibo ${recibo.numero}</title>
+    // Ticket térmico 58 mm (SAT Q22): una sola columna, angosto.
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${recibo.numero}</title>
     <style>
-      *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;margin:22px;color:#222;font-size:13px}
-      .head{text-align:center;border-bottom:3px solid #FFC107;padding-bottom:10px;margin-bottom:12px}
-      .head h1{color:#1976D2;font-size:22px;margin:0 0 4px}
-      .head p{margin:2px 0;font-size:12px;color:#555}
-      .meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin:12px 0;font-size:12.5px}
-      .meta b{color:#555}
-      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12.5px}
-      th{background:#f5f5f5;padding:7px 8px;text-align:left;border:1px solid #ddd;font-size:11.5px;text-transform:uppercase}
-      td{padding:6px 8px;border:1px solid #eee}
-      td.c{text-align:center} td.r{text-align:right}
-      .tot{margin:10px 0 4px;max-width:280px;margin-left:auto}
-      .tot .row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
-      .tot .big{font-weight:bold;font-size:16px;border-top:1px solid #ccc;padding-top:6px;margin-top:4px}
-      .terms{margin-top:18px;border:1px solid #eee;background:#fafafa;border-radius:8px;padding:12px 14px;font-size:11px;color:#444;line-height:1.55}
-      .terms b{color:#1976D2;font-size:12px}
-      .foot{text-align:center;font-size:11px;color:#999;margin-top:14px}
-      @media print{body{margin:0;padding:14px}}
+      @page { size: 58mm auto; margin: 0; }
+      *{box-sizing:border-box}
+      body{width:58mm;margin:0;padding:2mm 3mm;color:#000;line-height:1.35;
+           font-family:'Courier New',monospace;font-size:11px}
+      h1{font-size:14px;margin:0 0 2px}
+      p{margin:1px 0}
+      .c{text-align:center}
+      .b{font-weight:bold}
+      .big{font-size:13px;font-weight:bold}
+      .sep{border-top:1px dashed #000;margin:5px 0}
+      .row{display:flex;justify-content:space-between;gap:6px}
+      .it{margin:3px 0}
+      .itn{font-weight:bold}
+      .terms{font-size:9px;line-height:1.3;margin-top:2px}
+      @media print{body{margin:0}}
     </style></head><body>
-    <div class="head">
-      <h1>${empresa.nombre}</h1>
-      <p>${[empresa.nit ? 'NIT: ' + empresa.nit : '', empresa.direccion, empresa.ciudad].filter(Boolean).join(' · ')}</p>
-      <p>${[empresa.telefono ? 'Cel: ' + empresa.telefono : '', web].filter(Boolean).join(' · ')}</p>
+    <div class="c">
+      <h1 class="b">${empresa.nombre}</h1>
+      ${empresa.nit ? `<p>NIT ${empresa.nit}</p>` : ''}
+      ${empresa.direccion ? `<p>${empresa.direccion}</p>` : ''}
+      ${empresa.ciudad ? `<p>${empresa.ciudad}</p>` : ''}
+      ${empresa.telefono ? `<p>Cel: ${empresa.telefono}</p>` : ''}
+      <p>${web}</p>
     </div>
-    <div class="meta">
-      <div><b>Recibo N°:</b> ${recibo.numero}</div>
-      <div><b>Fecha:</b> ${recibo.fecha}</div>
-      <div><b>Cliente:</b> ${recibo.cliente || '—'}</div>
-      ${recibo.telefono ? `<div><b>Teléfono:</b> ${recibo.telefono}</div>` : ''}
-      ${recibo.colegio ? `<div><b>Colegio:</b> ${recibo.colegio}</div>` : ''}
-    </div>
-    <table><thead><tr><th>Producto</th><th class="c">Talla</th><th class="c">Cant.</th><th class="r">V. Unit.</th><th class="r">Total</th></tr></thead>
-    <tbody>${itemsHTML}</tbody></table>
-    <div class="tot">
-      ${recibo.descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(recibo.descuento)}</span></div>` : ''}
-      ${recibo.domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(recibo.domicilio)}</span></div>` : ''}
-      <div class="row big"><span>TOTAL</span><span>${money(recibo.total)}</span></div>
-      ${recibo.abono > 0 ? `<div class="row"><span>Abono</span><span>${money(recibo.abono)}</span></div>` : ''}
-      ${recibo.saldo > 0 ? `<div class="row big" style="color:#c62828"><span>SALDO</span><span>${money(recibo.saldo)}</span></div>` : ''}
-    </div>
+    <div class="sep"></div>
+    <div class="row"><span>Recibo:</span><span class="b">${recibo.numero}</span></div>
+    <div class="row"><span>Fecha:</span><span>${recibo.fecha}</span></div>
+    ${recibo.cliente ? `<div class="row"><span>Cliente:</span><span>${recibo.cliente}</span></div>` : ''}
+    ${recibo.colegio ? `<div class="row"><span>Colegio:</span><span>${recibo.colegio}</span></div>` : ''}
+    <div class="sep"></div>
+    ${itemsHTML}
+    <div class="sep"></div>
+    ${recibo.descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(recibo.descuento)}</span></div>` : ''}
+    ${recibo.domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(recibo.domicilio)}</span></div>` : ''}
+    <div class="row big"><span>TOTAL</span><span>${money(recibo.total)}</span></div>
+    ${recibo.abono > 0 ? `<div class="row"><span>Abono</span><span>${money(recibo.abono)}</span></div>` : ''}
+    ${recibo.saldo > 0 ? `<div class="row big"><span>SALDO</span><span>${money(recibo.saldo)}</span></div>` : ''}
+    <div class="sep"></div>
     <div class="terms">
-      <b>GARANTÍA, CAMBIOS Y REEMBOLSOS</b><br>
-      • Garantía por defecto de fabricación: <b>2 meses</b> desde la entrega.<br>
-      • Cambio por talla incorrecta: dentro de <b>5 días hábiles</b>, con la prenda <b>sin uso, limpia y con etiquetas</b>.<br>
-      • Uniformes personalizados o bordados no tienen cambio ni devolución, salvo defecto comprobado.<br>
-      • Los reembolsos se hacen por el mismo medio de pago. <b>Conserva este recibo.</b><br>
-      Términos completos: ${web}/terminos.html
+      <div class="b c">GARANTÍA Y CAMBIOS</div>
+      - Garantía por defecto de fabricación: 2 meses.<br>
+      - Cambio por talla: 5 días hábiles, prenda sin uso, limpia y con etiquetas.<br>
+      - Personalizados/bordados: sin cambio salvo defecto.<br>
+      - Reembolsos por el mismo medio de pago.<br>
+      - Conserva este ticket.<br>
+      ${web}/terminos.html
     </div>
-    <p class="foot">¡Gracias por tu compra! — ${empresa.nombre}</p>
+    <div class="sep"></div>
+    <p class="c">¡Gracias por tu compra!</p>
     </body></html>`)
     w.document.close()
     w.focus()
@@ -592,7 +594,7 @@ export default function Facturacion() {
                 onClick={imprimirRecibo}
                 className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-lg"
               >
-                <Printer size={18} /> Imprimir recibo
+                <Printer size={18} /> Imprimir ticket
               </button>
             )}
             <p className="text-gray-600">¿Quedaron prendas debiendo de esta factura?</p>
