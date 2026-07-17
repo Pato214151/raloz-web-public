@@ -418,39 +418,48 @@ export default function Facturacion() {
                 <div className="col-span-1"></div>
               </div>
               {detalles.map((det, idx) => (
-                <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3 bg-gray-50 rounded-lg items-center">
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg space-y-2 md:space-y-0 md:grid md:grid-cols-12 md:gap-3 md:items-center">
+                  {/* Producto */}
                   <div className="md:col-span-4">
+                    <label className="md:hidden block text-xs font-medium text-gray-500 mb-1">Producto</label>
                     <select value={det.id_producto} onChange={e => actualizarLinea(idx, 'id_producto', e.target.value)} className="input-field w-full">
                       <option value="">Seleccionar producto...</option>
                       {productos.map(p => <option key={p.id_producto} value={p.id_producto}>{p.nombre}</option>)}
                     </select>
                   </div>
-                  <div className="md:col-span-2">
-                    {(() => {
-                      const prod = productos.find(p => String(p.id_producto) === String(det.id_producto))
-                      const tallas = prod?.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
-                      return (
-                        <select value={det.talla_individual} onChange={e => actualizarLinea(idx, 'talla_individual', e.target.value)} className="input-field w-full">
-                          <option value="">Talla...</option>
-                          {tallas.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      )
-                    })()}
-                  </div>
-                  <div className="md:col-span-1">
-                    <input type="number" min="1" value={det.cantidad} onChange={e => actualizarLinea(idx, 'cantidad', parseInt(e.target.value) || 1)} className="input-field w-full text-center" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                      <input type="number" min="0" value={det.precio_unitario} onChange={e => actualizarLinea(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="input-field w-full pl-7" placeholder="Precio" />
+                  {/* Talla + Cantidad (juntas en móvil, sueltas en la tabla) */}
+                  <div className="grid grid-cols-2 gap-2 md:contents">
+                    <div className="md:col-span-2">
+                      <label className="md:hidden block text-xs font-medium text-gray-500 mb-1">Talla</label>
+                      {(() => {
+                        const prod = productos.find(p => String(p.id_producto) === String(det.id_producto))
+                        const tallas = prod?.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
+                        return (
+                          <select value={det.talla_individual} onChange={e => actualizarLinea(idx, 'talla_individual', e.target.value)} className="input-field w-full">
+                            <option value="">Talla...</option>
+                            {tallas.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        )
+                      })()}
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="md:hidden block text-xs font-medium text-gray-500 mb-1">Cant.</label>
+                      <input type="number" inputMode="numeric" min="1" value={det.cantidad} onChange={e => actualizarLinea(idx, 'cantidad', parseInt(e.target.value) || 1)} className="input-field w-full text-center" />
                     </div>
                   </div>
-                  <div className="md:col-span-2 text-right">
-                    <span className="text-sm font-bold text-gray-900">${(det.cantidad * det.precio_unitario).toLocaleString('es-CO')}</span>
+                  {/* Precio unitario */}
+                  <div className="md:col-span-2">
+                    <label className="md:hidden block text-xs font-medium text-gray-500 mb-1">Precio Unit.</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                      <input type="number" inputMode="numeric" min="0" value={det.precio_unitario} onChange={e => actualizarLinea(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="input-field w-full pl-7" placeholder="Precio" />
+                    </div>
                   </div>
-                  <div className="md:col-span-1 text-right">
-                    <button type="button" onClick={() => eliminarLinea(idx)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
+                  {/* Subtotal + eliminar */}
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-200 md:border-0 md:pt-0 md:col-span-3 md:justify-end md:gap-3">
+                    <span className="md:hidden text-xs font-medium text-gray-500">Subtotal</span>
+                    <span className="text-base md:text-sm font-bold text-gray-900">${(det.cantidad * det.precio_unitario).toLocaleString('es-CO')}</span>
+                    <button type="button" onClick={() => eliminarLinea(idx)} className="text-red-500 hover:text-red-600 p-2 md:p-1 rounded hover:bg-red-50 transition-colors" aria-label="Eliminar"><Trash2 size={18} /></button>
                   </div>
                 </div>
               ))}
@@ -516,7 +525,7 @@ export default function Facturacion() {
               {form.domicilio && (
                 <div className="relative mt-2">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                  <input type="number" min="0" value={form.valor_domicilio}
+                  <input type="number" inputMode="numeric" min="0" value={form.valor_domicilio}
                     onChange={e => setForm({...form, valor_domicilio: e.target.value})}
                     className="input-field pl-7 w-full" placeholder="Valor domicilio" />
                 </div>
@@ -526,14 +535,14 @@ export default function Facturacion() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Descuento</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                <input type="number" min="0" max={subtotal} value={form.descuento} onChange={e => setForm({...form, descuento: e.target.value})} className="input-field pl-7" placeholder="0" />
+                <input type="number" inputMode="numeric" min="0" max={subtotal} value={form.descuento} onChange={e => setForm({...form, descuento: e.target.value})} className="input-field pl-7" placeholder="0" />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Abono Inicial</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                <input type="number" min="0" max={totalConDomicilio} value={form.abono} onChange={e => setForm({...form, abono: e.target.value})} className="input-field pl-7" placeholder="0" />
+                <input type="number" inputMode="numeric" min="0" max={totalConDomicilio} value={form.abono} onChange={e => setForm({...form, abono: e.target.value})} className="input-field pl-7" placeholder="0" />
               </div>
             </div>
             <div>
