@@ -364,6 +364,84 @@ export default function BuscarFacturas() {
     printWindow.print()
   }
 
+  // Reimprime el TICKET de 76mm (Epson TM-U220) desde una factura ya guardada.
+  // Sirve para imprimir desde el computador ventas hechas en el celular, o reimpresos.
+  const imprimirTicket = () => {
+    if (!selected) return
+    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '', web: '' }
+    try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* usa default */ }
+    const web = empresa.web || 'ralozcolsas.com'
+    const money = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
+
+    const total = selected.total || 0
+    const saldo = selected.saldo || 0
+    const abono = Math.max(0, total - saldo)   // lo pagado hasta ahora
+    const descuento = selected.descuento || 0
+    const domicilio = selected.domicilio || 0
+
+    const itemsHTML = (selected.detalles || []).map(d =>
+      `<div class="it"><div class="itn">${d.producto_nombre}${d.talla_individual ? ' · T' + d.talla_individual : ''}</div>` +
+      `<div class="row"><span>${d.cantidad} x ${money(d.precio_unitario)}</span><span>${money(d.total_linea)}</span></div></div>`
+    ).join('')
+
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${selected.numero_factura}</title>
+    <style>
+      @page { size: 76mm auto; margin: 0; }
+      *{box-sizing:border-box}
+      body{width:76mm;margin:0;padding:2mm 3mm;color:#000;line-height:1.4;
+           font-family:'Courier New',monospace;font-size:12px}
+      h1{font-size:16px;margin:0 0 2px}
+      p{margin:1px 0}
+      .c{text-align:center}
+      .b{font-weight:bold}
+      .big{font-size:14px;font-weight:bold}
+      .sep{border-top:1px dashed #000;margin:6px 0}
+      .row{display:flex;justify-content:space-between;gap:8px}
+      .it{margin:4px 0}
+      .itn{font-weight:bold}
+      .terms{font-size:10px;line-height:1.35;margin-top:2px}
+      @media print{body{margin:0}}
+    </style></head><body>
+    <div class="c">
+      <h1 class="b">${empresa.nombre}</h1>
+      ${empresa.nit ? `<p>NIT ${empresa.nit}</p>` : ''}
+      ${empresa.direccion ? `<p>${empresa.direccion}</p>` : ''}
+      ${empresa.ciudad ? `<p>${empresa.ciudad}</p>` : ''}
+      ${empresa.telefono ? `<p>Cel: ${empresa.telefono}</p>` : ''}
+      <p>${web}</p>
+    </div>
+    <div class="sep"></div>
+    <div class="row"><span>Recibo:</span><span class="b">${selected.numero_factura}</span></div>
+    <div class="row"><span>Fecha:</span><span>${selected.fecha_factura}</span></div>
+    ${selected.cliente_nombre ? `<div class="row"><span>Cliente:</span><span>${selected.cliente_nombre}</span></div>` : ''}
+    ${selected.colegio_nombre ? `<div class="row"><span>Colegio:</span><span>${selected.colegio_nombre}</span></div>` : ''}
+    <div class="sep"></div>
+    ${itemsHTML}
+    <div class="sep"></div>
+    ${descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(descuento)}</span></div>` : ''}
+    ${domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(domicilio)}</span></div>` : ''}
+    <div class="row big"><span>TOTAL</span><span>${money(total)}</span></div>
+    ${abono > 0 ? `<div class="row"><span>Abono</span><span>${money(abono)}</span></div>` : ''}
+    ${saldo > 0 ? `<div class="row big"><span>SALDO</span><span>${money(saldo)}</span></div>` : ''}
+    <div class="sep"></div>
+    <div class="terms">
+      <div class="b c">GARANTÍA Y CAMBIOS</div>
+      - Garantía de 6 meses por defectos de confección (costuras/hilo).<br>
+      - Cambio por talla: 5 días hábiles, prenda sin uso, limpia y con etiquetas.<br>
+      - Personalizados/bordados: sin cambio salvo defecto.<br>
+      - Reembolsos por el mismo medio de pago.<br>
+      - Conserva este ticket.<br>
+      ${web}/terminos.html
+    </div>
+    <div class="sep"></div>
+    <p class="c">¡Gracias por tu compra!</p>
+    </body></html>`)
+    w.document.close()
+    w.focus()
+    w.print()
+  }
+
   const badgeEstado = (est) => {
     const styles = {
       PENDIENTE: 'bg-yellow-50 text-yellow-700 border-yellow-200',
@@ -651,8 +729,11 @@ export default function BuscarFacturas() {
                     <RefreshCw size={16} /> Reactivar
                   </button>
                 )}
+                <button onClick={imprimirTicket} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2">
+                  <Printer size={16} /> Imprimir ticket
+                </button>
                 <button onClick={imprimirFactura} className="btn-secondary flex items-center gap-2">
-                  <Printer size={16} /> Imprimir
+                  <Printer size={16} /> Factura A4
                 </button>
               </div>
 
