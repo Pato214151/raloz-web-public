@@ -290,7 +290,7 @@ export default function Facturacion() {
     <div class="sep"></div>
     <div class="terms">
       <div class="b c">GARANTÍA Y CAMBIOS</div>
-      - Garantía por defecto de fabricación: 2 meses.<br>
+      - Garantía de 6 meses por defectos de confección (costuras/hilo).<br>
       - Cambio por talla: 5 días hábiles, prenda sin uso, limpia y con etiquetas.<br>
       - Personalizados/bordados: sin cambio salvo defecto.<br>
       - Reembolsos por el mismo medio de pago.<br>
