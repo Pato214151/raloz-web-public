@@ -91,7 +91,7 @@ Ambos comparten el mismo backend Flask. La tienda pública consume los endpoints
 | Ruta | Módulo | Qué hace | Roles |
 |------|--------|----------|-------|
 | `/` | Dashboard | KPIs del día/mes, gráfica ventas 7 días, accesos rápidos | Todos |
-| `/facturacion` | Nueva Venta | Crea facturas en mostrador con cobro inmediato | Admin, Vendedor, Cajero |
+| `/facturacion` | Nueva Venta | Crea facturas en mostrador con cobro inmediato; imprime **ticket térmico 80mm** (SAT Q22) | Admin, Vendedor, Cajero |
 | `/buscar` | Buscar Facturas | Busca, edita, anula, reactiva facturas; registra pagos | Todos |
 | `/pagos` | Registrar Pago | Registra abonos a facturas existentes | Admin, Cajero |
 | `/stock` | Stock Actual | Inventario por colegio/talla, ajustes, historial | Admin, Vendedor |
@@ -110,6 +110,10 @@ Ambos comparten el mismo backend Flask. La tienda pública consume los endpoints
 | `/tareas` | Tareas | Lista de tareas/pendientes del equipo | Todos |
 | `/usuarios` | Usuarios | Crear/bloquear usuarios del POS | Admin |
 | `/configuracion` | Configuración | Colegios, productos, métodos de pago | Admin |
+
+> 📱 **PWA:** el panel es instalable como app en el celular (pantalla completa, sin
+> tienda de apps). Manifest + service worker en `frontend/public/`; el SW nunca
+> cachea `/api/*` (JWT/datos en vivo) y se registra solo en producción.
 
 ---
 
