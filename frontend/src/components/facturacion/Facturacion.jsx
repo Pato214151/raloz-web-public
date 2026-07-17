@@ -247,23 +247,23 @@ export default function Facturacion() {
       `<div class="row"><span>${it.cantidad} x ${money(it.precio)}</span><span>${money(it.cantidad * it.precio)}</span></div></div>`
     ).join('')
 
-    // Ticket térmico 58 mm (SAT Q22): una sola columna, angosto.
+    // Ticket térmico 80 mm (SAT Q22): una sola columna.
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${recibo.numero}</title>
     <style>
-      @page { size: 58mm auto; margin: 0; }
+      @page { size: 80mm auto; margin: 0; }
       *{box-sizing:border-box}
-      body{width:58mm;margin:0;padding:2mm 3mm;color:#000;line-height:1.35;
-           font-family:'Courier New',monospace;font-size:11px}
-      h1{font-size:14px;margin:0 0 2px}
+      body{width:80mm;margin:0;padding:3mm 4mm;color:#000;line-height:1.4;
+           font-family:'Courier New',monospace;font-size:12px}
+      h1{font-size:16px;margin:0 0 2px}
       p{margin:1px 0}
       .c{text-align:center}
       .b{font-weight:bold}
-      .big{font-size:13px;font-weight:bold}
-      .sep{border-top:1px dashed #000;margin:5px 0}
-      .row{display:flex;justify-content:space-between;gap:6px}
-      .it{margin:3px 0}
+      .big{font-size:14px;font-weight:bold}
+      .sep{border-top:1px dashed #000;margin:6px 0}
+      .row{display:flex;justify-content:space-between;gap:8px}
+      .it{margin:4px 0}
       .itn{font-weight:bold}
-      .terms{font-size:9px;line-height:1.3;margin-top:2px}
+      .terms{font-size:10px;line-height:1.35;margin-top:2px}
       @media print{body{margin:0}}
     </style></head><body>
     <div class="c">
