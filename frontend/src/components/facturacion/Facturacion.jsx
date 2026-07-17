@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText } from 'lucide-react'
+import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
 
 const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
 const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
@@ -41,6 +41,7 @@ export default function Facturacion() {
   // Post-save dialog
   const [showPostSave, setShowPostSave] = useState(false)
   const [lastFacturaId, setLastFacturaId] = useState(null)
+  const [recibo, setRecibo] = useState(null)   // snapshot para imprimir el recibo
 
   useEffect(() => {
     Promise.all([
@@ -177,6 +178,22 @@ export default function Facturacion() {
       const facturaCreada = res.data.factura
       toast.success(`Factura ${facturaCreada.numero_factura} creada exitosamente`)
       setLastFacturaId(facturaCreada.id_factura)
+      // Snapshot del recibo ANTES de limpiar el formulario (para poder imprimirlo)
+      setRecibo({
+        numero: facturaCreada.numero_factura,
+        fecha: form.fecha_factura,
+        cliente: form.cliente_nombre,
+        telefono: form.cliente_telefono,
+        colegio: colegioNombre,
+        items: detalles.map(d => ({
+          nombre: productos.find(p => String(p.id_producto) === String(d.id_producto))?.nombre || 'Producto',
+          talla: d.talla_individual,
+          cantidad: parseInt(d.cantidad) || 0,
+          precio: parseFloat(d.precio_unitario) || 0,
+        })),
+        subtotal, descuento, domicilio: valorDomicilio,
+        total: totalConDomicilio, abono, saldo,
+      })
       setShowPostSave(true)
       setDetalles([])
       setForm(f => ({
@@ -213,6 +230,78 @@ export default function Facturacion() {
   }
 
   const colegioNombre = colegios.find(c => String(c.id_colegio) === String(form.id_colegio))?.nombre || ''
+
+  // === IMPRIMIR RECIBO (reusa el patrón window.open + @media print del proyecto) ===
+  const imprimirRecibo = () => {
+    if (!recibo) return
+    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '', web: '' }
+    try { empresa = { ...empresa, ...(JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || {}) } } catch { /* usa default */ }
+    const web = empresa.web || 'ralozcolsas.com'
+    const money = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
+
+    const w = window.open('', '_blank')
+    if (!w) { toast.error('Habilita las ventanas emergentes para imprimir el recibo'); return }
+
+    const itemsHTML = recibo.items.map(it =>
+      `<tr><td>${it.nombre}</td><td class="c">${it.talla}</td><td class="c">${it.cantidad}</td>` +
+      `<td class="r">${money(it.precio)}</td><td class="r">${money(it.cantidad * it.precio)}</td></tr>`
+    ).join('')
+
+    w.document.write(`<!DOCTYPE html><html><head><title>Recibo ${recibo.numero}</title>
+    <style>
+      *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;margin:22px;color:#222;font-size:13px}
+      .head{text-align:center;border-bottom:3px solid #FFC107;padding-bottom:10px;margin-bottom:12px}
+      .head h1{color:#1976D2;font-size:22px;margin:0 0 4px}
+      .head p{margin:2px 0;font-size:12px;color:#555}
+      .meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin:12px 0;font-size:12.5px}
+      .meta b{color:#555}
+      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12.5px}
+      th{background:#f5f5f5;padding:7px 8px;text-align:left;border:1px solid #ddd;font-size:11.5px;text-transform:uppercase}
+      td{padding:6px 8px;border:1px solid #eee}
+      td.c{text-align:center} td.r{text-align:right}
+      .tot{margin:10px 0 4px;max-width:280px;margin-left:auto}
+      .tot .row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
+      .tot .big{font-weight:bold;font-size:16px;border-top:1px solid #ccc;padding-top:6px;margin-top:4px}
+      .terms{margin-top:18px;border:1px solid #eee;background:#fafafa;border-radius:8px;padding:12px 14px;font-size:11px;color:#444;line-height:1.55}
+      .terms b{color:#1976D2;font-size:12px}
+      .foot{text-align:center;font-size:11px;color:#999;margin-top:14px}
+      @media print{body{margin:0;padding:14px}}
+    </style></head><body>
+    <div class="head">
+      <h1>${empresa.nombre}</h1>
+      <p>${[empresa.nit ? 'NIT: ' + empresa.nit : '', empresa.direccion, empresa.ciudad].filter(Boolean).join(' · ')}</p>
+      <p>${[empresa.telefono ? 'Cel: ' + empresa.telefono : '', web].filter(Boolean).join(' · ')}</p>
+    </div>
+    <div class="meta">
+      <div><b>Recibo N°:</b> ${recibo.numero}</div>
+      <div><b>Fecha:</b> ${recibo.fecha}</div>
+      <div><b>Cliente:</b> ${recibo.cliente || '—'}</div>
+      ${recibo.telefono ? `<div><b>Teléfono:</b> ${recibo.telefono}</div>` : ''}
+      ${recibo.colegio ? `<div><b>Colegio:</b> ${recibo.colegio}</div>` : ''}
+    </div>
+    <table><thead><tr><th>Producto</th><th class="c">Talla</th><th class="c">Cant.</th><th class="r">V. Unit.</th><th class="r">Total</th></tr></thead>
+    <tbody>${itemsHTML}</tbody></table>
+    <div class="tot">
+      ${recibo.descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(recibo.descuento)}</span></div>` : ''}
+      ${recibo.domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(recibo.domicilio)}</span></div>` : ''}
+      <div class="row big"><span>TOTAL</span><span>${money(recibo.total)}</span></div>
+      ${recibo.abono > 0 ? `<div class="row"><span>Abono</span><span>${money(recibo.abono)}</span></div>` : ''}
+      ${recibo.saldo > 0 ? `<div class="row big" style="color:#c62828"><span>SALDO</span><span>${money(recibo.saldo)}</span></div>` : ''}
+    </div>
+    <div class="terms">
+      <b>GARANTÍA, CAMBIOS Y REEMBOLSOS</b><br>
+      • Garantía por defecto de fabricación: <b>2 meses</b> desde la entrega.<br>
+      • Cambio por talla incorrecta: dentro de <b>5 días hábiles</b>, con la prenda <b>sin uso, limpia y con etiquetas</b>.<br>
+      • Uniformes personalizados o bordados no tienen cambio ni devolución, salvo defecto comprobado.<br>
+      • Los reembolsos se hacen por el mismo medio de pago. <b>Conserva este recibo.</b><br>
+      Términos completos: ${web}/terminos.html
+    </div>
+    <p class="foot">¡Gracias por tu compra! — ${empresa.nombre}</p>
+    </body></html>`)
+    w.document.close()
+    w.focus()
+    w.print()
+  }
 
   return (
     <div className="space-y-6">
@@ -498,6 +587,14 @@ export default function Facturacion() {
               <Save className="text-green-600" size={32} />
             </div>
             <h3 className="text-xl font-bold text-gray-900">Factura Guardada</h3>
+            {recibo && (
+              <button
+                onClick={imprimirRecibo}
+                className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-lg"
+              >
+                <Printer size={18} /> Imprimir recibo
+              </button>
+            )}
             <p className="text-gray-600">¿Quedaron prendas debiendo de esta factura?</p>
             <div className="flex gap-3 justify-center">
               <button
