@@ -47,21 +47,26 @@ publica una versión nueva.
 
 ## 2. Vender y cobrar
 - **Nueva Venta** (`/facturacion`): arma la factura, elige colegio, productos y tallas.
-  Al guardar, aparece **"Imprimir ticket"** → recibo térmico de **80 mm** (impresora
-  SAT Q22) con los datos de la empresa, lo comprado, totales y la garantía.
+  Al guardar, aparece **"Imprimir ticket"** → recibo de **76 mm** (impresora
+  Epson TM-U220PD) con los datos de la empresa, lo comprado, totales y la garantía.
 - **Registrar Pago** (`/pagos`): abona a una factura (total o parcial).
 - **Buscar Facturas** (`/buscar`): encuentra una venta por número o cliente.
 - **Por Cobrar** (`/cuentas`): quién debe y cuánto.
 - **Caja** (`/caja`): abre/cierra caja y ve movimientos del día.
 
-### 2.1 Imprimir el ticket desde el celular
-La SAT Q22 es de **80 mm**. Desde el celular (Android) se imprime con la app **RawBT**:
-1. Empareja la Q22 en **Ajustes → Bluetooth** (PIN típico `0000` o `1234`).
-2. Instala **RawBT** (Play Store, gratis) y en sus ajustes elige la Q22 por Bluetooth.
-3. En el panel toca **"Imprimir ticket"** → elige **RawBT** → sale el recibo.
+### 2.1 Imprimir el ticket (Epson TM-U220PD)
+La impresora de la taquilla es una **Epson TM-U220PD** (matriz de puntos, papel de
+**76 mm**, cinta ERC-38) con **interfaz paralela (LPT)**. Como es paralela, se conecta
+**al computador**, no al celular — así que el ticket **se imprime desde el PC de la taquilla**:
 
-> Desde iPhone esto no funciona (iOS no permite RawBT): imprime desde el computador
-> de la taquilla o usa un Android para la impresora.
+1. En el computador, con la Epson instalada en Windows, abre el panel.
+2. Toca **"Imprimir ticket"** (en Nueva Venta al guardar, o en **Buscar Facturas** al
+   abrir una factura) → elige la impresora **Epson TM-U220** → sale el recibo.
+
+> **¿Vendiste desde el celular?** El ticket no puede salir del celular (la impresora es
+> paralela). Ve al computador → **Buscar Facturas** → abre esa venta → **"Imprimir ticket"**.
+> Ese mismo botón sirve para **reimprimir** si el cliente pierde el recibo.
+> El botón **"Factura A4"** imprime la factura grande tamaño carta (para hoja normal).
 
 ## 3. Pedidos (del pedido a la entrega)
 Menú **Pedidos**:

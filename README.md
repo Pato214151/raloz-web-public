@@ -91,8 +91,8 @@ Ambos comparten el mismo backend Flask. La tienda pública consume los endpoints
 | Ruta | Módulo | Qué hace | Roles |
 |------|--------|----------|-------|
 | `/` | Dashboard | KPIs del día/mes, gráfica ventas 7 días, accesos rápidos | Todos |
-| `/facturacion` | Nueva Venta | Crea facturas en mostrador con cobro inmediato; imprime **ticket térmico 80mm** (SAT Q22) | Admin, Vendedor, Cajero |
-| `/buscar` | Buscar Facturas | Busca, edita, anula, reactiva facturas; registra pagos | Todos |
+| `/facturacion` | Nueva Venta | Crea facturas en mostrador con cobro inmediato; imprime **ticket 76mm** (Epson TM-U220PD) | Admin, Vendedor, Cajero |
+| `/buscar` | Buscar Facturas | Busca, edita, anula, reactiva facturas; registra pagos; reimprime **ticket 76mm** o **factura A4** | Todos |
 | `/pagos` | Registrar Pago | Registra abonos a facturas existentes | Admin, Cajero |
 | `/stock` | Stock Actual | Inventario por colegio/talla, ajustes, historial | Admin, Vendedor |
 | `/fabricacion/stock` | Stock Fabricación | Prendas pendientes de fabricar por colegio | Admin, Vendedor |

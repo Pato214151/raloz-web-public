@@ -124,8 +124,9 @@ ENTRA: POST /api/facturas {id_colegio, cliente_*, detalles[{id_producto, talla_i
 5. abono > 0 → Pago; si es EFECTIVO y hay CajaDiaria ABIERTA → MovimientoCaja INGRESO
 6. Auditoría + upsert de Cliente (por teléfono, acumula totales)
 SALE: 201 {factura: to_dict_full()}   estado: PAGADA si abono cubre todo, si no PENDIENTE
-7. El frontend ofrece "Imprimir ticket" → recibo térmico 80 mm (SAT Q22) con empresa,
-   ítems, totales y términos de garantía (client-side, window.print; no toca backend)
+7. El frontend ofrece "Imprimir ticket" → recibo 76 mm (Epson TM-U220, matriz de
+   puntos, paralela → se imprime desde el PC) con empresa, ítems, totales y garantía
+   (client-side, window.print; no toca backend). Reimprimible desde BuscarFacturas
 ```
 
 Entrega posterior: `POST /api/prendas/<id>/entregar` (una por una) marca la PrendaPendiente
@@ -212,7 +213,7 @@ clientes vía `utils/whatsapp_notify.py` → Graph API de Meta.
 
 **PWA (app instalable):** el panel se instala en el celular (standalone, sin tienda de apps) desde `raloz-web.onrender.com`. Archivos en `frontend/public/`: `manifest.webmanifest` (shortcuts a Vender/Facturas/WhatsApp/Stock/Gastos/Reportes) + `sw.js` + íconos. El service worker **nunca cachea `/api/*`** (JWT/datos en vivo); navegaciones red-primero, assets cache-primero; subir `CACHE_VERSION` para forzar update. Se registra en `main.jsx` solo en producción y recarga solo al activar una versión nueva. Flask sirve `sw.js`/manifest como archivos reales (catch-all comprueba `os.path.isfile`).
 
-**Ticket térmico (POS):** tras crear una venta, `Facturacion.jsx › imprimirRecibo()` abre una ventana de impresión con layout **80 mm** (impresora **SAT Q22**): datos de empresa (`localStorage.raloz_empresa`), ítems, totales/abono/saldo y términos de garantía. Desde el celular se imprime vía la app **RawBT** por Bluetooth. Es distinto del PDF de factura que se manda por correo (ese va por el webhook con ReportLab).
+**Ticket POS:** tras crear una venta, `Facturacion.jsx › imprimirRecibo()` abre una ventana de impresión con layout **76 mm** (impresora **Epson TM-U220PD / M188D**: matriz de puntos, papel 76mm, **interfaz paralela LPT**): datos de empresa (`localStorage.raloz_empresa`), ítems, totales/abono/saldo y términos de garantía. Al ser **paralela se imprime desde el computador** (driver de Windows), NO desde el celular. `BuscarFacturas.jsx › imprimirTicket()` reimprime el mismo ticket 76mm desde una factura guardada (para ventas hechas en el celular o reimpresos). Es distinto del PDF de factura que se manda por correo (ese va por el webhook con ReportLab).
 
 | Ruta | Componente | Endpoints que usa | Rol |
 |---|---|---|---|

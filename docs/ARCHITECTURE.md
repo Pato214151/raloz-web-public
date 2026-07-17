@@ -298,7 +298,9 @@ cd backend && python backup_db.py
 - **Installable admin PWA:** the React panel installs to a phone's home screen
   (manifest + service worker in `frontend/public/`); the SW never caches `/api/*`
   (JWT/live data), registers only in production, and auto-reloads on new versions.
-- **80mm thermal POS ticket:** `Facturacion.jsx › imprimirRecibo()` prints a
-  client-side receipt (company data, items, totals, warranty terms) to a SAT Q22;
-  from a phone it prints via the RawBT Android app over Bluetooth.
+- **76mm POS ticket:** `Facturacion.jsx › imprimirRecibo()` prints a client-side
+  receipt (company data, items, totals, warranty terms) to an Epson TM-U220PD
+  (dot-matrix, parallel/LPT) — printed from the taquilla PC, not the phone.
+  `BuscarFacturas.jsx › imprimirTicket()` reprints the same ticket from a saved
+  invoice, so a phone-made sale prints from the PC and reprints are trivial.
 ```
