@@ -247,12 +247,12 @@ export default function Facturacion() {
       `<div class="row"><span>${it.cantidad} x ${money(it.precio)}</span><span>${money(it.cantidad * it.precio)}</span></div></div>`
     ).join('')
 
-    // Ticket térmico 80 mm (SAT Q22): una sola columna.
+    // Ticket 76 mm (Epson TM-U220, matriz de puntos): una sola columna, monoespaciada.
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${recibo.numero}</title>
     <style>
-      @page { size: 80mm auto; margin: 0; }
+      @page { size: 76mm auto; margin: 0; }
       *{box-sizing:border-box}
-      body{width:80mm;margin:0;padding:3mm 4mm;color:#000;line-height:1.4;
+      body{width:76mm;margin:0;padding:2mm 3mm;color:#000;line-height:1.4;
            font-family:'Courier New',monospace;font-size:12px}
       h1{font-size:16px;margin:0 0 2px}
       p{margin:1px 0}
