@@ -29,73 +29,69 @@ const menuGroups = [
     ],
   },
   {
-    groupId: 'pedidos',
-    label: 'Pedidos',
-    items: [
-      { path: '/pedidos-online',    label: 'Centro de Pedidos', icon: ShoppingCart, roles: ['administrador', 'vendedor']            },
-      { path: '/fabricacion',      label: 'Fabricación',       icon: Scissors,    roles: ['administrador', 'vendedor']          },
-      { path: '/empaque',          label: 'Empaque',            icon: PackageCheck, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/pendientes',        label: 'Por Entregar',       icon: Clock,       roles: ['administrador', 'vendedor']          },
-    ],
-  },
-  {
     groupId: 'ventas',
     label: 'Ventas',
     items: [
       { path: '/vender',      label: 'Nueva Venta',     icon: ShoppingCart, roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/buscar',      label: 'Buscar Facturas', icon: Search,       roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/pagos',       label: 'Registrar Pago',  icon: CreditCard,   roles: ['administrador', 'cajero']            },
-      { path: '/ventas',      label: 'Hoja de Ventas',  icon: TrendingUp,   roles: ['administrador', 'vendedor']          },
-      { path: '/cuentas',     label: 'Por Cobrar',     icon: AlertCircle,  roles: ['administrador', 'vendedor']          },
+      { path: '/cuentas',     label: 'Por Cobrar',      icon: AlertCircle,  roles: ['administrador', 'vendedor']          },
       { path: '/clientes',    label: 'Clientes',        icon: Users,        roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
-    groupId: 'operaciones',
-    label: 'Operaciones',
+    // Una sola entrada: la pantalla Operaciones ya junta Pedidos Web,
+    // Fabricación, Stock Fab, Empaque y Por Entregar en pestañas.
+    groupId: 'pedidos',
+    label: 'Pedidos y Entregas',
     items: [
-      { path: '/operaciones', label: 'Operaciones', icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/operaciones', label: 'Pedidos y Entregas', icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {
     groupId: 'inventario',
     label: 'Inventario',
     items: [
-      { path: '/stock',               label: 'Stock Actual',       icon: Activity,   roles: ['administrador', 'vendedor'] },
-      { path: '/publicaciones',       label: 'Publicaciones',     icon: Megaphone,  roles: ['administrador']             },
-      { path: '/automatizacion',      label: 'Automatización',    icon: Zap,        roles: ['administrador']             },
-      { path: '/precios',             label: 'Precios Colegios',  icon: DollarSign, roles: ['administrador']             },
-      { path: '/ordenes-produccion',  label: 'Órdenes Prod.',    icon: Scissors,   roles: ['administrador']            },
-      { path: '/fabricacion/stock',   label: 'Stock Fabricación', icon: Package,    roles: ['administrador']            },
+      { path: '/stock',               label: 'Stock Actual',        icon: Activity,   roles: ['administrador', 'vendedor'] },
+      { path: '/precios',             label: 'Precios Colegios',    icon: DollarSign, roles: ['administrador']             },
+      { path: '/ordenes-produccion',  label: 'Órdenes de Producción', icon: Scissors, roles: ['administrador']           },
     ],
   },
   {
     groupId: 'finanzas',
-    label: 'Finanzas',
+    label: 'Dinero',
     items: [
-      { path: '/gastos',    label: 'Gastos',   icon: Wallet,    roles: ['administrador', 'cajero']            },
-      { path: '/caja',      label: 'Caja',    icon: BookOpen,  roles: ['administrador', 'cajero']            },
-      { path: '/reportes',  label: 'Reportes', icon: BarChart3, roles: ['administrador']                   },
+      { path: '/caja',      label: 'Caja',           icon: BookOpen,   roles: ['administrador', 'cajero']   },
+      { path: '/gastos',    label: 'Gastos',         icon: Wallet,     roles: ['administrador', 'cajero']   },
+      { path: '/reportes',  label: 'Reportes',       icon: BarChart3,  roles: ['administrador']             },
+      { path: '/ventas',    label: 'Hoja de Ventas', icon: TrendingUp, roles: ['administrador', 'vendedor'] },
     ],
   },
-    {
+  {
     groupId: 'comunicacion',
     label: 'Comunicación',
     items: [
       { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/escribir-cliente', label: 'Escribir a cliente', icon: Search, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/avisos',   label: 'Avisos', icon: Megaphone, roles: ['administrador'] },
-      { path: '/leads',    label: 'Leads',     icon: MessageSquare, roles: ['administrador', 'vendedor'] },
-      { path: '/citas',   label: 'Citas',     icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/citas',    label: 'Citas',    icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/leads',    label: 'Leads',    icon: MessageSquare, roles: ['administrador', 'vendedor']           },
+      { path: '/avisos',   label: 'Avisos',   icon: Megaphone,     roles: ['administrador']                       },
+    ],
+  },
+  {
+    groupId: 'tienda',
+    label: 'Tienda online',
+    items: [
+      { path: '/publicaciones',  label: 'Publicaciones',  icon: Megaphone, roles: ['administrador'] },
+      { path: '/automatizacion', label: 'Automatización', icon: Zap,       roles: ['administrador'] },
     ],
   },
   {
     groupId: 'ajustes',
     label: 'Ajustes',
     items: [
-      { path: '/usuarios',      label: 'Usuarios',  icon: UserCog,       roles: ['administrador']                        },
-      { path: '/configuracion', label: 'Colegios', icon: Settings,      roles: ['administrador']                       },
-      { path: '/tareas',        label: 'Tareas',   icon: ListTodo,      roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/configuracion', label: 'Colegios', icon: Settings, roles: ['administrador']                        },
+      { path: '/usuarios',      label: 'Usuarios', icon: UserCog,  roles: ['administrador']                        },
+      { path: '/tareas',        label: 'Tareas',   icon: ListTodo, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
 ]
@@ -131,11 +127,11 @@ const PAGE_TITLES = {
   '/usuarios':              'Usuarios',
   '/configuracion':          'Configuración',
   '/tareas':                'Tareas',
-  '/operaciones':           'Operaciones',
+  '/operaciones':           'Pedidos y Entregas',
 }
 
 // Grupos que arrancan colapsados por defecto
-const DEFAULT_COLLAPSED = ['pedidos', 'inventario', 'finanzas', 'comunicacion', 'ajustes']
+const DEFAULT_COLLAPSED = ['inventario', 'finanzas', 'comunicacion', 'tienda', 'ajustes']
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
