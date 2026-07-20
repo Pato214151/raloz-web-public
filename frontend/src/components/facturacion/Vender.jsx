@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -250,6 +251,12 @@ export default function Vender() {
 
       {/* ===== Columna de productos ===== */}
       <div className="lg:flex-1 lg:min-w-0 lg:overflow-y-auto lg:pr-1">
+        {/* Enlace de escape al modo clásico */}
+        <div className="flex justify-end mb-1">
+          <Link to="/facturacion" className="text-xs text-gray-400 hover:text-blue-600 underline underline-offset-2">
+            Modo clásico
+          </Link>
+        </div>
         {/* Colegios */}
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin">
           {colegios.map(c => (

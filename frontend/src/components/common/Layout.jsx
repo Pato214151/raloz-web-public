@@ -42,8 +42,7 @@ const menuGroups = [
     groupId: 'ventas',
     label: 'Ventas',
     items: [
-      { path: '/vender',      label: 'Vender ✨',        icon: ShoppingCart, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/facturacion', label: 'Nueva Venta',     icon: FileText,     roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/vender',      label: 'Nueva Venta',     icon: ShoppingCart, roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/buscar',      label: 'Buscar Facturas', icon: Search,       roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/pagos',       label: 'Registrar Pago',  icon: CreditCard,   roles: ['administrador', 'cajero']            },
       { path: '/ventas',      label: 'Hoja de Ventas',  icon: TrendingUp,   roles: ['administrador', 'vendedor']          },
@@ -104,8 +103,8 @@ const menuGroups = [
 // Mapeo ruta → título para el header dinámico
 const PAGE_TITLES = {
   '/':                      'Dashboard',
-  '/facturacion':           'Nueva Venta',
-  '/vender':                'Vender',
+  '/facturacion':           'Nueva Venta (clásica)',
+  '/vender':                'Nueva Venta',
   '/buscar':                'Buscar Facturas',
   '/pagos':                 'Registrar Pago',
   '/ventas':                'Hoja de Ventas',
