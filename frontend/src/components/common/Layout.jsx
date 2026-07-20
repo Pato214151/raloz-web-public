@@ -7,8 +7,17 @@ import {
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
   ShoppingCart, Scissors, Truck, Activity, ChevronRight,   MessageCircle, CalendarClock, MessageSquare,
-  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap,
+  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap, Home,
 } from 'lucide-react'
+
+// ─── Barra inferior (solo móvil): accesos directos a lo más usado ──
+const bottomNavItems = [
+  { path: '/',            label: 'Inicio', icon: Home,          roles: ['administrador', 'vendedor', 'cajero'] },
+  { path: '/facturacion', label: 'Vender', icon: FileText,      roles: ['administrador', 'vendedor', 'cajero'] },
+  { path: '/stock',       label: 'Stock',  icon: Activity,      roles: ['administrador', 'vendedor']           },
+  { path: '/whatsapp',    label: 'Chat',   icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
+  { path: '/caja',        label: 'Caja',   icon: BookOpen,      roles: ['administrador', 'cajero']             },
+]
 
 // ─── Grupos de navegación reorganizados ─────────────────────────
 const menuGroups = [
@@ -391,11 +400,47 @@ export default function Layout() {
 
         {/* Contenido */}
         <div className="flex-1 overflow-auto">
-          <div className="p-4 lg:p-6 max-w-screen-2xl mx-auto">
+          <div className="p-4 pb-24 lg:p-6 lg:pb-6 max-w-screen-2xl mx-auto">
             <Outlet />
           </div>
         </div>
       </main>
+
+      {/* ── Barra inferior de navegación (solo móvil) ──────────────── */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200
+                   flex items-stretch justify-around px-1"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {bottomNavItems
+          .filter(i => i.roles.includes(usuario?.rol))
+          .map(item => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.path === '/'}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-lg transition-colors ${
+                  isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className="relative">
+                    <item.icon size={22} strokeWidth={isActive ? 2.4 : 2} />
+                    {item.path === '/whatsapp' && waNoLeidos > 0 && (
+                      <span className="absolute -top-1.5 -right-2 bg-green-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center">
+                        {waNoLeidos > 9 ? '9+' : waNoLeidos}
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+      </nav>
     </div>
   )
 }
