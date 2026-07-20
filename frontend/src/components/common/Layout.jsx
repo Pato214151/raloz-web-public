@@ -13,7 +13,7 @@ import {
 // ─── Barra inferior (solo móvil): accesos directos a lo más usado ──
 const bottomNavItems = [
   { path: '/',            label: 'Inicio', icon: Home,          roles: ['administrador', 'vendedor', 'cajero'] },
-  { path: '/facturacion', label: 'Vender', icon: FileText,      roles: ['administrador', 'vendedor', 'cajero'] },
+  { path: '/vender',      label: 'Vender', icon: ShoppingCart,  roles: ['administrador', 'vendedor', 'cajero'] },
   { path: '/stock',       label: 'Stock',  icon: Activity,      roles: ['administrador', 'vendedor']           },
   { path: '/whatsapp',    label: 'Chat',   icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
   { path: '/caja',        label: 'Caja',   icon: BookOpen,      roles: ['administrador', 'cajero']             },
@@ -42,6 +42,7 @@ const menuGroups = [
     groupId: 'ventas',
     label: 'Ventas',
     items: [
+      { path: '/vender',      label: 'Vender ✨',        icon: ShoppingCart, roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/facturacion', label: 'Nueva Venta',     icon: FileText,     roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/buscar',      label: 'Buscar Facturas', icon: Search,       roles: ['administrador', 'vendedor', 'cajero'] },
       { path: '/pagos',       label: 'Registrar Pago',  icon: CreditCard,   roles: ['administrador', 'cajero']            },
@@ -104,6 +105,7 @@ const menuGroups = [
 const PAGE_TITLES = {
   '/':                      'Dashboard',
   '/facturacion':           'Nueva Venta',
+  '/vender':                'Vender',
   '/buscar':                'Buscar Facturas',
   '/pagos':                 'Registrar Pago',
   '/ventas':                'Hoja de Ventas',

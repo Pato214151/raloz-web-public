@@ -5,6 +5,7 @@ import Login from './components/auth/Login'
 import Layout from './components/common/Layout'
 import Dashboard from './components/dashboard/Dashboard'
 import Facturacion from './components/facturacion/Facturacion'
+import Vender from './components/facturacion/Vender'
 import BuscarFacturas from './components/facturacion/BuscarFacturas'
 import Pagos from './components/pagos/Pagos'
 import StockView from './components/stock/StockView'
@@ -69,6 +70,7 @@ export default function App() {
         }>
           <Route index element={<Dashboard />} />
           <Route path="facturacion" element={<Facturacion />} />
+          <Route path="vender" element={<Vender />} />
           <Route path="buscar" element={<BuscarFacturas />} />
           <Route path="pagos" element={<Pagos />} />
           <Route path="stock" element={<StockView />} />
