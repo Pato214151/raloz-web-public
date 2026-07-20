@@ -377,6 +377,11 @@ export default function Layout() {
             <Menu size={18} />
           </button>
 
+          {/* Marca (solo móvil) */}
+          <div className="lg:hidden w-6 h-6 bg-amber-400 rounded-md flex items-center justify-center shrink-0">
+            <span className="text-slate-900 font-black text-[11px] leading-none">R</span>
+          </div>
+
           {/* Título dinámico */}
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-sm font-semibold text-gray-900 truncate">{pageTitle}</h1>
