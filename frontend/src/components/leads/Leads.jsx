@@ -161,7 +161,7 @@ export default function Leads() {
             const origenInfo = ORIGEN_LABEL[lead.origen]
             const OrigenIcon = origenInfo?.icon || MessageSquare
             return (
-              <div key={lead.id}
+              <div key={lead.id_lead}
                 className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
 
                 {/* Header: origen + estado */}
@@ -188,14 +188,14 @@ export default function Leads() {
                   {/* Acción rápida siguiente estado */}
                   {lead.estado !== 'descartado' && (
                     <button
-                      onClick={() => cambiarEstado(lead.id, ESTADOS_SIGUIENTE[lead.estado])}
+                      onClick={() => cambiarEstado(lead.id_lead, ESTADOS_SIGUIENTE[lead.estado])}
                       className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 whitespace-nowrap shrink-0">
                       {SIGUIENTE_LABEL[lead.estado]}
                     </button>
                   )}
                   {lead.estado === 'descartado' && (
                     <button
-                      onClick={() => cambiarEstado(lead.id, 'pendiente')}
+                      onClick={() => cambiarEstado(lead.id_lead, 'pendiente')}
                       className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 whitespace-nowrap shrink-0">
                       Reabrir
                     </button>
@@ -238,7 +238,7 @@ export default function Leads() {
                   {Object.entries(ESTADO_STYLE).map(([est, cls]) => (
                     <button
                       key={est}
-                      onClick={() => cambiarEstado(lead.id, est)}
+                      onClick={() => cambiarEstado(lead.id_lead, est)}
                       className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg transition border ${
                         lead.estado === est
                           ? `${cls} border-transparent`

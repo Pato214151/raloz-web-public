@@ -5,7 +5,7 @@
  *  - assets estáticos  -> cache primero (Vite les pone hash en el nombre, así que es seguro)
  * Sube CACHE_VERSION para forzar que todos los clientes bajen los archivos nuevos.
  */
-const CACHE_VERSION = 'raloz-panel-v2';
+const CACHE_VERSION = 'raloz-panel-v3';
 const APP_SHELL = '/';
 
 // ── Notificaciones push (nuevo mensaje de WhatsApp, etc.) ──────────
@@ -66,7 +66,11 @@ self.addEventListener('fetch', (event) => {
   // Nunca tocar la API (auth/JWT, datos en vivo)
   if (url.pathname.startsWith('/api/')) return;
 
-  // Navegaciones (rutas de la SPA): red primero, respaldo a la caché
+  const sinConexion = () =>
+    new Response('Sin conexión', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+
+  // Navegaciones (rutas de la SPA): red primero, respaldo a la caché.
+  // SIEMPRE debe resolver a un Response (si no, el navegador lanza un error).
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -75,7 +79,9 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_VERSION).then((c) => c.put(APP_SHELL, copy)).catch(() => {});
           return res;
         })
-        .catch(async () => (await caches.match(request)) || (await caches.match(APP_SHELL)))
+        .catch(async () =>
+          (await caches.match(request)) || (await caches.match(APP_SHELL)) || sinConexion()
+        )
     );
     return;
   }
@@ -91,7 +97,7 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => cached);
+        .catch(() => cached || sinConexion());
       return cached || network;
     })
   );
