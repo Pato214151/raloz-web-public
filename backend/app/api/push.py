@@ -24,7 +24,8 @@ push_bp = Blueprint('push', __name__)
 
 
 def _vapid():
-    priv = os.getenv('VAPID_PRIVATE_KEY', '').strip()
+    # La privada es un PEM multilínea; se admite pegada en una sola línea con "\n".
+    priv = os.getenv('VAPID_PRIVATE_KEY', '').strip().replace('\\n', '\n')
     pub = os.getenv('VAPID_PUBLIC_KEY', '').strip()
     sub = os.getenv('VAPID_SUBJECT', 'mailto:jramirezramirez2005@gmail.com').strip()
     return priv, pub, sub
