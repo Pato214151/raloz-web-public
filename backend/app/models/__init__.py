@@ -33,6 +33,7 @@ from app.models.aviso import Aviso
 from app.models.regla_auto import ReglaAuto
 from app.models.promocion import Promocion
 from app.models.suscriptor import Suscriptor
+from app.models.push_subscription import PushSubscription
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -43,5 +44,5 @@ __all__ = [
     'PedidoFabricacion', 'StockPendienteFabricacion', 'TokenRevocado',
     'MovimientoInventario', 'OrdenProduccion',
     'WaConversacion', 'WaMensaje', 'Cita', 'Lead', 'ConfigSitio', 'Aviso',
-    'ReglaAuto', 'Promocion', 'Suscriptor',
+    'ReglaAuto', 'Promocion', 'Suscriptor', 'PushSubscription',
 ]

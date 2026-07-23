@@ -5,8 +5,38 @@
  *  - assets estáticos  -> cache primero (Vite les pone hash en el nombre, así que es seguro)
  * Sube CACHE_VERSION para forzar que todos los clientes bajen los archivos nuevos.
  */
-const CACHE_VERSION = 'raloz-panel-v1';
+const CACHE_VERSION = 'raloz-panel-v2';
 const APP_SHELL = '/';
+
+// ── Notificaciones push (nuevo mensaje de WhatsApp, etc.) ──────────
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+  const title = data.title || 'RALOZ';
+  const options = {
+    body: data.body || '',
+    icon: '/pwa-192.png',
+    badge: '/pwa-192.png',
+    tag: data.tag || 'raloz',
+    renotify: true,
+    data: { url: data.url || '/whatsapp' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/whatsapp';
+  event.waitUntil(
+    (async () => {
+      const clientsArr = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const c of clientsArr) {
+        if ('focus' in c) { c.navigate(url); return c.focus(); }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })()
+  );
+});
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -168,6 +168,7 @@ def create_app(config_name=None):
     from app.api.whatsapp_inbox import wa_inbox_bp
     from app.api.citas import citas_bp
     from app.api.leads import leads_bp
+    from app.api.push import push_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
@@ -193,6 +194,7 @@ def create_app(config_name=None):
     app.register_blueprint(wa_inbox_bp, url_prefix='/api/wa')
     app.register_blueprint(citas_bp, url_prefix='/api/citas')
     app.register_blueprint(leads_bp, url_prefix='/api/leads')
+    app.register_blueprint(push_bp, url_prefix='/api/push')
 
     # ── Config de conexión (timeout de red explícito a Supabase) ──
     # pool_pre_ping ya está activo; connect_args agrega timeout de red.

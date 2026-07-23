@@ -386,6 +386,20 @@ MIGRACIONES = [
             "ON CONFLICT (clave) DO NOTHING",
         ],
     },
+    {
+        'version': '0024',
+        'descripcion': 'Suscripciones Web Push del panel (notificaciones de WhatsApp)',
+        'sql': [
+            "CREATE TABLE IF NOT EXISTS push_subscriptions ("
+            "  id SERIAL PRIMARY KEY,"
+            "  endpoint TEXT UNIQUE NOT NULL,"
+            "  p256dh TEXT NOT NULL,"
+            "  auth TEXT NOT NULL,"
+            "  usuario VARCHAR(80),"
+            "  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")",
+        ],
+    },
 ]
 
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download } from 'lucide-react'
+import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download, Bell } from 'lucide-react'
+import { activarNotificaciones, estadoNotificaciones } from '../../services/push'
 
 // ── Error boundary: aísla fallos de render ──
 // Evita que un solo mensaje/chat problemático tumbe toda la bandeja.
@@ -267,6 +268,19 @@ export default function WhatsApp() {
   const [panelMovil, setPanelMovil] = useState('lista')
 
   const [descargando, setDescargando] = useState(false)
+  const [notif, setNotif] = useState(estadoNotificaciones())
+  const [activandoNotif, setActivandoNotif] = useState(false)
+
+  const activarNotif = async () => {
+    setActivandoNotif(true)
+    try {
+      const r = await activarNotificaciones()
+      if (r.ok) { toast.success('Notificaciones activadas ✅'); setNotif('granted') }
+      else toast.error(r.motivo || 'No se pudieron activar')
+    } finally {
+      setActivandoNotif(false)
+    }
+  }
   const descargarTodo = async () => {
     setDescargando(true)
     try {
@@ -426,6 +440,13 @@ export default function WhatsApp() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={activarNotif} disabled={activandoNotif}
+              title={notif === 'granted' ? 'Notificaciones activas' : 'Activar notificaciones'}
+              className={`p-2 rounded-full transition disabled:opacity-50 hover:bg-gray-100 ${
+                notif === 'granted' ? 'text-[#25d366]' : 'text-[#8696a0] hover:text-[#075e54]'
+              }`}>
+              <Bell size={16} className={activandoNotif ? 'animate-pulse' : ''} fill={notif === 'granted' ? 'currentColor' : 'none'} />
+            </button>
             <button onClick={descargarTodo} disabled={descargando} title="Descargar historial (CSV)"
               className="p-2 text-[#8696a0] hover:text-[#075e54] hover:bg-gray-100 rounded-full transition disabled:opacity-50">
               {descargando ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />}

@@ -81,6 +81,17 @@ def log_mensaje():
         media_b64=data.get('media_b64'),
     ))
     db.session.commit()
+
+    # Notificación push al panel cuando escribe un cliente (best-effort)
+    if direccion == 'in':
+        try:
+            from app.api.push import enviar_push_a_todos
+            nombre_cli = conv.nombre or chat_id
+            preview = (texto or '📎 Adjunto')[:120]
+            enviar_push_a_todos(f'💬 {nombre_cli}', preview, url='/whatsapp')
+        except Exception:
+            pass
+
     return jsonify({'ok': True, 'modo': conv.modo or 'bot'})
 
 
