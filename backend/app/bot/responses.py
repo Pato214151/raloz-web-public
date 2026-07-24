@@ -198,8 +198,12 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
         partes.append("✅ *Disponible ahora:*\n" + "\n".join(disp))
     if encargo:
         partes.append("\n🧵 *Por encargo* (demora aprox. 1 a 2 meses):\n" + "\n".join(encargo))
-    partes.append("\n🛒 Compra en línea 👉 " + TIENDA_URL +
-                  "\n_O acércate al punto y trae al niñ@ para medir la talla._")
+    _slug = {1: "marillac", 2: "adventista", 3: "manyanet"}.get(id_colegio, "")
+    _link = TIENDA_URL + ("/?colegio=" + _slug if _slug else "")
+    partes.append("\n🛒 *Cómpralo en línea* 👉 " + _link +
+                  "\nPagas por *link seguro* (MercadoPago), te *reservamos la talla* "
+                  "y te llega la *factura* al correo. 🧾"
+                  "\n_O acércate al punto para medir la talla._")
     return "\n".join(partes)
 
 
@@ -444,13 +448,13 @@ RESP_HORARIOS = (
 )
 
 RESP_COMPRAR = (
-    "🛒 *Comprar uniformes*\n\n"
-    "Es muy fácil:\n"
-    "1. Entra a nuestra tienda 👉 " + TIENDA_URL + "\n"
-    "2. Elige tu *colegio*\n"
-    "3. Selecciona la *prenda* y la *talla*\n"
-    "4. Paga seguro con *MercadoPago*\n\n"
-    "Apenas confirmes tu pago, *te avisaré por aquí* el estado de tu pedido. 📦"
+    "🛒 *Comprar uniformes en línea*\n\n"
+    "Es rápido y seguro:\n"
+    "1. Entra 👉 " + TIENDA_URL + "\n"
+    "2. Elige tu *colegio*, *prenda* y *talla*\n"
+    "3. Paga con *MercadoPago* (link seguro)\n\n"
+    "✅ Te *reservamos la talla*, te llega la *factura* al correo y "
+    "te aviso por aquí el estado de tu pedido. 📦"
 )
 
 # ─── SOPORTE ───────────────────────────────────────────────────────
