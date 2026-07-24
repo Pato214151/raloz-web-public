@@ -14,6 +14,10 @@ class WaConversacion(db.Model):
     no_leidos = db.Column(db.Integer, default=0)
     # 'bot' = el bot responde solo · 'humano' = un asesor tomó el chat (bot en silencio)
     modo = db.Column(db.String(10), default='bot')
+    # Estado de la máquina de conversación del bot (antes en memoria; ahora en BD
+    # para que funcione con varios workers de gunicorn). Ej: 'menu', 'garantia_fotos'.
+    bot_estado = db.Column(db.String(40), default='menu')
+    bot_datos = db.Column(db.Text)   # JSON con datos temporales de la conversación
 
     def to_dict(self):
         return {

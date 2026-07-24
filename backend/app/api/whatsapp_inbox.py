@@ -47,38 +47,25 @@ def _upsert_conversacion(chat_id, nombre=None):
     return conv
 
 
-# ─────────────────────── Endpoints para el BOT ───────────────────────
-@wa_inbox_bp.route('/log', methods=['POST'])
-def log_mensaje():
-    """El bot registra un mensaje (entrante o saliente). Devuelve el modo actual
-    de la conversación para que el bot sepa si debe responder o quedarse callado."""
-    if not _bot_autorizado():
-        return jsonify({'error': 'no autorizado'}), 401
-
-    data = request.get_json(silent=True) or {}
-    chat_id = (data.get('chat_id') or '').strip()
-    direccion = (data.get('direccion') or 'in').strip()
-    texto = data.get('texto') or ''
-    autor = data.get('autor') or ('cliente' if direccion == 'in' else 'bot')
-    nombre = data.get('nombre')
-
-    if not chat_id or direccion not in ('in', 'out'):
-        return jsonify({'error': 'chat_id y direccion (in|out) requeridos'}), 400
-
+# ─────────────────────── Registro de mensajes (reutilizable) ───────────
+def registrar_mensaje_inbox(chat_id, direccion, texto='', nombre=None, autor=None,
+                            set_modo=None, media_tipo=None, media_b64=None):
+    """Guarda un mensaje en la bandeja y devuelve el modo actual del chat
+    ('bot' | 'humano'). Se usa tanto desde el endpoint /log (bot externo) como
+    desde el webhook de WhatsApp integrado en el backend — así el bot integrado
+    NO tiene que llamarse a sí mismo por HTTP."""
+    autor = autor or ('cliente' if direccion == 'in' else 'bot')
     conv = _upsert_conversacion(chat_id, nombre)
-    conv.ultimo_mensaje = texto[:500]
+    conv.ultimo_mensaje = (texto or '')[:500]
     conv.ultima_fecha = datetime.utcnow()
     if direccion == 'in':
         conv.no_leidos = (conv.no_leidos or 0) + 1
-    # El bot puede pedir el paso a humano (ej: el cliente pidió un asesor)
-    set_modo = data.get('set_modo')
     if set_modo in ('bot', 'humano'):
         conv.modo = set_modo
 
     db.session.add(WaMensaje(
         chat_id=chat_id, direccion=direccion, texto=texto, autor=autor,
-        media_tipo=data.get('media_tipo'),
-        media_b64=data.get('media_b64'),
+        media_tipo=media_tipo, media_b64=media_b64,
     ))
     db.session.commit()
 
@@ -92,7 +79,34 @@ def log_mensaje():
         except Exception:
             pass
 
-    return jsonify({'ok': True, 'modo': conv.modo or 'bot'})
+    return conv.modo or 'bot'
+
+
+# ─────────────────────── Endpoints para el BOT ───────────────────────
+@wa_inbox_bp.route('/log', methods=['POST'])
+def log_mensaje():
+    """El bot registra un mensaje (entrante o saliente). Devuelve el modo actual
+    de la conversación para que el bot sepa si debe responder o quedarse callado."""
+    if not _bot_autorizado():
+        return jsonify({'error': 'no autorizado'}), 401
+
+    data = request.get_json(silent=True) or {}
+    chat_id = (data.get('chat_id') or '').strip()
+    direccion = (data.get('direccion') or 'in').strip()
+
+    if not chat_id or direccion not in ('in', 'out'):
+        return jsonify({'error': 'chat_id y direccion (in|out) requeridos'}), 400
+
+    modo = registrar_mensaje_inbox(
+        chat_id, direccion,
+        texto=data.get('texto') or '',
+        nombre=data.get('nombre'),
+        autor=data.get('autor'),
+        set_modo=data.get('set_modo'),
+        media_tipo=data.get('media_tipo'),
+        media_b64=data.get('media_b64'),
+    )
+    return jsonify({'ok': True, 'modo': modo})
 
 
 @wa_inbox_bp.route('/modo/<chat_id>', methods=['GET'])

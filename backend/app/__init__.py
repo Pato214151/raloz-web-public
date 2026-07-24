@@ -166,6 +166,7 @@ def create_app(config_name=None):
     from app.api.tienda import tienda_bp
     from app.api.ordenes_produccion import ordenes_produccion_bp
     from app.api.whatsapp_inbox import wa_inbox_bp
+    from app.api.whatsapp_webhook import wa_webhook_bp
     from app.api.citas import citas_bp
     from app.api.leads import leads_bp
     from app.api.push import push_bp
@@ -192,6 +193,7 @@ def create_app(config_name=None):
     app.register_blueprint(tienda_bp, url_prefix='/api/tienda')
     app.register_blueprint(ordenes_produccion_bp, url_prefix='/api/ordenes-produccion')
     app.register_blueprint(wa_inbox_bp, url_prefix='/api/wa')
+    app.register_blueprint(wa_webhook_bp, url_prefix='/api/whatsapp')
     app.register_blueprint(citas_bp, url_prefix='/api/citas')
     app.register_blueprint(leads_bp, url_prefix='/api/leads')
     app.register_blueprint(push_bp, url_prefix='/api/push')

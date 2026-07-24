@@ -400,6 +400,14 @@ MIGRACIONES = [
             ")",
         ],
     },
+    {
+        'version': '0025',
+        'descripcion': 'Estado del bot de WhatsApp en la BD (bot integrado en el backend)',
+        'sql': [
+            "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS bot_estado VARCHAR(40) DEFAULT 'menu'",
+            "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS bot_datos TEXT",
+        ],
+    },
 ]
 
 
