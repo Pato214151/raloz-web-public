@@ -698,7 +698,11 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     # Agradecimiento: un "gracias" exacto siempre se contesta cortés (sin tocar
     # el estado). La versión "de pasada" ("me llegó roto, gracias") solo aplica
     # fuera de un flujo activo, para no interrumpir una garantía/cita/etc.
-    if t in _GRACIAS or ("gracias" in t and estado == "menu"):
+    # "gracias" cuenta como agradecimiento puro solo si el mensaje es CORTO y no
+    # trae una intención de compra. Si es un pedido largo (ej. "necesito comprar
+    # ... muchas gracias") NO debe tragarse la intención real: se deja pasar.
+    if t in _GRACIAS or ("gracias" in t and estado == "menu"
+                         and len(t.split()) <= 6 and not _tiene(t, _COMPRAR)):
         return Respuesta(RESP_AGRADECIMIENTO)
     if _tiene(t, _ASESOR):
         _guardar_lead(chat_id, texto)
