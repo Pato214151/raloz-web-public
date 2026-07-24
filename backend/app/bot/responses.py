@@ -199,7 +199,8 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
     if encargo:
         partes.append("\n🧵 *Por encargo* (demora aprox. 1 a 2 meses):\n" + "\n".join(encargo))
     _slug = {1: "marillac", 2: "adventista", 3: "manyanet"}.get(id_colegio, "")
-    _link = TIENDA_URL + ("/?colegio=" + _slug if _slug else "")
+    _prenda_q = ("&prenda=" + prod.split()[0]) if (_slug and prod) else ""
+    _link = TIENDA_URL + ("/?colegio=" + _slug + _prenda_q if _slug else "")
     partes.append("\n🛒 *Cómpralo en línea* 👉 " + _link +
                   "\nPagas por *link seguro* (MercadoPago), te *reservamos la talla* "
                   "y te llega la *factura* al correo. 🧾"
