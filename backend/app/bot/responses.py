@@ -613,7 +613,8 @@ _PALABRAS_SALUDO = {"hola", "holaa", "holaaa", "holi", "holis", "ola", "hey", "h
                     "hello", "buenas", "buenos", "buena", "bueno", "buen", "dia",
                     "dias", "tarde", "tardes", "noche", "noches", "como", "estas",
                     "esta", "va", "tal", "saludos", "cordial", "cordiales",
-                    "senores", "señores", "y", "el"}
+                    "senores", "señores", "y", "el", "bendiciones", "bendicion",
+                    "feliz", "santo", "santos", "santas", "santa", "estan"}
 
 
 def _es_saludo(t: str) -> bool:
@@ -898,10 +899,15 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return Respuesta(RESP_QUIENES + VOLVER)
     if t == "2" or _tiene(t, ["pago", "pagos", "tarjeta", "pse", "efecty", "abono"]):
         return Respuesta(RESP_PAGOS + VOLVER)
-    if t == "3" or _tiene(t, ["horario", "atendiendo", "atienden", "abierto", "abiertos",
-                              "estan abiert", "estan atend", "que dias", "como llego",
-                              "como llegar", "mapa", "ubicado", "ubicacion", "direccion", "donde quedan",
-                              "donde estan", "abren"]):
+    if t == "3" or _tiene(t, ["horario", "atendiendo", "atienden", "atiende", "atencion",
+                              "abierto", "abiertos", "estan abiert", "estan atend", "que dias",
+                              "como llego", "como llegar", "mapa", "ubicado", "ubicacion",
+                              "direccion", "donde quedan", "donde estan", "donde queda", "abren",
+                              "cierran", "cierre", "hasta que hora", "hasta que horas",
+                              "que hora", "que horas", "a que hora", "a que horas", "de que hora",
+                              "cuando abren", "cuando atienden", "cuando se puede pasar",
+                              "cuando puedo pasar", "cuando puedo ir", "puedo pasar hoy",
+                              "atienden hoy", "atendiendo hoy", "estan atendiendo"]):
         return Respuesta(RESP_HORARIOS + VOLVER)
     # Agendar cita (después de horarios, que es de donde se ofrece)
     if _tiene(t, _CITA):
