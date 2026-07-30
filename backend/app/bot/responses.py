@@ -619,7 +619,8 @@ _PALABRAS_SALUDO = {"hola", "holaa", "holaaa", "holi", "holis", "ola", "hey", "h
                     "dias", "tarde", "tardes", "noche", "noches", "como", "estas",
                     "esta", "va", "tal", "saludos", "cordial", "cordiales",
                     "senores", "señores", "y", "el", "bendiciones", "bendicion",
-                    "feliz", "santo", "santos", "santas", "santa", "estan"}
+                    "feliz", "santo", "santos", "santas", "santa", "estan",
+                    "excelente", "linda", "lindo", "bonito", "bonita"}
 
 
 def _es_saludo(t: str) -> bool:

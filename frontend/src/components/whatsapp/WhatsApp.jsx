@@ -124,6 +124,13 @@ function Media({ id, tipo }) {
       </a>
     )
   }
+  if (tipo === 'audio') {
+    return (
+      <div className="mb-1">
+        <audio controls src={src} className="max-w-[260px] w-[260px]" />
+      </div>
+    )
+  }
   return (
     <div className="mb-1">
       <a href={src} download className="text-xs underline">📎 Descargar archivo</a>

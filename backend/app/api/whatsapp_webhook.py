@@ -83,7 +83,12 @@ def _descargar_media(media_id: str):
         if binf.status_code >= 300 or len(binf.content) > 5_000_000:
             return None, None
         data_url = f'data:{mime};base64,{base64.b64encode(binf.content).decode()}'
-        tipo = 'image' if mime.startswith('image/') else 'document'
+        if mime.startswith('image/'):
+            tipo = 'image'
+        elif mime.startswith('audio/'):
+            tipo = 'audio'
+        else:
+            tipo = 'document'
         return data_url, tipo
     except Exception as e:
         logger.warning('No se pudo descargar media %s: %s', media_id, e)
@@ -152,6 +157,14 @@ def webhook():
     return jsonify({'status': 'ok'}), 200
 
 
+RESP_AUDIO = (
+    "🎧 *Recibí tu nota de voz.* En un momentico una persona la escucha y te "
+    "responde por aquí. 🙌\n\n"
+    "Si prefieres respuesta al instante, también puedes escribirme por *texto* "
+    "(ej: *precio*, *pedido*, *garantía*)."
+)
+
+
 def _procesar_mensaje(msg: dict, nombre: str = None):
     numero = msg.get('from')
     tipo = msg.get('type', 'text')
@@ -177,6 +190,11 @@ def _procesar_mensaje(msg: dict, nombre: str = None):
         texto = doc.get('caption') or doc.get('filename') or '📎 Archivo'
         media_id = doc.get('id')
         contenido = 'otro'
+    elif tipo in ('audio', 'voice'):
+        a = msg.get('audio') or msg.get('voice') or {}
+        texto = '🎤 Nota de voz'
+        media_id = a.get('id')
+        contenido = 'audio'
     else:
         texto = ''
         contenido = 'otro'
@@ -189,6 +207,14 @@ def _procesar_mensaje(msg: dict, nombre: str = None):
 
     if modo == 'humano':
         logger.info('Chat %s en modo humano; el bot no responde.', numero)
+        return
+
+    # Nota de voz: el bot no la entiende, pero la guardó para que la escuches.
+    # Le avisamos al cliente y pasamos el chat a HUMANO (te llega la notificación).
+    if contenido == 'audio':
+        _enviar_texto(numero, RESP_AUDIO)
+        registrar_mensaje_inbox(numero, 'out', RESP_AUDIO, nombre=nombre, autor='bot',
+                                set_modo='humano')
         return
 
     resp = construir_respuesta(numero, texto, contenido)
