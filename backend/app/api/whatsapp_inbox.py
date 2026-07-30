@@ -123,6 +123,8 @@ def consultar_modo(chat_id):
 @rol_requerido('administrador', 'vendedor', 'cajero')
 def listar_conversaciones():
     convs = (WaConversacion.query
+             # Los chats del asistente web (prefijo 'web:') no van en la bandeja de WhatsApp
+             .filter(~WaConversacion.chat_id.like('web:%'))
              .order_by(WaConversacion.ultima_fecha.desc())
              .limit(200).all())
     return jsonify([c.to_dict() for c in convs])

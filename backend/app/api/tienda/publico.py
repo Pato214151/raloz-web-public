@@ -198,6 +198,30 @@ def promociones_publicas():
     return jsonify({'promociones': [p.to_dict() for p in promos]}), 200
 
 
+@tienda_bp.route('/chat', methods=['POST'])
+@limiter.limit("30 per minute")
+def chat_web():
+    """Asistente de chat de la tienda web: reusa el MISMO cerebro del bot de
+    WhatsApp (construir_respuesta). El estado de la conversación se guarda por
+    sesión con el prefijo 'web:' (se filtra de la bandeja de WhatsApp)."""
+    data = request.get_json(silent=True) or {}
+    session_id = (data.get('session_id') or '').strip()[:60]
+    mensaje = (data.get('mensaje') or '').strip()[:1000]
+    if not session_id or not mensaje:
+        return jsonify({'error': 'session_id y mensaje requeridos'}), 400
+    try:
+        from app.bot.responses import construir_respuesta
+        resp = construir_respuesta(f'web:{session_id}', mensaje)
+        return jsonify({
+            'respuesta': resp.texto or '',
+            'handoff': bool(getattr(resp, 'handoff', False)),
+        }), 200
+    except Exception as e:
+        logger.warning('Error en chat web: %s', e)
+        return jsonify({'respuesta': 'Ups, tuve un problemita. Intenta de nuevo '
+                        'o escríbenos por WhatsApp. 🙏'}), 200
+
+
 @tienda_bp.route('/suscripcion', methods=['POST'])
 @limiter.limit("10 per minute")
 def suscribir():
