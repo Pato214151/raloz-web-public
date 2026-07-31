@@ -39,10 +39,13 @@ export default function Vender() {
   const [exito, setExito] = useState(null)         // snapshot de la venta creada
 
   const [pago, setPago] = useState({
-    cliente_nombre: '', cliente_telefono: '', metodo_pago: 'EFECTIVO',
+    cliente_nombre: '', cliente_telefono: '',
+    // Uno o varios pagos (ej. una parte Nequi y otra efectivo)
+    pagos: [{ metodo: 'EFECTIVO', valor: '' }],
     entrega_inmediata: true, domicilio: false, valor_domicilio: '',
-    descuento: '', abono: '',
+    descuento: '',
   })
+  const PAGO_VACIO = { cliente_nombre: '', cliente_telefono: '', pagos: [{ metodo: 'EFECTIVO', valor: '' }], entrega_inmediata: true, domicilio: false, valor_domicilio: '', descuento: '' }
 
   // Carga inicial: lista de colegios
   useEffect(() => {
@@ -124,7 +127,9 @@ export default function Vender() {
   const descuento = parseFloat(pago.descuento) || 0
   const valorDomicilio = pago.domicilio ? (parseFloat(pago.valor_domicilio) || 0) : 0
   const total = Math.max(0, subtotal - descuento) + valorDomicilio
-  const abono = parseFloat(pago.abono) || 0
+  // El abono es la suma de todos los pagos (Nequi + efectivo + …)
+  const pagosValidos = (pago.pagos || []).filter(p => (parseFloat(p.valor) || 0) > 0)
+  const abono = pagosValidos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0)
   const saldo = total - abono
 
   // ---- Cobro ----
@@ -135,16 +140,20 @@ export default function Vender() {
     if (abono > total) { toast.error('El abono no puede ser mayor al total'); return }
 
     setSaving(true)
+    // ¿pago dividido? (Nequi + efectivo, etc.)
+    const dividido = pagosValidos.length > 1
     const payload = {
       id_colegio: colegioId,
       cliente_nombre: pago.cliente_nombre,
       cliente_telefono: pago.cliente_telefono,
       fecha_factura: new Date().toISOString().split('T')[0],
-      metodo_pago: pago.metodo_pago,
+      metodo_pago: dividido ? 'MIXTO' : (pagosValidos[0]?.metodo || 'EFECTIVO'),
       entrega_inmediata: pago.entrega_inmediata,
       domicilio: valorDomicilio,
       descuento,
-      abono,
+      // Si es dividido, el abono va en 0 aquí y cada pago se registra aparte
+      // (con su método) para que la caja y el historial queden correctos.
+      abono: dividido ? 0 : abono,
       detalles: carrito.map(d => ({
         id_producto: parseInt(d.id_producto),
         talla_individual: d.talla_individual,
@@ -156,6 +165,16 @@ export default function Vender() {
     const doPost = async (permitir_sobreventa) => {
       const res = await api.post('/facturas', { ...payload, permitir_sobreventa })
       const f = res.data.factura
+      // Pago dividido: registrar cada método por separado sobre la factura creada
+      if (dividido) {
+        for (const p of pagosValidos) {
+          try {
+            await api.post('/pagos', { id_factura: f.id_factura, valor: parseFloat(p.valor), metodo_pago: p.metodo })
+          } catch (e) {
+            toast.error(`Factura creada, pero no pude registrar el pago ${p.metodo}: ${e.response?.data?.error || ''}`)
+          }
+        }
+      }
       toast.success(`Factura ${f.numero_factura} creada`)
       setExito({
         numero: f.numero_factura,
@@ -167,7 +186,7 @@ export default function Vender() {
       })
       // limpiar
       setCarrito([]); setCheckout(false); setVerCarrito(false)
-      setPago({ cliente_nombre: '', cliente_telefono: '', metodo_pago: 'EFECTIVO', entrega_inmediata: true, domicilio: false, valor_domicilio: '', descuento: '', abono: '' })
+      setPago(PAGO_VACIO)
     }
 
     try {
@@ -558,24 +577,46 @@ function ModalCobro({ pago, setPago, subtotal, descuento, valorDomicilio, total,
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Método de pago</label>
-            <select value={pago.metodo_pago} onChange={e => set('metodo_pago', e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              {METODOS_PAGO.map(m => <option key={m}>{m}</option>)}
-            </select>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Descuento</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input value={pago.descuento} onChange={e => set('descuento', e.target.value)} inputMode="numeric" placeholder="0"
+                className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Descuento</label>
-              <input value={pago.descuento} onChange={e => set('descuento', e.target.value)} inputMode="numeric" placeholder="0"
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          {/* Pagos: uno o varios (ej. una parte Nequi y otra efectivo) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-gray-600">Pago(s)</label>
+              <button type="button" onClick={() => setPago(p => ({ ...p, pagos: [{ ...(p.pagos[0] || { metodo: 'EFECTIVO' }), valor: String(Math.round(total)) }] }))}
+                className="text-xs text-blue-600 font-semibold hover:underline">Pagar todo ({money(total)})</button>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Abono</label>
-              <input value={pago.abono} onChange={e => set('abono', e.target.value)} inputMode="numeric" placeholder="0"
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="space-y-2">
+              {pago.pagos.map((row, i) => (
+                <div key={i} className="flex gap-2">
+                  <select value={row.metodo}
+                    onChange={e => setPago(p => { const r = [...p.pagos]; r[i] = { ...r[i], metodo: e.target.value }; return { ...p, pagos: r } })}
+                    className="w-32 shrink-0 px-2 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {METODOS_PAGO.map(m => <option key={m}>{m}</option>)}
+                  </select>
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <input value={row.valor} inputMode="numeric" placeholder="0"
+                      onChange={e => setPago(p => { const r = [...p.pagos]; r[i] = { ...r[i], valor: e.target.value }; return { ...p, pagos: r } })}
+                      className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  {pago.pagos.length > 1 && (
+                    <button type="button" onClick={() => setPago(p => ({ ...p, pagos: p.pagos.filter((_, j) => j !== i) }))}
+                      className="text-gray-300 hover:text-red-500 px-1" aria-label="Quitar"><X size={16} /></button>
+                  )}
+                </div>
+              ))}
             </div>
+            <button type="button" onClick={() => setPago(p => ({ ...p, pagos: [...p.pagos, { metodo: 'EFECTIVO', valor: '' }] }))}
+              className="mt-2 text-xs text-blue-600 font-semibold flex items-center gap-1 hover:underline">
+              <Plus size={13} /> Dividir pago (otro método)
+            </button>
           </div>
 
           <div className="flex items-center gap-4 pt-1">
@@ -598,7 +639,12 @@ function ModalCobro({ pago, setPago, subtotal, descuento, valorDomicilio, total,
             <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{money(subtotal)}</span></div>
             {descuento > 0 && <div className="flex justify-between text-orange-600"><span>Descuento</span><span>-{money(descuento)}</span></div>}
             {valorDomicilio > 0 && <div className="flex justify-between text-blue-600"><span>Domicilio</span><span>+{money(valorDomicilio)}</span></div>}
-            <div className="flex justify-between font-bold text-gray-800 text-base border-t border-gray-200 pt-1.5"><span>{abono > 0 ? 'Saldo' : 'Total'}</span><span className="text-blue-700">{money(abono > 0 ? saldo : total)}</span></div>
+            <div className="flex justify-between text-gray-600"><span>Total</span><span className="font-semibold">{money(total)}</span></div>
+            {abono > 0 && <div className="flex justify-between text-green-600"><span>Pagado</span><span>{money(abono)}</span></div>}
+            <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-1.5">
+              <span className="text-gray-800">{saldo > 0.5 ? 'Saldo pendiente' : 'Pagado completo'}</span>
+              <span className={saldo > 0.5 ? 'text-red-600' : 'text-green-600'}>{saldo > 0.5 ? money(saldo) : money(total)}</span>
+            </div>
           </div>
 
           <button onClick={onCobrar} disabled={saving}
