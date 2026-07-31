@@ -7,21 +7,9 @@ import {
 } from 'lucide-react'
 import { fotoPrenda } from '../../data/prendasFotos'
 
-const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
-const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 
 const money = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
-
-// Talla individual → grupo (misma tabla que Facturacion)
-const obtenerTallaGrupo = (talla) => {
-  const mapeo = {
-    '4': '4', '6': '6-8', '8': '6-8', '10': '10-12', '12': '10-12',
-    '14': '14-16', '16': '14-16', 'S': 'S-M', 'M': 'S-M', 'L': 'L', 'XL': 'XL',
-    '6-8': '6-8', '8-10': '8-10', '10-12': '10-12', '12-14': '12-14', '14-16': '14-16',
-  }
-  return mapeo[talla] || talla
-}
 
 // Categoría a partir del nombre del producto (para los filtros)
 const categoriaDe = (nombre) => {
@@ -37,12 +25,11 @@ const CATEGORIAS = ['Todos', 'Diario', 'Ed. Física', 'Completos', 'Medias', 'Ot
 
 export default function Vender() {
   const [colegios, setColegios] = useState([])
-  const [productos, setProductos] = useState([])
-  const [precios, setPrecios] = useState({})      // `${id}_${grupo}` -> precio
+  const [productos, setProductos] = useState([])   // del catálogo: {..., tallas:[{talla,precio,stock}]}
   const [colegioId, setColegioId] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [categoria, setCategoria] = useState('Todos')
-  const [loadingPrecios, setLoadingPrecios] = useState(false)
+  const [loadingCatalogo, setLoadingCatalogo] = useState(false)
 
   const [carrito, setCarrito] = useState([])       // {id_producto, nombre, talla_individual, cantidad, precio_unitario}
   const [picker, setPicker] = useState(null)       // producto en selección de talla
@@ -57,48 +44,45 @@ export default function Vender() {
     descuento: '', abono: '',
   })
 
-  // Carga inicial
+  // Carga inicial: lista de colegios
   useEffect(() => {
-    Promise.all([api.get('/colegios'), api.get('/productos')])
-      .then(([col, prod]) => {
+    api.get('/colegios')
+      .then((col) => {
         const cols = col.data.colegios || []
         setColegios(cols)
-        setProductos(prod.data.productos || [])
-        if (cols.length) { setColegioId(String(cols[0].id_colegio)) }
+        if (cols.length) setColegioId(String(cols[0].id_colegio))
       })
-      .catch(() => toast.error('Error cargando datos'))
+      .catch(() => toast.error('Error cargando colegios'))
   }, [])
 
-  const cargarPrecios = useCallback(async (id) => {
-    if (!id) { setPrecios({}); return }
-    setLoadingPrecios(true)
+  // Catálogo del colegio: trae producto + tallas (talla, precio, stock) listas.
+  // Es la MISMA fuente de la tienda, así que medias y completos salen correctos.
+  const cargarCatalogo = useCallback(async (id) => {
+    if (!id) { setProductos([]); return }
+    setLoadingCatalogo(true)
     try {
-      const res = await api.get('/precios', { params: { colegio_id: id, per_page: 500 } })
-      const mapa = {}
-      for (const p of (res.data.precios || [])) mapa[`${p.id_producto}_${p.talla_grupo}`] = p.precio_unitario
-      setPrecios(mapa)
-    } catch { setPrecios({}) }
-    finally { setLoadingPrecios(false) }
+      const res = await api.get(`/tienda/catalogo/${id}`)
+      setProductos(res.data.productos || [])
+    } catch { setProductos([]); toast.error('No pude cargar el catálogo') }
+    finally { setLoadingCatalogo(false) }
   }, [])
 
-  useEffect(() => { cargarPrecios(colegioId) }, [colegioId, cargarPrecios])
+  useEffect(() => { cargarCatalogo(colegioId) }, [colegioId, cargarCatalogo])
 
   const colegioNombre = colegios.find(c => String(c.id_colegio) === String(colegioId))?.nombre || ''
-  const buscarPrecio = (idProd, talla) => precios[`${idProd}_${obtenerTallaGrupo(talla)}`] || 0
 
-  // Productos disponibles para el colegio: los que tienen algún precio
   const productosColegio = useMemo(() => {
-    const idsConPrecio = new Set(Object.keys(precios).map(k => k.split('_')[0]))
-    return productos
-      .filter(p => idsConPrecio.has(String(p.id_producto)))
+    return (productos || [])
+      .filter(p => (p.tallas || []).length > 0)
       .map(p => {
-        // precio "desde" = mínimo de los precios del producto
-        const suyos = Object.entries(precios)
-          .filter(([k]) => k.split('_')[0] === String(p.id_producto))
-          .map(([, v]) => v)
-        return { ...p, precioDesde: suyos.length ? Math.min(...suyos) : 0, categoria: categoriaDe(p.nombre) }
+        const precios = (p.tallas || []).map(t => t.precio).filter(v => v > 0)
+        return {
+          ...p,
+          precioDesde: precios.length ? Math.min(...precios) : 0,
+          categoria: categoriaDe(p.nombre),
+        }
       })
-  }, [productos, precios])
+  }, [productos])
 
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -109,22 +93,22 @@ export default function Vender() {
     })
   }, [productosColegio, busqueda, categoria])
 
-  // Tallas con precio para el producto en selección
-  const tallasDisponibles = useMemo(() => {
-    if (!picker) return []
-    const base = picker.tipo === 'medias' ? TALLAS_MEDIAS : TALLAS_NORMAL
-    return base.filter(t => buscarPrecio(picker.id_producto, t) > 0)
-  }, [picker]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Tallas del producto en selección (ya vienen con precio y stock del catálogo)
+  const tallasDisponibles = useMemo(
+    () => (picker?.tallas || []).filter(t => t.precio > 0),
+    [picker],
+  )
 
   // ---- Carrito ----
-  const agregarAlCarrito = (producto, talla, cantidad) => {
-    const precio = buscarPrecio(producto.id_producto, talla)
+  // tallaObj = { talla, precio, stock } (viene del catálogo)
+  const agregarAlCarrito = (producto, tallaObj, cantidad) => {
+    const talla = tallaObj.talla
     setCarrito(prev => {
       const i = prev.findIndex(x => x.id_producto === producto.id_producto && x.talla_individual === talla)
       if (i >= 0) {
         const n = [...prev]; n[i] = { ...n[i], cantidad: n[i].cantidad + cantidad }; return n
       }
-      return [...prev, { id_producto: producto.id_producto, nombre: producto.nombre, talla_individual: talla, cantidad, precio_unitario: precio }]
+      return [...prev, { id_producto: producto.id_producto, nombre: producto.nombre, talla_individual: talla, cantidad, precio_unitario: tallaObj.precio }]
     })
     toast.success(`${producto.nombre} T${talla} agregada`)
   }
@@ -299,7 +283,7 @@ export default function Vender() {
         </div>
 
         {/* Grid de prendas */}
-        {loadingPrecios ? (
+        {loadingCatalogo ? (
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mt-2">
             {[...Array(6)].map((_, i) => <div key={i} className="h-52 bg-gray-100 rounded-2xl animate-pulse" />)}
           </div>
@@ -374,9 +358,8 @@ export default function Vender() {
       {picker && (
         <PickerTalla
           producto={picker} colegio={colegioNombre} tallas={tallasDisponibles}
-          precioDe={t => buscarPrecio(picker.id_producto, t)}
           onCerrar={() => setPicker(null)}
-          onAgregar={(talla, cant) => { agregarAlCarrito(picker, talla, cant); setPicker(null) }}
+          onAgregar={(tallaObj, cant) => { agregarAlCarrito(picker, tallaObj, cant); setPicker(null) }}
         />
       )}
 
@@ -479,10 +462,10 @@ function CarritoPanel({ carrito, subtotal, total, totalUnidades, onMas, onMenos,
 }
 
 // ─── Modal: elegir talla + cantidad ────────────────────────────────
-function PickerTalla({ producto, colegio, tallas, precioDe, onCerrar, onAgregar }) {
-  const [talla, setTalla] = useState('')
+function PickerTalla({ producto, colegio, tallas, onCerrar, onAgregar }) {
+  const [sel, setSel] = useState(null)   // objeto {talla, precio, stock}
   const [cantidad, setCantidad] = useState(1)
-  const precio = talla ? precioDe(talla) : (producto.precioDesde || 0)
+  const precio = sel ? sel.precio : (producto.precioDesde || 0)
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
       <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
@@ -492,30 +475,42 @@ function PickerTalla({ producto, colegio, tallas, precioDe, onCerrar, onAgregar 
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-gray-800 leading-tight">{producto.nombre}</p>
-            <p className="text-blue-700 font-bold mt-1">{money(precio)}</p>
+            <p className="text-blue-700 font-bold mt-1">{money(precio)}{!sel && ' +'}</p>
           </div>
           <button onClick={onCerrar} className="text-gray-400 p-1"><X size={20} /></button>
         </div>
 
         <div className="p-4 space-y-4">
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Talla</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Elige la talla</p>
             {tallas.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin tallas con precio para este colegio.</p>
+              <p className="text-sm text-gray-400">Este producto no tiene tallas con precio para este colegio.</p>
             ) : (
-              <div className="grid grid-cols-5 gap-2">
-                {tallas.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTalla(t)}
-                    className={`py-2 rounded-lg text-sm font-bold border transition-colors ${
-                      talla === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+              <div className="grid grid-cols-4 gap-2">
+                {tallas.map(t => {
+                  const activa = sel?.talla === t.talla
+                  const sinStock = (t.stock || 0) <= 0
+                  return (
+                    <button
+                      key={t.talla}
+                      onClick={() => setSel(t)}
+                      className={`py-2 rounded-xl text-sm font-bold border transition-colors flex flex-col items-center leading-tight ${
+                        activa ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <span>{t.talla}</span>
+                      <span className={`text-[9px] font-medium ${activa ? 'text-blue-100' : sinStock ? 'text-amber-500' : 'text-gray-400'}`}>
+                        {sinStock ? 'encargo' : `${t.stock} disp`}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
+            )}
+            {sel && (
+              <p className="text-xs text-gray-400 mt-2">
+                {money(sel.precio)} c/u · {(sel.stock || 0) > 0 ? `${sel.stock} en stock` : 'sin stock (queda por encargo/entregar)'}
+              </p>
             )}
           </div>
 
@@ -529,11 +524,11 @@ function PickerTalla({ producto, colegio, tallas, precioDe, onCerrar, onAgregar 
           </div>
 
           <button
-            onClick={() => onAgregar(talla, cantidad)}
-            disabled={!talla}
+            onClick={() => sel && onAgregar(sel, cantidad)}
+            disabled={!sel}
             className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold transition-colors"
           >
-            Agregar {talla ? `· ${money(precio * cantidad)}` : ''}
+            Agregar {sel ? `· ${money(precio * cantidad)}` : ''}
           </button>
         </div>
       </div>
