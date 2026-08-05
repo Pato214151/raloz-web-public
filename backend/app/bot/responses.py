@@ -127,7 +127,9 @@ Respuesta = namedtuple("Respuesta", ["texto", "aviso_admin", "handoff"],
 
 # ─── CONSULTA DE PRECIOS Y STOCK (llama al catálogo del backend) ────
 # id de cada colegio en la base (ver /api/tienda/colegios)
-COLEGIOS = {"marillac": (1, "Marillac"), "adventista": (2, "Adventista"), "manyanet": (3, "Manyanet")}
+COLEGIOS = {"marillac": (1, "Marillac"), "marilac": (1, "Marillac"),
+            "adventista": (2, "Adventista"),
+            "manyanet": (3, "Manyanet"), "manyannet": (3, "Manyanet"), "manyanette": (3, "Manyanet")}
 
 
 def _detectar_colegio(t: str):
@@ -608,7 +610,12 @@ _COMPROBANTE = ["comprobante", "ya pague", "ya pagué", "ya realice el pago",
              "ya consigne", "le consigne", "soporte de pago", "soporte del pago",
              "adjunto el pago", "adjunto comprobante", "envio el comprobante",
              "aqui esta el pago", "aqui el comprobante", "pago realizado",
-             "pantallazo del pago", "pantallazo de pago", "mando el pago", "ya deposite"]
+             "pantallazo del pago", "pantallazo de pago", "mando el pago", "ya deposite",
+             # confirmaciones de transferencia ("ya se te hizo/iso la transferencia")
+             "se te iso", "se te hizo la transfer", "se hizo la transfer", "hice la transfer",
+             "te transferi", "te hice la transfer", "te consigne", "te deposite",
+             "te mande el pago", "mande el pago", "te paso el soporte", "paso el soporte",
+             "mando el soporte", "envio el soporte", "te envio el soporte"]
 _ENVIOS    = ["domicilio", "envios", "hacen envio", "mandan", "a otra ciudad",
              "fuera de bogota", "contraentrega"]
 
