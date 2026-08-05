@@ -128,7 +128,8 @@ Respuesta = namedtuple("Respuesta", ["texto", "aviso_admin", "handoff"],
 # ─── CONSULTA DE PRECIOS Y STOCK (llama al catálogo del backend) ────
 # id de cada colegio en la base (ver /api/tienda/colegios)
 COLEGIOS = {"marillac": (1, "Marillac"), "marilac": (1, "Marillac"),
-            "adventista": (2, "Adventista"),
+            "marrilla": (1, "Marillac"), "marilla": (1, "Marillac"), "marillac": (1, "Marillac"),
+            "adventista": (2, "Adventista"), "adbentista": (2, "Adventista"),
             "manyanet": (3, "Manyanet"), "manyannet": (3, "Manyanet"), "manyanette": (3, "Manyanet")}
 
 
@@ -180,7 +181,8 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
     etiqueta_gen = {"nino": " · niño", "nina": " · niña"}.get(genero, "")
     nota = ""
     if prod:
-        filtrados = [e for e in encontrados if prod in _norm(e[0])]
+        terminos = _terminos_producto(prod)
+        filtrados = [e for e in encontrados if any(term in _norm(e[0]) for term in terminos)]
         if filtrados:
             encontrados = filtrados
         else:
@@ -245,6 +247,24 @@ def _detectar_producto(t: str):
         if p in t:
             return p
     return None
+
+
+# Sinónimos coloquiales → términos que SÍ aparecen en los nombres reales.
+# Ej: la gente dice "sudadera" y se refiere al uniforme de Educación Física.
+_SINONIMOS = {
+    "sudadera": ["fisica", "pantaloneta"],
+    "buzo": ["camiseta ed", "chaqueta ed", "fisica"],
+    "saco": ["chaqueta", "chaleco"],
+    "camibuso": ["camiseta"],
+    "camisilla": ["camiseta"],
+    "falda": ["jardinera"],
+    "sueter": ["chaqueta", "chaleco"],
+}
+
+
+def _terminos_producto(prod):
+    """Términos de búsqueda para un producto detectado (aplica sinónimos)."""
+    return _SINONIMOS.get(prod, [prod]) if prod else None
 
 
 # Frases que indican que el cliente NO está seguro de la talla
@@ -545,6 +565,13 @@ RESP_ASESOR = (
     "Cuéntanos mientras tanto en qué te podemos ayudar."
 )
 
+RESP_LLAMAR = (
+    "📞 *Llámanos o escríbenos por WhatsApp:*\n"
+    f"{WHATSAPP_HUMANO}\n\n"
+    f"🕘 {HORARIO}\n"
+    "O escribe *asesor* y una persona te atiende por aquí mismo. 🙌"
+)
+
 RESP_AGRADECIMIENTO = "¡Con gusto! 😊 Si necesitas algo más, escribe *menú*."
 
 # Confirmación de comprobante de pago (el archivo queda en la bandeja del asesor)
@@ -588,6 +615,12 @@ _SALUDOS   = {"menu", "menu principal", "hola", "inicio", "buenas", "buenos dias
 _GRACIAS   = {"gracias", "muchas gracias", "ok", "okay", "listo", "vale",
              "perfecto", "de acuerdo", "dale", "graciass"}
 _ASESOR    = ["asesor", "humano", "persona", "agente", "hablar con", "alguien", "vendedor"]
+# Piden un número / quieren llamar (frases específicas para no chocar con "número de pedido")
+_LLAMAR    = ["numero para llamar", "numero donde llamar", "donde puedo llamar", "numero donde",
+             "un numero donde", "me pasas el numero", "me das el numero", "me das un numero",
+             "pasame el numero", "numero de contacto", "numero telefonico", "numero de telefono",
+             "puedo llamar", "quiero llamar", "para llamar", "los llamo", "telefono de contacto",
+             "linea de atencion", "numero de la tienda", "numero del local"]
 _GARANTIA  = ["garantia", "descosi", "descoc", "costura", "bordado", "daño", "dano",
              "roto", "rota", "rasg", "falla", "fallo", "mala postura", "deshil",
              "arreglo", "arreglar", "se daño", "defect"]
@@ -717,6 +750,9 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     if t in _GRACIAS or ("gracias" in t and estado == "menu"
                          and len(t.split()) <= 6 and not _tiene(t, _COMPRAR)):
         return Respuesta(RESP_AGRADECIMIENTO)
+    # Piden un número para llamar → damos el teléfono (funciona en cualquier estado)
+    if _tiene(t, _LLAMAR):
+        return Respuesta(RESP_LLAMAR)
     if _tiene(t, _ASESOR):
         _guardar_lead(chat_id, texto)
         return Respuesta(RESP_ASESOR, handoff=True)
