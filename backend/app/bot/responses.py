@@ -145,6 +145,22 @@ def _detectar_talla(t: str):
     return m.group(1).upper() if m else None
 
 
+_PALABRAS_DIA = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
+                 "hoy", "manana", "pasado", "proxim", "entrante", "fin de semana",
+                 "esta semana", "este ", "el finde", "festivo"]
+
+
+def _parece_dia(t: str) -> bool:
+    """True si el texto parece indicar un día (para no guardar una frase suelta
+    como si fuera la fecha de la cita)."""
+    if any(w in t for w in _PALABRAS_DIA):
+        return True
+    # una fecha con número: "8 de julio", "el 15", "15/7"
+    if re.search(r"\b\d{1,2}\b", t):
+        return True
+    return False
+
+
 def _coincide_genero(nombre_prenda: str, genero: str) -> bool:
     """¿La prenda corresponde al género pedido? 'ambos' muestra todo; las prendas
     sin marca de género (Blazer, Chaleco...) se muestran para niño y para niña."""
@@ -885,9 +901,14 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return Respuesta(CITA_PEDIR_DIA)
 
     if estado == "cita_dia":
-        if "domingo" in t or "festivo" in t:
-            return Respuesta("😕 Los domingos y festivos no atendemos. Dime otro día (lunes a sábado).")
-        set_dato(chat_id, "cita_dia", texto.strip())
+        if "domingo" in t:
+            return Respuesta("😕 Los domingos no atendemos. Dime otro día (lunes a sábado).")
+        # Si escribió una frase suelta o una pregunta en vez de un día, re-preguntamos
+        # (así no queda "hasta qué hora podría confirmarle..." guardado como el día).
+        if not _parece_dia(t):
+            return Respuesta("📆 Escríbeme *solo el día*, por ejemplo: *mañana*, *el jueves* "
+                             "o *18 de julio*. 🙂")
+        set_dato(chat_id, "cita_dia", texto.strip()[:60])
         set_estado(chat_id, "cita_hora")
         return Respuesta(CITA_PEDIR_HORA)
 
