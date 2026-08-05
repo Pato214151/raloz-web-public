@@ -621,6 +621,18 @@ _LLAMAR    = ["numero para llamar", "numero donde llamar", "donde puedo llamar",
              "pasame el numero", "numero de contacto", "numero telefonico", "numero de telefono",
              "puedo llamar", "quiero llamar", "para llamar", "los llamo", "telefono de contacto",
              "linea de atencion", "numero de la tienda", "numero del local"]
+# Horarios / ubicación (reusable dentro y fuera del flujo de precios)
+_HORARIOS  = ["horario", "atendiendo", "atienden", "atiende", "atencion",
+             "abierto", "abiertos", "estan abiert", "estan atend", "que dias", "que dia",
+             "como llego", "como llegar", "mapa", "ubicado", "ubicacion",
+             "direccion", "donde quedan", "donde estan", "donde queda", "abren",
+             "cierran", "cierre", "hasta que hora", "hasta que horas",
+             "que hora", "que horas", "a que hora", "a que horas", "de que hora",
+             "cuando abren", "cuando atienden", "cuando se puede pasar",
+             "cuando puedo pasar", "cuando puedo ir", "puedo pasar hoy",
+             "atienden hoy", "atendiendo hoy", "estan atendiendo",
+             "ir al local", "se puede ir", "puedo ir al local", "estan en el local",
+             "estan hoy", "el local", "al local hoy"]
 _GARANTIA  = ["garantia", "descosi", "descoc", "costura", "bordado", "daño", "dano",
              "roto", "rota", "rasg", "falla", "fallo", "mala postura", "deshil",
              "arreglo", "arreglar", "se daño", "defect"]
@@ -801,7 +813,16 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         if _tiene(t, _DUDA_TALLA):
             reset_estado(chat_id)
             return Respuesta(RESP_DUDA_TALLA + VOLVER)
-        talla = _detectar_talla(t) or texto.strip().upper()
+        talla_det = _detectar_talla(t)
+        # Si no escribió una talla sino otra pregunta (horarios/cita), no la
+        # tomamos como talla: la respondemos para no quedar pegados.
+        if not talla_det:
+            if _tiene(t, _HORARIOS):
+                return Respuesta(RESP_HORARIOS + VOLVER)
+            if _tiene(t, _CITA):
+                set_estado(chat_id, "cita_nombre")
+                return Respuesta(CITA_PEDIR_NOMBRE)
+        talla = talla_det or texto.strip().upper()
         set_dato(chat_id, "precio_talla", talla)
         set_estado(chat_id, "precio_genero")
         return Respuesta(PEDIR_GENERO_PRECIO)
@@ -810,6 +831,11 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     if estado == "precio_genero":
         genero = _detectar_genero(t)
         if not genero:
+            if _tiene(t, _HORARIOS):
+                return Respuesta(RESP_HORARIOS + VOLVER)
+            if _tiene(t, _CITA):
+                set_estado(chat_id, "cita_nombre")
+                return Respuesta(CITA_PEDIR_NOMBRE)
             return Respuesta("¿Para *niño*, *niña* o *ambos*?")
         idc = int(get_dato(chat_id, "precio_col_id", "0"))
         nombre = get_dato(chat_id, "precio_col_nom", "")
@@ -843,6 +869,12 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
             talla_prev = get_dato(chat_id, "precio_talla_val", "")
             if talla_prev:
                 return _mostrar_precios(chat_id, idc, nombre, talla_prev, gen)
+        # No es talla ni cambio de prenda: ¿pregunta por horarios o quiere cita?
+        if _tiene(t, _HORARIOS):
+            return Respuesta(RESP_HORARIOS + VOLVER)
+        if _tiene(t, _CITA):
+            set_estado(chat_id, "cita_nombre")
+            return Respuesta(CITA_PEDIR_NOMBRE)
         return Respuesta("🔁 Escríbeme la *talla* que quieres ver (ej: *10*, *S*, *M*), "
                          "o *menú* para volver al inicio.")
 
@@ -952,15 +984,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return Respuesta(RESP_QUIENES + VOLVER)
     if t == "2" or _tiene(t, ["pago", "pagos", "tarjeta", "pse", "efecty", "abono"]):
         return Respuesta(RESP_PAGOS + VOLVER)
-    if t == "3" or _tiene(t, ["horario", "atendiendo", "atienden", "atiende", "atencion",
-                              "abierto", "abiertos", "estan abiert", "estan atend", "que dias",
-                              "como llego", "como llegar", "mapa", "ubicado", "ubicacion",
-                              "direccion", "donde quedan", "donde estan", "donde queda", "abren",
-                              "cierran", "cierre", "hasta que hora", "hasta que horas",
-                              "que hora", "que horas", "a que hora", "a que horas", "de que hora",
-                              "cuando abren", "cuando atienden", "cuando se puede pasar",
-                              "cuando puedo pasar", "cuando puedo ir", "puedo pasar hoy",
-                              "atienden hoy", "atendiendo hoy", "estan atendiendo"]):
+    if t == "3" or _tiene(t, _HORARIOS):
         return Respuesta(RESP_HORARIOS + VOLVER)
     # Agendar cita (después de horarios, que es de donde se ofrece)
     if _tiene(t, _CITA):
