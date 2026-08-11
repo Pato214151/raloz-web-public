@@ -3,12 +3,16 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Image as ImageIcon, X, Loader2, Eye, EyeOff } from 'lucide-react'
 
-// Reduce la imagen en el navegador (máx 900px, JPEG) para no guardar fotos pesadas.
-async function fileADataUrl(file, maxW = 900, quality = 0.82) {
+// Reduce la imagen en el navegador (máx 1000px, JPEG) para no guardar fotos pesadas.
+async function fileADataUrl(file, maxW = 1000, quality = 0.82) {
+  // Solo imágenes normales (JPG/PNG/WebP). PDF/HEIC no se pueden dibujar en <img>.
+  if (!file.type || !file.type.startsWith('image/')) {
+    const e = new Error('no-imagen'); e.code = 'no-imagen'; throw e
+  }
   const img = await new Promise((res, rej) => {
     const i = new Image()
     i.onload = () => res(i)
-    i.onerror = rej
+    i.onerror = () => rej(new Error('load'))
     i.src = URL.createObjectURL(file)
   })
   const scale = Math.min(1, maxW / img.width)
@@ -49,8 +53,12 @@ export default function PromocionesPanel() {
     try {
       const url = await fileADataUrl(file)
       setForm((f) => ({ ...f, foto: url }))
-    } catch {
-      toast.error('No se pudo procesar la imagen')
+    } catch (err) {
+      if (err?.code === 'no-imagen') {
+        toast.error('Debe ser una imagen JPG o PNG (no PDF ni HEIC).')
+      } else {
+        toast.error('No pude procesar esa imagen. Prueba con una foto JPG o PNG más liviana.')
+      }
     }
   }
 
