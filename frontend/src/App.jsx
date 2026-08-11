@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext'
 import { Toaster } from 'react-hot-toast'
 import Login from './components/auth/Login'
 import Layout from './components/common/Layout'
+import DucklabBadge from './components/common/DucklabBadge'
 import Dashboard from './components/dashboard/Dashboard'
 import Facturacion from './components/facturacion/Facturacion'
 import Vender from './components/facturacion/Vender'
@@ -57,6 +58,7 @@ export default function App() {
 
   return (
     <>
+      <DucklabBadge />
       <Toaster position="top-right" toastOptions={{
         duration: 3000,
         style: { borderRadius: '10px', background: '#333', color: '#fff' },

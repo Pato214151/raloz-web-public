@@ -294,7 +294,7 @@ TIENDA_URL      = "https://ralozcolsas.com"
 WHATSAPP_HUMANO = "+57 321 341 2903"   # ✏️ confirma el número real del asesor
 EMAIL           = "ralozcol@outlook.com"
 DIRECCION       = "Centro Comercial San Andresito de la 68 · Local M14, Bogotá"
-HORARIO         = "Lunes y sábado de 10:00 a.m. a 6:00 p.m."
+HORARIO         = "Lunes y sábado de 10:00 a.m. a 5:00 p.m."
 MAPS_URL        = "https://maps.app.goo.gl/NPvai43RV9VGNpqj8"   # ubicación del local
 
 # Páginas legales de la tienda (deben coincidir con lo publicado en la web)
@@ -360,14 +360,14 @@ CITA_PEDIR_DIA = (
     "Atendemos con cita cualquier día *excepto domingos y festivos*."
 )
 CITA_PEDIR_HORA = (
-    "🕘 ¿A qué *hora*? Entre las *10:00 a.m. y 6:00 p.m.*\n"
+    "🕘 ¿A qué *hora*? Entre las *10:00 a.m. y 5:00 p.m.*\n"
     "(ej: *11 am*, *2 pm*)"
 )
 CITA_PEDIR_COLEGIO = "🏫 Por último, ¿de qué *colegio* es el uniforme? (Marillac, Adventista o Manyanet)"
 
 
 def _parse_hora(t: str):
-    """Devuelve la hora (10-18) si es válida dentro del horario, o None."""
+    """Devuelve la hora (10-17) si es válida dentro del horario, o None."""
     m = re.search(r"(\d{1,2})", t)
     if not m:
         return None
@@ -376,7 +376,7 @@ def _parse_hora(t: str):
         h += 12
     if "am" in t and h == 12:
         h = 0
-    return h if 10 <= h <= 18 else None
+    return h if 10 <= h <= 17 else None
 
 
 def _crear_cita(chat_id: str, nombre: str, dia: str, hora: str, colegio: str) -> bool:
@@ -914,7 +914,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
 
     if estado == "cita_hora":
         if _parse_hora(t) is None:
-            return Respuesta("🕘 Dame una hora entre las *10 a.m. y 6 p.m.* (ej: *11 am*, *2 pm*).")
+            return Respuesta("🕘 Dame una hora entre las *10 a.m. y 5 p.m.* (ej: *11 am*, *2 pm*).")
         set_dato(chat_id, "cita_hora", texto.strip())
         set_estado(chat_id, "cita_colegio")
         return Respuesta(CITA_PEDIR_COLEGIO)
