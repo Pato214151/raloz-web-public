@@ -3,29 +3,44 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Image as ImageIcon, X, Loader2, Eye, EyeOff } from 'lucide-react'
 
+// Lee el archivo tal cual como data URL (sin procesar). Respaldo a prueba de balas.
+function fileRawDataUrl(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader()
+    fr.onload = () => res(fr.result)
+    fr.onerror = () => rej(new Error('read'))
+    fr.readAsDataURL(file)
+  })
+}
+
 // Reduce la imagen en el navegador (máx 1000px, JPEG) para no guardar fotos pesadas.
+// Si algo falla al redimensionar, guarda la imagen tal cual (mientras no sea enorme).
 async function fileADataUrl(file, maxW = 1000, quality = 0.82) {
-  // Solo imágenes normales (JPG/PNG/WebP). PDF/HEIC no se pueden dibujar en <img>.
   if (!file.type || !file.type.startsWith('image/')) {
     const e = new Error('no-imagen'); e.code = 'no-imagen'; throw e
   }
-  // HEIC/HEIF (fotos de iPhone): el navegador no las decodifica en <img>.
   if (/image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name || '')) {
     const e = new Error('heic'); e.code = 'heic'; throw e
   }
-  const img = await new Promise((res, rej) => {
-    const i = new Image()
-    i.onload = () => res(i)
-    i.onerror = () => rej(new Error('load'))
-    i.src = URL.createObjectURL(file)
-  })
-  const scale = Math.min(1, maxW / img.width)
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(img.width * scale)
-  canvas.height = Math.round(img.height * scale)
-  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-  URL.revokeObjectURL(img.src)
-  return canvas.toDataURL('image/jpeg', quality)
+  try {
+    // createImageBitmap decodifica el archivo de forma más robusta que <img>.
+    const bmp = await createImageBitmap(file)
+    const scale = Math.min(1, maxW / bmp.width)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bmp.width * scale))
+    canvas.height = Math.max(1, Math.round(bmp.height * scale))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('sin-contexto')
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    bmp.close?.()
+    const url = canvas.toDataURL('image/jpeg', quality)
+    if (url && url.length > 100) return url
+    throw new Error('vacio')
+  } catch (e) {
+    // Respaldo: subir el archivo original si no es muy pesado (≤ 3 MB).
+    if (file.size <= 3_000_000) return await fileRawDataUrl(file)
+    const err = new Error('pesada'); err.code = 'pesada'; throw err
+  }
 }
 
 const VACIO = { titulo: '', texto: '', foto: null }
@@ -62,8 +77,10 @@ export default function PromocionesPanel() {
         toast.error('Debe ser una imagen JPG o PNG (no PDF).')
       } else if (err?.code === 'heic') {
         toast.error('Es una foto HEIC de iPhone. Tómale una captura de pantalla y sube esa, o guárdala como JPG.', { duration: 6000 })
+      } else if (err?.code === 'pesada') {
+        toast.error('La imagen es muy pesada. Usa una más liviana (menos de 3 MB).')
       } else {
-        toast.error('No pude procesar esa imagen. Prueba con una foto JPG o PNG más liviana.')
+        toast.error('No pude procesar esa imagen. Prueba con una foto JPG o PNG.')
       }
     }
   }
