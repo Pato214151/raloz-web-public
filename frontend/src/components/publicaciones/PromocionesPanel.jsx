@@ -9,6 +9,10 @@ async function fileADataUrl(file, maxW = 1000, quality = 0.82) {
   if (!file.type || !file.type.startsWith('image/')) {
     const e = new Error('no-imagen'); e.code = 'no-imagen'; throw e
   }
+  // HEIC/HEIF (fotos de iPhone): el navegador no las decodifica en <img>.
+  if (/image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name || '')) {
+    const e = new Error('heic'); e.code = 'heic'; throw e
+  }
   const img = await new Promise((res, rej) => {
     const i = new Image()
     i.onload = () => res(i)
@@ -55,7 +59,9 @@ export default function PromocionesPanel() {
       setForm((f) => ({ ...f, foto: url }))
     } catch (err) {
       if (err?.code === 'no-imagen') {
-        toast.error('Debe ser una imagen JPG o PNG (no PDF ni HEIC).')
+        toast.error('Debe ser una imagen JPG o PNG (no PDF).')
+      } else if (err?.code === 'heic') {
+        toast.error('Es una foto HEIC de iPhone. Tómale una captura de pantalla y sube esa, o guárdala como JPG.', { duration: 6000 })
       } else {
         toast.error('No pude procesar esa imagen. Prueba con una foto JPG o PNG más liviana.')
       }
