@@ -581,6 +581,14 @@ RESP_ASESOR = (
     "Cuéntanos mientras tanto en qué te podemos ayudar."
 )
 
+RESP_EMPRESA = (
+    "🏢 *Dotación empresarial e institucional*\n\n"
+    "¡Con gusto! Sí hacemos uniformes y dotación para *empresas e instituciones* "
+    "(y también uniformes de colegio).\n\n"
+    "Te comunico con un *asesor* que maneja esos pedidos para darte una cotización "
+    "a la medida. En un momento te responde por aquí. 🙌"
+)
+
 RESP_LLAMAR = (
     "📞 *Llámanos o escríbenos por WhatsApp:*\n"
     f"{WHATSAPP_HUMANO}\n\n"
@@ -631,6 +639,12 @@ _SALUDOS   = {"menu", "menu principal", "hola", "inicio", "buenas", "buenos dias
 _GRACIAS   = {"gracias", "muchas gracias", "ok", "okay", "listo", "vale",
              "perfecto", "de acuerdo", "dale", "graciass"}
 _ASESOR    = ["asesor", "humano", "persona", "agente", "hablar con", "alguien", "vendedor"]
+# Consultas de empresa / dotación institucional (ventas grandes → asesor)
+_EMPRESA   = ["empresa", "empresas", "dotacion", "dotaciones", "constructora",
+             "institucional", "institucion", "corporativ", "por referencia",
+             "para mi empresa", "de una empresa", "somos una empresa", "mi negocio",
+             "para una empresa", "uniforme empresarial", "uniformes empresarial",
+             "logo de la empresa", "pasadia", "camisetas para la empresa"]
 # Piden un número / quieren llamar (frases específicas para no chocar con "número de pedido")
 _LLAMAR    = ["numero para llamar", "numero donde llamar", "donde puedo llamar", "numero donde",
              "un numero donde", "me pasas el numero", "me das el numero", "me das un numero",
@@ -784,6 +798,10 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     if _tiene(t, _ASESOR):
         _guardar_lead(chat_id, texto)
         return Respuesta(RESP_ASESOR, handoff=True)
+    # Consultas de EMPRESA / dotación (ventas grandes) → directo a un asesor
+    if _tiene(t, _EMPRESA):
+        _guardar_lead(chat_id, texto)
+        return Respuesta(RESP_EMPRESA, handoff=True)
 
     # ── 4) Estás dentro del flujo de GARANTÍA (esperando fotos) ───
     if estado == "garantia_fotos":
