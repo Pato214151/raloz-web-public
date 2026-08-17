@@ -346,8 +346,8 @@ RESP_DUDA_TALLA = (
 
 # ─── AGENDAR CITA ──────────────────────────────────────────────────
 _CITA = ["cita", "agendar", "agenda", "reservar", "reserva", "separar hora", "turno",
-         "vernos", "visitar", "pasar el", "puedo ir", "puedo pasar", "ir el",
-         "medir", "tomar medida", "probar", "probarme", "entre semana", "cita previa"]
+         "vernos", "visitar", "visita", "la visita", "pasar el", "puedo ir", "puedo pasar",
+         "ir el", "medir", "tomar medida", "probar", "probarme", "entre semana", "cita previa"]
 
 CITA_PEDIR_NOMBRE = (
     "📅 *Agendar cita*\n\n"
@@ -1071,20 +1071,28 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
 
     # Precios / comprar → flujo interactivo (colegio → talla → género → stock)
     prod_detectado = _detectar_producto(t)
-    if t == "4" or _tiene(t, _COMPRAR) or prod_detectado:
+    idc_det, nombre_det = _detectar_colegio(t)
+    # Nombrar un colegio (aunque no diga "precio") también arranca la cotización.
+    if t == "4" or _tiene(t, _COMPRAR) or prod_detectado or idc_det:
         if _tiene(t, _DUDA_TALLA):
             return Respuesta(RESP_DUDA_TALLA + VOLVER)
         if prod_detectado:
             set_dato(chat_id, "precio_producto", prod_detectado)
-        idc, nombre = _detectar_colegio(t)
-        if idc:
-            return _guardar_colegio_y_pedir_siguiente(chat_id, idc, nombre, _detectar_talla(t))
+        if idc_det:
+            return _guardar_colegio_y_pedir_siguiente(chat_id, idc_det, nombre_det, _detectar_talla(t))
         set_estado(chat_id, "precio_colegio")
         return Respuesta(PEDIR_COLEGIO_PRECIO)
 
     # Duda de talla escrita libremente (ej: "no sé si es 6 u 8")
     if _tiene(t, _DUDA_TALLA):
         return Respuesta(RESP_DUDA_TALLA + VOLVER)
+
+    # Saludo con nombre/título ("Señora Nelly, buenas tardes") → mostrar el menú
+    # en vez de "no entendí" (contiene un saludo claro).
+    if _tiene(t, ["buenas tardes", "buenos dias", "buenas noches", "buen dia",
+                  "buena tarde", "buena noche", "buenas", "hola"]):
+        reset_estado(chat_id)
+        return Respuesta(MENU_PRINCIPAL)
 
     # ── 7) No reconocido → menú ───────────────────────────────────
     return Respuesta(RESP_NO_ENTIENDO)
