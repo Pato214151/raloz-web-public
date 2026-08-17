@@ -474,6 +474,33 @@ RESP_PAGOS = (
     "y el resto al recibir. 🧵"
 )
 
+RESP_DOMICILIO = (
+    "🛵 *Domicilios*\n\n"
+    "¡Sí llevamos a domicilio en *Bogotá*! El *costo depende de la zona*.\n\n"
+    "Cuéntanos tu *dirección o barrio* y te cotizamos el envío. 📍\n"
+    "También puedes comprar en línea 👉 " + TIENDA_URL + " y elegir domicilio."
+)
+
+# ✏️ DATOS DE PAGO POR TRANSFERENCIA — llénalos y el bot los da solo cuando
+# el cliente pregunte "¿a qué número consigno?" (déjalo vacío si no quieres publicarlos).
+# Ej: "📱 *Nequi:* 321 341 2903\n🏦 *Bancolombia ahorros:* 123-456789-00\n👤 A nombre de RALOZ COL SAS · NIT 901412505"
+DATOS_PAGO = ""
+
+if DATOS_PAGO.strip():
+    RESP_CONSIGNAR = (
+        "💳 *Para pagar por transferencia:*\n\n" + DATOS_PAGO + "\n\n"
+        "Cuando pagues, envíanos el *comprobante* por aquí y te confirmamos. 🙌\n"
+        "_También puedes pagar en línea con factura 👉 " + TIENDA_URL + "_"
+    )
+else:
+    RESP_CONSIGNAR = (
+        "💳 *Para pagar*\n\n"
+        "Lo más fácil y seguro es *pagar en línea* 👉 " + TIENDA_URL + "\n"
+        "Pagas por link y te llega la *factura* al correo. 🧾\n\n"
+        "Si prefieres *transferencia directa* (Nequi/Bancolombia), escribe *asesor* "
+        "y te pasamos los datos al instante. 🙌"
+    )
+
 RESP_HORARIOS = (
     "🕘 *Horarios y ubicación*\n\n"
     f"📍 {DIRECCION}\n"
@@ -692,7 +719,16 @@ _COMPROBANTE = ["comprobante", "ya pague", "ya pagué", "ya realice el pago",
              "te mande el pago", "mande el pago", "te paso el soporte", "paso el soporte",
              "mando el soporte", "envio el soporte", "te envio el soporte"]
 _ENVIOS    = ["domicilio", "envios", "hacen envio", "mandan", "a otra ciudad",
-             "fuera de bogota", "contraentrega"]
+             "fuera de bogota", "contraentrega", "me lo llevan", "me lo pueden llevar",
+             "me lo traen", "me lo pueden traer", "llevar a domicilio", "mandar a domicilio",
+             "traer a domicilio", "cuanto el domicilio", "cuanto vale el domicilio",
+             "envio a mi casa", "domi", "lo llevan"]
+# Piden el número/cuenta para pagar por transferencia directa (Nequi/Bancolombia)
+_CONSIGNAR = ["a que numero consigno", "donde consigno", "donde pago", "donde consignar",
+             "el nequi", "numero de nequi", "numero del nequi", "me das el nequi",
+             "me pasas el nequi", "numero de cuenta", "a que cuenta", "numero para consignar",
+             "para consignar", "cuenta bancolombia", "numero bancolombia", "datos de pago",
+             "datos para pagar", "para transferir", "hacer la transferencia a"]
 
 # Palabras que forman un saludo. Si TODO el mensaje son estas palabras
 # (ej: "hola buenos dias", "buenas tardes como estas"), lo tratamos como saludo.
@@ -1021,6 +1057,10 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return Respuesta(PEDIR_REF_SALDO)
     if t == "1" or _tiene(t, ["quien", "quienes somos", "nosotros", "empresa"]):
         return Respuesta(RESP_QUIENES + VOLVER)
+    # "¿A qué número consigno? / me das el nequi?" → datos de transferencia
+    # (va ANTES del pago genérico, que también contiene "pago").
+    if _tiene(t, _CONSIGNAR):
+        return Respuesta(RESP_CONSIGNAR + VOLVER)
     if t == "2" or _tiene(t, ["pago", "pagos", "tarjeta", "pse", "efecty", "abono"]):
         return Respuesta(RESP_PAGOS + VOLVER)
     if t == "3" or _tiene(t, _HORARIOS):
@@ -1062,7 +1102,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     # Envíos / domicilios (pregunta de venta) — ANTES que "pedido no llegado",
     # porque ambos mencionan la palabra "envío".
     if _tiene(t, _ENVIOS):
-        return Respuesta(RESP_COMPRAR + VOLVER)
+        return Respuesta(RESP_DOMICILIO + VOLVER)
 
     # Pedido no llegado escrito directamente
     if _tiene(t, _PEDIDO):
