@@ -43,6 +43,29 @@ export default function Asistente() {
     try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
   }
 
+  async function confirmarAccion(idx) {
+    const accion = mensajes[idx]?.accion
+    if (!accion) return
+    setMensajes((m) => m.map((x, i) => (i === idx ? { ...x, accionEstado: 'enviando' } : x)))
+    try {
+      const res = await api.post('/asistente/ejecutar', accion, { timeout: 60000 })
+      setMensajes((m) => {
+        const upd = m.map((x, i) => (i === idx ? { ...x, accionEstado: 'hecha' } : x))
+        return [...upd, { rol: 'bot', texto: res.data.mensaje || '✅ Hecho.' }]
+      })
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'No pude ejecutar la acción.'
+      setMensajes((m) => {
+        const upd = m.map((x, i) => (i === idx ? { ...x, accionEstado: 'error' } : x))
+        return [...upd, { rol: 'bot', texto: msg, error: true }]
+      })
+    }
+  }
+
+  function cancelarAccion(idx) {
+    setMensajes((m) => m.map((x, i) => (i === idx ? { ...x, accionEstado: 'cancelada' } : x)))
+  }
+
   async function preguntar(texto) {
     const pregunta = (texto ?? input).trim()
     if (!pregunta || cargando) return
@@ -51,7 +74,7 @@ export default function Asistente() {
     setCargando(true)
     try {
       const res = await api.post('/asistente/preguntar', { pregunta }, { timeout: 130000 })
-      setMensajes((m) => [...m, { rol: 'bot', texto: res.data.respuesta }])
+      setMensajes((m) => [...m, { rol: 'bot', texto: res.data.respuesta, accion: res.data.accion || null }])
     } catch (err) {
       const data = err?.response?.data || {}
       let msg =
@@ -100,9 +123,10 @@ export default function Asistente() {
           </div>
         )}
         {mensajes.map((m, i) => (
-          <div key={i} style={{ alignSelf: m.rol === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, alignSelf: m.rol === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
             <div style={{
               padding: '10px 14px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+              alignSelf: m.rol === 'user' ? 'flex-end' : 'flex-start',
               background: m.rol === 'user' ? '#071f4c' : (m.error ? '#fef2f2' : '#fff'),
               color: m.rol === 'user' ? '#fff' : (m.error ? '#b91c1c' : '#15171c'),
               border: m.rol === 'user' ? 'none' : '1px solid #e5e7eb',
@@ -111,6 +135,29 @@ export default function Asistente() {
             }}>
               {m.rol === 'bot' && !m.error ? renderRich(m.texto) : m.texto}
             </div>
+
+            {m.accion && (
+              <div style={{ border: '1px solid #F9C90C', background: '#fffbeb', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: 12.5, color: '#92400e', fontWeight: 800, marginBottom: 6 }}>⚠️ Confirmar acción</div>
+                <div style={{ fontSize: 13.5, color: '#15171c', marginBottom: 10 }}>{m.accion.descripcion}</div>
+                {m.accionEstado === 'hecha' ? (
+                  <div style={{ fontSize: 13, color: '#166534', fontWeight: 700 }}>✅ Hecho</div>
+                ) : m.accionEstado === 'cancelada' ? (
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Cancelada</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => confirmarAccion(i)} disabled={m.accionEstado === 'enviando'}
+                      style={{ background: '#071f4c', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 800, cursor: 'pointer', opacity: m.accionEstado === 'enviando' ? 0.6 : 1 }}>
+                      {m.accionEstado === 'enviando' ? 'Ejecutando…' : 'Confirmar'}
+                    </button>
+                    <button onClick={() => cancelarAccion(i)} disabled={m.accionEstado === 'enviando'}
+                      style={{ background: '#fff', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {cargando && (

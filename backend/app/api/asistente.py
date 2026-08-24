@@ -12,6 +12,7 @@ manual de uso. NO ejecuta acciones (no crea ni modifica nada).
 """
 
 import os
+import re
 import json
 import time
 import logging
@@ -27,10 +28,10 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy import func, and_
 
 from app import db, limiter
-from app.utils.decorators import rol_requerido
+from app.utils.decorators import rol_requerido, get_current_identity, registrar_auditoria
 from app.models import (
     Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
-    Stock, Producto, Colegio,
+    Stock, Producto, Colegio, PedidoWeb,
 )
 
 logger = logging.getLogger("raloz.asistente")
@@ -43,6 +44,16 @@ GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.6-flash').strip()
 # Modelos que Google ya retiró (dan 404); si la env trae uno de estos, lo ignoramos.
 _MODELOS_RETIRADOS = {'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro',
                       'gemini-1.0-pro', 'gemini-pro', 'gemini-2.0-flash-001'}
+
+# ── Fase 2 (acciones) — APAGADO por defecto. Enciéndelo con ASISTENTE_ACCIONES=1.
+#    Aun encendido, NADA se ejecuta sin confirmación explícita del admin en la UI.
+ACCIONES_ON = os.getenv('ASISTENTE_ACCIONES', '') == '1'
+# Estados de entrega que el asistente puede PROPONER (2a). Con confirmación.
+_ESTADOS_ENTREGA = {
+    'EMPACADO':     'Empacado (listo para entregar)',
+    'LISTO_LLAMAR': 'Listo — llamar al cliente',
+    'ENTREGADA':    'Entregado al cliente',
+}
 
 # Manual corto del sistema (para responder "¿cómo hago X?"). Basado en la
 # operación real de RALOZ. Ajusta este texto cuando cambie un flujo.
@@ -133,6 +144,50 @@ def _contexto_datos():
     return ctx
 
 
+def _extraer_accion(texto):
+    """Busca 'ACCION_JSON: {...}' en la respuesta de la IA. Devuelve
+    (texto_sin_esa_linea, accion_validada | None). Solo valida acciones de la
+    lista blanca; cualquier otra cosa se ignora."""
+    m = re.search(r'ACCION_JSON:\s*(\{.*)', texto, re.DOTALL)
+    if not m:
+        return texto, None
+    crudo = m.group(1)
+    obj = None
+    for fin in range(len(crudo), 0, -1):  # recorta hasta un JSON válido
+        if crudo[fin - 1] != '}':
+            continue
+        try:
+            obj = json.loads(crudo[:fin])
+            break
+        except Exception:
+            continue
+    if not isinstance(obj, dict) or obj.get('tipo') != 'cambiar_estado_pedido':
+        return texto, None
+    estado = str(obj.get('estado', '')).upper().strip()
+    factura = str(obj.get('factura', '')).strip()
+    if estado not in _ESTADOS_ENTREGA or not factura:
+        return texto, None
+    accion = {
+        'tipo': 'cambiar_estado_pedido',
+        'factura': factura,
+        'estado': estado,
+        'descripcion': f'Marcar la factura/pedido “{factura}” como: {_ESTADOS_ENTREGA[estado]}',
+    }
+    texto_limpio = texto[:m.start()].rstrip() or 'Te propongo esta acción:'
+    return texto_limpio, accion
+
+
+def _buscar_factura(ref):
+    """Busca una factura por su número, o por la referencia de un pedido web."""
+    f = Factura.query.filter_by(numero_factura=ref).first()
+    if f:
+        return f
+    pedido = PedidoWeb.query.filter_by(referencia=ref).first()
+    if pedido and pedido.id_factura:
+        return Factura.query.get(pedido.id_factura)
+    return None
+
+
 @asistente_bp.route('/preguntar', methods=['POST'])
 @jwt_required()
 @rol_requerido('administrador', 'vendedor', 'cajero')
@@ -152,6 +207,9 @@ def preguntar():
     if len(pregunta) > 800:
         pregunta = pregunta[:800]
 
+    identity = get_current_identity()
+    puede_accionar = ACCIONES_ON and identity.get('rol') == 'administrador'
+
     datos = _contexto_datos()
 
     sistema = (
@@ -161,8 +219,20 @@ def preguntar():
         "sugiere en qué parte del sistema mirarlo. NUNCA inventes cifras, precios ni "
         "stock. El dinero va en pesos colombianos (ej: $1.234.000)."
     )
+    acciones = ""
+    if puede_accionar:
+        acciones = (
+            "\n\n=== ACCIONES (con confirmación) ===\n"
+            "Si el usuario pide CAMBIAR EL ESTADO DE ENTREGA de un pedido o factura, "
+            "NO afirmes que ya lo hiciste. Escribe una frase proponiéndolo y, en la "
+            "ÚLTIMA línea, agrega EXACTAMENTE:\n"
+            "ACCION_JSON: {\"tipo\":\"cambiar_estado_pedido\",\"factura\":\"<numero de factura o referencia RALOZ-...>\",\"estado\":\"<EMPACADO|LISTO_LLAMAR|ENTREGADA>\"}\n"
+            "Mapea: 'empacado'->EMPACADO; 'listo'/'llamar'->LISTO_LLAMAR; "
+            "'entregado'/'entregué'/'ya lo recogió'->ENTREGADA. "
+            "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
+        )
     prompt = (
-        f"{sistema}\n\n=== DATOS REALES DEL SISTEMA (hoy {datos.get('fecha_hoy')}) ===\n"
+        f"{sistema}{acciones}\n\n=== DATOS REALES DEL SISTEMA (hoy {datos.get('fecha_hoy')}) ===\n"
         f"{json.dumps(datos, ensure_ascii=False, default=str)}\n\n"
         f"=== MANUAL DEL SISTEMA ===\n{MANUAL}\n\n"
         f"=== PREGUNTA DEL USUARIO ===\n{pregunta}"
@@ -199,7 +269,13 @@ def preguntar():
                 texto = r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
             except Exception:
                 texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
-            return jsonify({'respuesta': texto}), 200
+            respuesta = {'respuesta': texto}
+            if puede_accionar:
+                texto_limpio, accion = _extraer_accion(texto)
+                if accion:
+                    respuesta['respuesta'] = texto_limpio
+                    respuesta['accion'] = accion
+            return jsonify(respuesta), 200
 
         ultimo_detalle = f'{r.status_code}: {r.text[:200]}'
         logger.warning("asistente: Gemini %s respondió %s: %s", modelo, r.status_code, r.text[:300])
@@ -212,3 +288,52 @@ def preguntar():
         'detalle': ultimo_detalle,
         'code': 'gemini_error',
     }), 502
+
+
+@asistente_bp.route('/ejecutar', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador')
+@limiter.limit("20 per minute")
+def ejecutar():
+    """Ejecuta una acción YA confirmada por el admin en la UI. Apagada por
+    defecto (requiere ASISTENTE_ACCIONES=1). Reusa el mismo flujo probado."""
+    if not ACCIONES_ON:
+        return jsonify({
+            'error': 'Las acciones del asistente están desactivadas. '
+                     'Actívalas con ASISTENTE_ACCIONES=1 en el servidor.',
+            'code': 'acciones_off',
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    if data.get('tipo') != 'cambiar_estado_pedido':
+        return jsonify({'error': 'Acción no soportada.'}), 400
+
+    factura_ref = str(data.get('factura', '')).strip()
+    estado = str(data.get('estado', '')).upper().strip()
+    if estado not in _ESTADOS_ENTREGA or not factura_ref:
+        return jsonify({'error': 'Datos de la acción inválidos.'}), 400
+
+    factura = _buscar_factura(factura_ref)
+    if not factura:
+        return jsonify({'error': f'No encontré la factura/pedido "{factura_ref}".',
+                        'code': 'no_encontrado'}), 404
+    if factura.estado == 'ANULADA':
+        return jsonify({'error': 'Esa factura está anulada; no se puede cambiar.'}), 400
+
+    anterior = factura.estado_entrega
+    factura.estado_entrega = estado
+    db.session.commit()
+
+    identity = get_current_identity()
+    try:
+        registrar_auditoria('facturas', factura.id_factura, estado,
+                            f'[Asistente] Estado de entrega {anterior} -> {estado} '
+                            f'por {identity.get("usuario")}')
+    except Exception as e:
+        logger.warning("asistente: no se pudo auditar: %s", e)
+
+    return jsonify({
+        'ok': True,
+        'mensaje': f'✅ Factura {factura.numero_factura} marcada como '
+                   f'"{_ESTADOS_ENTREGA[estado]}".',
+    }), 200
