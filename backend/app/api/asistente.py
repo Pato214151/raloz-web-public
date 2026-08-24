@@ -154,25 +154,46 @@ def preguntar():
         f"=== PREGUNTA DEL USUARIO ===\n{pregunta}"
     )
 
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}")
-    try:
-        r = requests.post(url, json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 700},
-        }, timeout=30)
-    except Exception as e:
-        logger.warning("asistente: fallo conectando a Gemini: %s", e)
-        return jsonify({'error': 'No pude conectar con el asistente ahora. Intenta de nuevo.'}), 502
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 700},
+    }
 
-    if r.status_code != 200:
-        logger.warning("asistente: Gemini respondió %s: %s", r.status_code, r.text[:300])
-        return jsonify({'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
-                        'code': 'gemini_error'}), 502
+    # Prueba varios modelos (el de la env primero, luego respaldos conocidos),
+    # así un nombre de modelo mal escrito no rompe el asistente.
+    candidatos = []
+    if GEMINI_MODEL:
+        candidatos.append(GEMINI_MODEL)
+    for m in ('gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash', 'gemini-2.5-flash'):
+        if m not in candidatos:
+            candidatos.append(m)
 
-    try:
-        texto = r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-    except Exception:
-        texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
+    ultimo_detalle = ''
+    for modelo in candidatos:
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{modelo}:generateContent?key={GEMINI_API_KEY}")
+        try:
+            r = requests.post(url, json=payload, timeout=30)
+        except Exception as e:
+            ultimo_detalle = f'conexión: {e}'
+            logger.warning("asistente: fallo conectando a Gemini (%s): %s", modelo, e)
+            continue
 
-    return jsonify({'respuesta': texto}), 200
+        if r.status_code == 200:
+            try:
+                texto = r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+            except Exception:
+                texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
+            return jsonify({'respuesta': texto}), 200
+
+        ultimo_detalle = f'{r.status_code}: {r.text[:200]}'
+        logger.warning("asistente: Gemini %s respondió %s: %s", modelo, r.status_code, r.text[:300])
+        # Si el problema es la LLAVE, no tiene sentido probar otros modelos.
+        if r.status_code in (400, 403) and 'API_KEY' in r.text.upper():
+            break
+
+    return jsonify({
+        'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
+        'detalle': ultimo_detalle,
+        'code': 'gemini_error',
+    }), 502

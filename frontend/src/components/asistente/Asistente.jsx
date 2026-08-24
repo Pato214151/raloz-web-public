@@ -28,12 +28,12 @@ export default function Asistente() {
       const res = await api.post('/asistente/preguntar', { pregunta })
       setMensajes((m) => [...m, { rol: 'bot', texto: res.data.respuesta }])
     } catch (err) {
-      const code = err?.response?.data?.code
-      const msg =
-        code === 'sin_config'
+      const data = err?.response?.data || {}
+      let msg =
+        data.code === 'sin_config'
           ? '⚙️ El asistente aún no está activo: falta configurar la llave GEMINI_API_KEY en el servidor (Render → Environment).'
-          : err?.response?.data?.error ||
-            'No pude responder ahora. Intenta de nuevo en un momento.'
+          : data.error || 'No pude responder ahora. Intenta de nuevo en un momento.'
+      if (data.detalle) msg += `\n\nDetalle técnico: ${data.detalle}`
       setMensajes((m) => [...m, { rol: 'bot', texto: msg, error: true }])
     } finally {
       setCargando(false)
