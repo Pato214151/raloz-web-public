@@ -501,6 +501,12 @@ else:
         "y te pasamos los datos al instante. 🙌"
     )
 
+RESP_FACTURA = (
+    "🧾 *¿No te llegó la factura?*\n\n"
+    "Revisa tu *correo*, incluida la carpeta de *spam / no deseado* — llega ahí.\n\n"
+    "Si aún no la ves, escribe *asesor* y te la reenviamos enseguida. 🙌"
+)
+
 RESP_HORARIOS = (
     "🕘 *Horarios y ubicación*\n\n"
     f"📍 {DIRECCION}\n"
@@ -727,8 +733,19 @@ _ENVIOS    = ["domicilio", "envios", "hacen envio", "mandan", "a otra ciudad",
 _CONSIGNAR = ["a que numero consigno", "donde consigno", "donde pago", "donde consignar",
              "el nequi", "numero de nequi", "numero del nequi", "me das el nequi",
              "me pasas el nequi", "numero de cuenta", "a que cuenta", "numero para consignar",
-             "para consignar", "cuenta bancolombia", "numero bancolombia", "datos de pago",
-             "datos para pagar", "para transferir", "hacer la transferencia a"]
+             "para consignar", "consignar", "consigno", "cuenta bancolombia", "numero bancolombia",
+             "bancolombia", "nequi", "cuenta de ahorros", "por transferencia",
+             "transferencia bancolombia", "datos de pago", "datos para pagar",
+             "para transferir", "hacer la transferencia a"]
+
+# Cliente dice que no le llegó la factura (soporte). Va ANTES de _PEDIDO, porque
+# "no me llegó la factura" contiene "no me llegó" (que es de pedido no llegado).
+_FACTURA   = ["no me enviaste la factura", "no me enviaron la factura",
+             "no me llego la factura", "no me ha llegado la factura",
+             "no me mandaron la factura", "no me lleg la factura",
+             "no llego la factura", "no recibi la factura", "no tengo la factura",
+             "donde esta mi factura", "falta la factura", "reenviar factura",
+             "reenviame la factura", "reenviar la factura", "sin la factura"]
 
 # Palabras que forman un saludo. Si TODO el mensaje son estas palabras
 # (ej: "hola buenos dias", "buenas tardes como estas"), lo tratamos como saludo.
@@ -1047,6 +1064,9 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return Respuesta("No entendí. " + SOPORTE_MENU)
 
     # ── 6) Menú principal / detección por palabras clave ──────────
+    # "No me llegó la factura" (va ANTES de comprobante y de pedido-no-llegado)
+    if _tiene(t, _FACTURA):
+        return Respuesta(RESP_FACTURA + VOLVER)
     # Comprobante de pago escrito ("ya pagué", "envío soporte", etc.)
     if _tiene(t, _COMPROBANTE):
         return _resp_comprobante(chat_id, "mensaje")
