@@ -25,7 +25,7 @@ export default function Asistente() {
     setMensajes((m) => [...m, { rol: 'user', texto: pregunta }])
     setCargando(true)
     try {
-      const res = await api.post('/asistente/preguntar', { pregunta })
+      const res = await api.post('/asistente/preguntar', { pregunta }, { timeout: 130000 })
       setMensajes((m) => [...m, { rol: 'bot', texto: res.data.respuesta }])
     } catch (err) {
       const data = err?.response?.data || {}
@@ -79,7 +79,7 @@ export default function Asistente() {
         ))}
         {cargando && (
           <div style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280', fontSize: 13 }}>
-            <Loader2 size={16} className="spin" /> Pensando…
+            <Loader2 size={16} className="spin" /> Pensando… <span style={{ color: '#94a3b8' }}>(la primera consulta puede tardar ~1 min)</span>
           </div>
         )}
         <div ref={finRef} />

@@ -164,16 +164,17 @@ def preguntar():
     candidatos = []
     if GEMINI_MODEL:
         candidatos.append(GEMINI_MODEL)
-    for m in ('gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash', 'gemini-2.5-flash'):
+    for m in ('gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash'):
         if m not in candidatos:
             candidatos.append(m)
+    candidatos = candidatos[:3]  # acota el peor caso de latencia
 
     ultimo_detalle = ''
     for modelo in candidatos:
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                f"{modelo}:generateContent?key={GEMINI_API_KEY}")
         try:
-            r = requests.post(url, json=payload, timeout=30)
+            r = requests.post(url, json=payload, timeout=25)
         except Exception as e:
             ultimo_detalle = f'conexión: {e}'
             logger.warning("asistente: fallo conectando a Gemini (%s): %s", modelo, e)
