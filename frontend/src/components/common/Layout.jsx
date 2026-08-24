@@ -7,7 +7,7 @@ import {
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
   ShoppingCart, Scissors, Truck, Activity, ChevronRight,   MessageCircle, CalendarClock, MessageSquare,
-  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap, Home,
+  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap, Home, Sparkles,
 } from 'lucide-react'
 
 // ─── Barra inferior (solo móvil): accesos directos a lo más usado ──
@@ -26,6 +26,7 @@ const menuGroups = [
     label: 'Inicio',
     items: [
       { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['administrador', 'vendedor', 'cajero'] },
+      { path: '/asistente', label: 'Asistente', icon: Sparkles, roles: ['administrador', 'vendedor', 'cajero'] },
     ],
   },
   {

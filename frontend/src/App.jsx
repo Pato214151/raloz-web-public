@@ -5,6 +5,7 @@ import Login from './components/auth/Login'
 import Layout from './components/common/Layout'
 import DucklabBadge from './components/common/DucklabBadge'
 import Dashboard from './components/dashboard/Dashboard'
+import Asistente from './components/asistente/Asistente'
 import Facturacion from './components/facturacion/Facturacion'
 import Vender from './components/facturacion/Vender'
 import BuscarFacturas from './components/facturacion/BuscarFacturas'
@@ -71,6 +72,7 @@ export default function App() {
           <ProtectedRoute><Layout /></ProtectedRoute>
         }>
           <Route index element={<Dashboard />} />
+          <Route path="asistente" element={<Asistente />} />
           <Route path="facturacion" element={<Facturacion />} />
           <Route path="vender" element={<Vender />} />
           <Route path="buscar" element={<BuscarFacturas />} />
