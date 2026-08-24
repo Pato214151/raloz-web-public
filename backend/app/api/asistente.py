@@ -220,6 +220,141 @@ def _buscar_factura(ref):
     return None
 
 
+# ── Herramientas de BÚSQUEDA (solo lectura) que el asistente puede pedir ──
+def _resolver_colegio_id(txt):
+    t = (txt or '').strip().lower()
+    if not t:
+        return None
+    for c in Colegio.query.all():
+        n = (c.nombre or '').lower()
+        if t in n or n in t or any(w and w in n for w in t.split()):
+            return c.id_colegio
+    return None
+
+
+def _tool_buscar_prenda(colegio, texto):
+    cid = _resolver_colegio_id(colegio)
+    q = Producto.query
+    if (texto or '').strip():
+        q = q.filter(Producto.nombre.ilike(f'%{texto.strip()}%'))
+    prods = q.limit(6).all()
+    if not prods:
+        return {'encontrado': False, 'mensaje': 'No hallé prendas con ese nombre.'}
+    res = []
+    for p in prods:
+        item = {'prenda': p.nombre}
+        if cid:
+            item['precios_por_grupo_talla'] = {
+                pc.talla_grupo: pc.precio_unitario
+                for pc in PrecioColegio.query.filter_by(id_colegio=cid, id_producto=p.id_producto).all()
+            }
+            stock = {s.talla_individual: (s.cantidad or 0)
+                     for s in Stock.query.filter_by(id_colegio=cid, id_producto=p.id_producto).all()}
+            item['stock_por_talla'] = stock
+            item['stock_total'] = sum(stock.values())
+        res.append(item)
+    return {'encontrado': True, 'colegio_id': cid, 'prendas': res}
+
+
+def _tool_buscar_factura(ref):
+    f = _buscar_factura(str(ref).strip())
+    if not f:
+        return {'encontrado': False}
+    return {
+        'encontrado': True,
+        'numero_factura': f.numero_factura,
+        'estado': f.estado,
+        'estado_entrega': f.estado_entrega,
+        'total': float(f.total or 0),
+        'saldo_pendiente': float(f.saldo_pendiente or 0),
+        'cliente': getattr(f, 'cliente_nombre', None),
+        'telefono': getattr(f, 'cliente_telefono', None),
+        'fecha': f.fecha_factura.isoformat() if f.fecha_factura else None,
+    }
+
+
+def _tool_pedidos_telefono(tel):
+    dig = re.sub(r'\D', '', str(tel or ''))
+    if len(dig) < 7:
+        return {'encontrado': False}
+    ult = dig[-10:]
+    cand = (PedidoWeb.query
+            .filter(PedidoWeb.telefono_cliente.like(f'%{ult[-7:]}%'))
+            .order_by(PedidoWeb.fecha_creacion.desc()).limit(10).all())
+    pedidos = []
+    for p in cand:
+        if re.sub(r'\D', '', p.telefono_cliente or '')[-10:] != ult:
+            continue
+        pedidos.append({
+            'referencia': p.referencia, 'estado': p.estado,
+            'total': float(getattr(p, 'total', 0) or 0),
+            'fecha': p.fecha_creacion.isoformat() if getattr(p, 'fecha_creacion', None) else None,
+        })
+    return {'encontrado': bool(pedidos), 'pedidos': pedidos}
+
+
+def _ejecutar_busqueda(obj):
+    tipo = obj.get('tipo')
+    if tipo == 'buscar_prenda':
+        return _tool_buscar_prenda(obj.get('colegio', ''), obj.get('texto') or obj.get('prenda', ''))
+    if tipo == 'buscar_factura':
+        return _tool_buscar_factura(obj.get('referencia') or obj.get('factura', ''))
+    if tipo == 'pedidos_cliente':
+        return _tool_pedidos_telefono(obj.get('telefono', ''))
+    return {'error': 'búsqueda no soportada'}
+
+
+def _extraer_json_marcador(texto, marcador):
+    """Extrae el objeto JSON que sigue a `marcador:` en el texto (o None)."""
+    m = re.search(marcador + r':\s*(\{.*)', texto, re.DOTALL)
+    if not m:
+        return None
+    crudo = m.group(1)
+    for fin in range(len(crudo), 0, -1):
+        if crudo[fin - 1] != '}':
+            continue
+        try:
+            return json.loads(crudo[:fin])
+        except Exception:
+            continue
+    return None
+
+
+def _llamar_gemini(prompt_text):
+    """Llama a Gemini probando modelos vigentes. Devuelve (texto|None, detalle)."""
+    payload = {
+        "contents": [{"parts": [{"text": prompt_text}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 600},
+    }
+    candidatos = []
+    if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
+        candidatos.append(GEMINI_MODEL)
+    for m in ('gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'):
+        if m not in candidatos:
+            candidatos.append(m)
+    candidatos = candidatos[:3]
+
+    ultimo_detalle = ''
+    for modelo in candidatos:
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{modelo}:generateContent?key={GEMINI_API_KEY}")
+        try:
+            r = requests.post(url, json=payload, timeout=15)
+        except Exception as e:
+            ultimo_detalle = f'conexión: {e}'
+            continue
+        if r.status_code == 200:
+            try:
+                return r.json()['candidates'][0]['content']['parts'][0]['text'].strip(), None
+            except Exception:
+                return '', 'respuesta_vacia'
+        ultimo_detalle = f'{r.status_code}: {r.text[:200]}'
+        logger.warning("asistente: Gemini %s -> %s: %s", modelo, r.status_code, r.text[:200])
+        if r.status_code in (400, 403) and 'API_KEY' in r.text.upper():
+            break
+    return None, ultimo_detalle
+
+
 @asistente_bp.route('/preguntar', methods=['POST'])
 @jwt_required()
 @rol_requerido('administrador', 'vendedor', 'cajero')
@@ -263,63 +398,62 @@ def preguntar():
             "'entregado'/'entregué'/'ya lo recogió'->ENTREGADA. "
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
         )
-    prompt = (
-        f"{sistema}{acciones}\n\n=== DATOS REALES DEL SISTEMA (hoy {datos.get('fecha_hoy')}) ===\n"
+
+    busqueda = (
+        "\n\n=== BÚSQUEDA (para datos puntuales) ===\n"
+        "Si el usuario pregunta por algo específico que NO está en el resumen (el precio "
+        "o el stock de UNA prenda concreta, una factura por su número/referencia, o los "
+        "pedidos de un cliente por su teléfono), responde ÚNICAMENTE con una línea así y "
+        "nada más:\n"
+        "BUSCAR: {\"tipo\":\"buscar_prenda\",\"colegio\":\"<colegio>\",\"texto\":\"<nombre prenda>\"}\n"
+        "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero o RALOZ-...>\"}\n"
+        "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
+        "Solo UNA búsqueda por vez. Si la respuesta ya está en el resumen, NO uses BUSCAR."
+    )
+
+    base = (
+        f"{sistema}{busqueda}{acciones}\n\n=== DATOS REALES DEL SISTEMA (hoy {datos.get('fecha_hoy')}) ===\n"
         f"{json.dumps(datos, ensure_ascii=False, default=str)}\n\n"
         f"=== MANUAL DEL SISTEMA ===\n{MANUAL}\n\n"
         f"=== PREGUNTA DEL USUARIO ===\n{pregunta}"
     )
 
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 500},
-    }
+    texto, detalle = _llamar_gemini(base)
+    if texto is None:
+        return jsonify({'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
+                        'detalle': detalle, 'code': 'gemini_error'}), 502
 
-    # Prueba varios modelos (el de la env primero, luego respaldos conocidos),
-    # así un nombre de modelo mal escrito no rompe el asistente.
-    candidatos = []
-    if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
-        candidatos.append(GEMINI_MODEL)
-    for m in ('gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'):
-        if m not in candidatos:
-            candidatos.append(m)
-    candidatos = candidatos[:3]  # acota el peor caso de latencia
-
-    ultimo_detalle = ''
-    for modelo in candidatos:
-        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{modelo}:generateContent?key={GEMINI_API_KEY}")
-        try:
-            r = requests.post(url, json=payload, timeout=15)
-        except Exception as e:
-            ultimo_detalle = f'conexión: {e}'
-            logger.warning("asistente: fallo conectando a Gemini (%s): %s", modelo, e)
-            continue
-
-        if r.status_code == 200:
-            try:
-                texto = r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-            except Exception:
-                texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
-            respuesta = {'respuesta': texto}
-            if puede_accionar:
-                texto_limpio, accion = _extraer_accion(texto)
-                if accion:
-                    respuesta['respuesta'] = texto_limpio
-                    respuesta['accion'] = accion
-            return jsonify(respuesta), 200
-
-        ultimo_detalle = f'{r.status_code}: {r.text[:200]}'
-        logger.warning("asistente: Gemini %s respondió %s: %s", modelo, r.status_code, r.text[:300])
-        # Si el problema es la LLAVE, no tiene sentido probar otros modelos.
-        if r.status_code in (400, 403) and 'API_KEY' in r.text.upper():
+    # Bucle de búsqueda: si la IA pide un dato con BUSCAR, lo consultamos y se lo damos.
+    for _ in range(2):
+        consulta = _extraer_json_marcador(texto, 'BUSCAR')
+        if not consulta:
             break
+        try:
+            resultado = _ejecutar_busqueda(consulta)
+        except Exception as e:
+            logger.warning("asistente: búsqueda falló: %s", e)
+            resultado = {'error': 'la búsqueda falló'}
+        seguimiento = (
+            f"{base}\n\n=== RESULTADO DE LA BÚSQUEDA ({consulta.get('tipo')}) ===\n"
+            f"{json.dumps(resultado, ensure_ascii=False, default=str)}\n\n"
+            "Con ese resultado responde al usuario en español, claro y breve. No inventes; "
+            "si no se encontró, dilo. No vuelvas a escribir BUSCAR salvo que necesites otro dato distinto."
+        )
+        texto, detalle = _llamar_gemini(seguimiento)
+        if texto is None:
+            return jsonify({'error': 'El asistente no respondió al procesar la búsqueda.',
+                            'detalle': detalle, 'code': 'gemini_error'}), 502
 
-    return jsonify({
-        'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
-        'detalle': ultimo_detalle,
-        'code': 'gemini_error',
-    }), 502
+    if not texto:
+        texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
+
+    respuesta = {'respuesta': texto}
+    if puede_accionar:
+        texto_limpio, accion = _extraer_accion(texto)
+        if accion:
+            respuesta['respuesta'] = texto_limpio
+            respuesta['accion'] = accion
+    return jsonify(respuesta), 200
 
 
 @asistente_bp.route('/ejecutar', methods=['POST'])
