@@ -81,7 +81,7 @@ export default function Asistente() {
         data.code === 'sin_config'
           ? '⚙️ El asistente aún no está activo: falta configurar la llave GEMINI_API_KEY en el servidor (Render → Environment).'
           : data.error || 'No pude responder ahora. Intenta de nuevo en un momento.'
-      if (data.detalle) msg += `\n\nDetalle técnico: ${data.detalle}`
+      if (data.detalle && data.code !== 'ocupado') msg += `\n\nDetalle técnico: ${data.detalle}`
       setMensajes((m) => [...m, { rol: 'bot', texto: msg, error: true }])
     } finally {
       setCargando(false)

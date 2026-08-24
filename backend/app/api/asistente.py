@@ -335,24 +335,48 @@ def _llamar_gemini(prompt_text):
     candidatos = candidatos[:3]
 
     ultimo_detalle = ''
-    for modelo in candidatos:
-        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{modelo}:generateContent?key={GEMINI_API_KEY}")
-        try:
-            r = requests.post(url, json=payload, timeout=15)
-        except Exception as e:
-            ultimo_detalle = f'conexión: {e}'
-            continue
-        if r.status_code == 200:
+    # Hasta 3 pasadas por la lista si todo dio 503 (alta demanda momentánea de Google).
+    for intento in range(3):
+        hubo_503 = False
+        for modelo in candidatos:
+            url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+                   f"{modelo}:generateContent?key={GEMINI_API_KEY}")
             try:
-                return r.json()['candidates'][0]['content']['parts'][0]['text'].strip(), None
-            except Exception:
-                return '', 'respuesta_vacia'
-        ultimo_detalle = f'{r.status_code}: {r.text[:200]}'
-        logger.warning("asistente: Gemini %s -> %s: %s", modelo, r.status_code, r.text[:200])
-        if r.status_code in (400, 403) and 'API_KEY' in r.text.upper():
+                r = requests.post(url, json=payload, timeout=15)
+            except Exception as e:
+                ultimo_detalle = f'conexión: {e}'
+                continue
+            if r.status_code == 200:
+                try:
+                    return r.json()['candidates'][0]['content']['parts'][0]['text'].strip(), None
+                except Exception:
+                    return '', 'respuesta_vacia'
+            ultimo_detalle = f'{r.status_code}: {r.text[:200]}'
+            logger.warning("asistente: Gemini %s -> %s: %s", modelo, r.status_code, r.text[:200])
+            if r.status_code in (503,) or 'UNAVAILABLE' in r.text.upper():
+                hubo_503 = True
+            # Si el problema es la LLAVE, no tiene sentido reintentar.
+            if r.status_code in (400, 403) and 'API_KEY' in r.text.upper():
+                return None, ultimo_detalle
+        if not hubo_503:
             break
+        time.sleep(1.5)  # espera y reintenta la lista completa
     return None, ultimo_detalle
+
+
+def _error_gemini(detalle):
+    """Devuelve la respuesta de error adecuada (saturación vs. problema real)."""
+    d = (detalle or '').upper()
+    if 'UNAVAILABLE' in d or (detalle or '').startswith('503'):
+        return jsonify({
+            'error': '⏳ Los modelos de IA gratis de Google están saturados ahora mismo '
+                     '(mucha demanda). Espera unos segundos y vuelve a intentar.',
+            'detalle': detalle, 'code': 'ocupado',
+        }), 503
+    return jsonify({
+        'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
+        'detalle': detalle, 'code': 'gemini_error',
+    }), 502
 
 
 @asistente_bp.route('/preguntar', methods=['POST'])
@@ -420,8 +444,7 @@ def preguntar():
 
     texto, detalle = _llamar_gemini(base)
     if texto is None:
-        return jsonify({'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
-                        'detalle': detalle, 'code': 'gemini_error'}), 502
+        return _error_gemini(detalle)
 
     # Bucle de búsqueda: si la IA pide un dato con BUSCAR, lo consultamos y se lo damos.
     for _ in range(2):
@@ -441,8 +464,7 @@ def preguntar():
         )
         texto, detalle = _llamar_gemini(seguimiento)
         if texto is None:
-            return jsonify({'error': 'El asistente no respondió al procesar la búsqueda.',
-                            'detalle': detalle, 'code': 'gemini_error'}), 502
+            return _error_gemini(detalle)
 
     if not texto:
         texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
