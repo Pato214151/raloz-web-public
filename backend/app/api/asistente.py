@@ -13,8 +13,13 @@ manual de uso. NO ejecuta acciones (no crea ni modifica nada).
 
 import os
 import json
+import time
 import logging
 from datetime import date
+
+# Caché corta del contexto (evita reconsultar la BD en cada pregunta seguida).
+_CTX_CACHE = {'t': 0.0, 'data': None}
+_CTX_TTL = 45  # segundos
 
 import requests
 from flask import Blueprint, request, jsonify
@@ -58,7 +63,11 @@ MANUAL = (
 
 
 def _contexto_datos():
-    """Reúne un resumen de datos REALES (solo lectura) para dárselo al asistente."""
+    """Reúne un resumen de datos REALES (solo lectura) para dárselo al asistente.
+    Cachea el resultado unos segundos para no golpear la BD en cada pregunta."""
+    ahora = time.time()
+    if _CTX_CACHE['data'] is not None and (ahora - _CTX_CACHE['t']) < _CTX_TTL:
+        return _CTX_CACHE['data']
     hoy = date.today()
     inicio_mes = hoy.replace(day=1)
     ctx = {'fecha_hoy': hoy.isoformat()}
@@ -119,6 +128,8 @@ def _contexto_datos():
     except Exception as e:
         logger.warning("asistente: fallo armando stock bajo: %s", e)
 
+    _CTX_CACHE['t'] = ahora
+    _CTX_CACHE['data'] = ctx
     return ctx
 
 
@@ -159,7 +170,7 @@ def preguntar():
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 700},
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 500},
     }
 
     # Prueba varios modelos (el de la env primero, luego respaldos conocidos),
@@ -177,7 +188,7 @@ def preguntar():
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                f"{modelo}:generateContent?key={GEMINI_API_KEY}")
         try:
-            r = requests.post(url, json=payload, timeout=25)
+            r = requests.post(url, json=payload, timeout=15)
         except Exception as e:
             ultimo_detalle = f'conexión: {e}'
             logger.warning("asistente: fallo conectando a Gemini (%s): %s", modelo, e)

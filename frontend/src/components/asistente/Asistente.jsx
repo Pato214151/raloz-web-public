@@ -67,6 +67,11 @@ export default function Asistente() {
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
+      <style>{`
+        @keyframes raloz-spin { to { transform: rotate(360deg); } }
+        .raloz-dots::after { content: ''; animation: raloz-dots 1.3s steps(1,end) infinite; }
+        @keyframes raloz-dots { 0%{content:'';} 25%{content:'.';} 50%{content:'..';} 75%{content:'...';} }
+      `}</style>
       {/* Encabezado */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <div style={{ width: 42, height: 42, borderRadius: 12, background: '#071f4c', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
@@ -110,7 +115,8 @@ export default function Asistente() {
         ))}
         {cargando && (
           <div style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280', fontSize: 13 }}>
-            <Loader2 size={16} className="spin" /> Pensando… <span style={{ color: '#94a3b8' }}>(la primera consulta puede tardar ~1 min)</span>
+            <Loader2 size={16} style={{ animation: 'raloz-spin 0.8s linear infinite' }} />
+            <span>Pensando<span className="raloz-dots" /></span>
           </div>
         )}
         <div ref={finRef} />
