@@ -31,8 +31,9 @@ from app import db, limiter
 from app.utils.decorators import rol_requerido, get_current_identity, registrar_auditoria
 from app.models import (
     Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
-    Stock, Producto, Colegio, PedidoWeb,
+    Stock, Producto, Colegio, PedidoWeb, PrecioColegio,
 )
+from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 
 logger = logging.getLogger("raloz.asistente")
 
@@ -71,6 +72,31 @@ MANUAL = (
     "EN_PRODUCCION → LISTO → ENTREGADO.\n"
     "- Horario del punto: lunes y sábado 10:00 a.m. – 5:00 p.m."
 )
+
+
+def _stock_resumen():
+    """Unidades y valor de inventario por colegio (usa los precios reales del sistema)."""
+    colegios = {c.id_colegio: c.nombre for c in Colegio.query.all()}
+    precios = {(p.id_colegio, p.id_producto, p.talla_grupo): (p.precio_unitario or 0)
+               for p in PrecioColegio.query.all()}
+    agg, total_u, total_v = {}, 0, 0.0
+    for s in Stock.query.all():
+        a = agg.setdefault(s.id_colegio, {
+            'colegio': colegios.get(s.id_colegio, f'Colegio {s.id_colegio}'),
+            'unidades': 0, 'valor': 0.0})
+        cant = s.cantidad or 0
+        grupo = TALLA_INDIVIDUAL_A_GRUPO.get(s.talla_individual, s.talla_individual)
+        val = cant * (precios.get((s.id_colegio, s.id_producto, grupo), 0) or 0)
+        a['unidades'] += cant
+        a['valor'] += val
+        total_u += cant
+        total_v += val
+    return {
+        'total_unidades': total_u,
+        'valor_inventario_total': round(total_v),
+        'por_colegio': [{'colegio': v['colegio'], 'unidades': v['unidades'],
+                         'valor_inventario': round(v['valor'])} for v in agg.values()],
+    }
 
 
 def _contexto_datos():
@@ -138,6 +164,12 @@ def _contexto_datos():
         ]
     except Exception as e:
         logger.warning("asistente: fallo armando stock bajo: %s", e)
+
+    # Inventario completo: unidades + valor por colegio (y total)
+    try:
+        ctx['inventario'] = _stock_resumen()
+    except Exception as e:
+        logger.warning("asistente: fallo resumen de inventario: %s", e)
 
     _CTX_CACHE['t'] = ahora
     _CTX_CACHE['data'] = ctx
