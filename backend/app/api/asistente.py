@@ -34,7 +34,10 @@ asistente_bp = Blueprint('asistente', __name__)
 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
 # Modelo de la capa gratis; se puede cambiar por env si Google lo renombra.
-GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash').strip()
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.6-flash').strip()
+# Modelos que Google ya retiró (dan 404); si la env trae uno de estos, lo ignoramos.
+_MODELOS_RETIRADOS = {'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro',
+                      'gemini-1.0-pro', 'gemini-pro', 'gemini-2.0-flash-001'}
 
 # Manual corto del sistema (para responder "¿cómo hago X?"). Basado en la
 # operación real de RALOZ. Ajusta este texto cuando cambie un flujo.
@@ -162,9 +165,9 @@ def preguntar():
     # Prueba varios modelos (el de la env primero, luego respaldos conocidos),
     # así un nombre de modelo mal escrito no rompe el asistente.
     candidatos = []
-    if GEMINI_MODEL:
+    if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
         candidatos.append(GEMINI_MODEL)
-    for m in ('gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash'):
+    for m in ('gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'):
         if m not in candidatos:
             candidatos.append(m)
     candidatos = candidatos[:3]  # acota el peor caso de latencia

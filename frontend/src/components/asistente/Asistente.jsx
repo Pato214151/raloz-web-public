@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Send, Loader2 } from 'lucide-react'
+import { Sparkles, Send, Loader2, Trash2 } from 'lucide-react'
 import api from '../../services/api'
 
 const SUGERENCIAS = [
@@ -10,13 +10,38 @@ const SUGERENCIAS = [
   '¿Cómo imprimo el ticket de una venta?',
 ]
 
+const STORAGE_KEY = 'raloz_asistente_chat'
+
+// Renderiza el texto de la IA con **negritas** y saltos de línea (sin mostrar los *).
+function renderRich(texto) {
+  return String(texto).split('\n').map((linea, i) => (
+    <div key={i} style={{ minHeight: linea ? undefined : 7 }}>
+      {linea.split(/(\*\*[^*]+\*\*)/g).map((parte, j) =>
+        parte.startsWith('**') && parte.endsWith('**')
+          ? <strong key={j}>{parte.slice(2, -2)}</strong>
+          : parte
+      )}
+    </div>
+  ))
+}
+
 export default function Asistente() {
-  const [mensajes, setMensajes] = useState([])
+  const [mensajes, setMensajes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
+  })
   const [input, setInput] = useState('')
   const [cargando, setCargando] = useState(false)
   const finRef = useRef(null)
 
   useEffect(() => { finRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [mensajes, cargando])
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mensajes.slice(-40))) } catch { /* lleno */ }
+  }, [mensajes])
+
+  function limpiar() {
+    setMensajes([])
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+  }
 
   async function preguntar(texto) {
     const pregunta = (texto ?? input).trim()
@@ -47,12 +72,18 @@ export default function Asistente() {
         <div style={{ width: 42, height: 42, borderRadius: 12, background: '#071f4c', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Sparkles size={22} color="#F9C90C" />
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ margin: 0, fontSize: 20, color: '#071a3d' }}>Asistente RALOZ</h1>
           <p style={{ margin: 0, fontSize: 12.5, color: '#6b7280' }}>
             Pregunta sobre ventas, stock, pedidos y cómo usar el sistema. Solo consulta datos — no modifica nada.
           </p>
         </div>
+        {mensajes.length > 0 && (
+          <button onClick={limpiar} title="Limpiar conversación"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', color: '#6b7280', borderRadius: 10, padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}>
+            <Trash2 size={15} /> Limpiar
+          </button>
+        )}
       </div>
 
       {/* Conversación */}
@@ -73,7 +104,7 @@ export default function Asistente() {
               borderBottomRightRadius: m.rol === 'user' ? 4 : 14,
               borderBottomLeftRadius: m.rol === 'user' ? 14 : 4,
             }}>
-              {m.texto}
+              {m.rol === 'bot' && !m.error ? renderRich(m.texto) : m.texto}
             </div>
           </div>
         ))}
