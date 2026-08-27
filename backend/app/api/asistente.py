@@ -34,6 +34,7 @@ from app.models import (
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
+from app.utils.inventario import registrar_movimiento
 
 logger = logging.getLogger("raloz.asistente")
 
@@ -220,6 +221,23 @@ def _extraer_accion(texto):
                 'descripcion_tarea': str(obj.get('descripcion', '')).strip()[:500],
                 'descripcion': desc,
             }
+    elif tipo == 'ajustar_stock':
+        colegio = str(obj.get('colegio', '')).strip()
+        prenda = str(obj.get('prenda') or obj.get('texto', '')).strip()
+        talla = str(obj.get('talla', '')).strip().upper()
+        modo = str(obj.get('modo', '')).lower().strip()
+        try:
+            cantidad = int(obj.get('cantidad'))
+        except Exception:
+            cantidad = None
+        if colegio and prenda and talla and modo in ('sumar', 'restar', 'fijar') \
+                and cantidad is not None and cantidad >= 0:
+            verbo = {'sumar': 'Sumar', 'restar': 'Restar', 'fijar': 'Fijar en'}[modo]
+            accion = {
+                'tipo': tipo, 'colegio': colegio, 'prenda': prenda[:100], 'talla': talla[:20],
+                'modo': modo, 'cantidad': cantidad,
+                'descripcion': f'{verbo} {cantidad} unidad(es) de “{prenda}” talla {talla} — {colegio}',
+            }
     if not accion:
         return texto, None
     texto_limpio = texto[:m.start()].rstrip() or 'Te propongo esta acción:'
@@ -247,6 +265,17 @@ def _resolver_colegio_id(txt):
         if t in n or n in t or any(w and w in n for w in t.split()):
             return c.id_colegio
     return None
+
+
+def _resolver_producto_id(texto):
+    t = (texto or '').strip()
+    if not t:
+        return None, None
+    exact = Producto.query.filter(Producto.nombre.ilike(t)).first()
+    if exact:
+        return exact.id_producto, exact.nombre
+    p = Producto.query.filter(Producto.nombre.ilike(f'%{t}%')).order_by(Producto.id_producto).first()
+    return (p.id_producto, p.nombre) if p else (None, None)
 
 
 def _tool_buscar_prenda(colegio, texto):
@@ -473,6 +502,9 @@ def preguntar():
             "Si el usuario pide CREAR UN RECORDATORIO / TAREA / agendar algo para un día, "
             "propónlo y en la ÚLTIMA línea agrega EXACTAMENTE:\n"
             "ACCION_JSON: {\"tipo\":\"crear_tarea\",\"titulo\":\"<qué recordar>\",\"fecha\":\"<YYYY-MM-DD o vacío>\",\"descripcion\":\"<detalle opcional>\"}\n"
+            "Si el usuario pide AJUSTAR EL STOCK de una prenda (sumar, restar o fijar "
+            "unidades de una talla), propónlo y en la ÚLTIMA línea agrega EXACTAMENTE:\n"
+            "ACCION_JSON: {\"tipo\":\"ajustar_stock\",\"colegio\":\"<colegio>\",\"prenda\":\"<nombre prenda>\",\"talla\":\"<talla>\",\"modo\":\"<sumar|restar|fijar>\",\"cantidad\":<numero>}\n"
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
         )
 
@@ -577,6 +609,44 @@ def ejecutar():
             'mensaje': f'✅ Recordatorio creado: “{titulo}”'
                        + (f' para el {fecha.isoformat()}' if fecha else '')
                        + '. Lo ves en el menú *Tareas*.',
+        }), 200
+
+    # ── Ajustar stock (sumar / restar / fijar) ──
+    if tipo == 'ajustar_stock':
+        cid = _resolver_colegio_id(str(data.get('colegio', '')))
+        pid, pnombre = _resolver_producto_id(str(data.get('prenda', '')))
+        talla = str(data.get('talla', '')).strip().upper()
+        modo = str(data.get('modo', '')).lower().strip()
+        try:
+            cantidad = int(data.get('cantidad'))
+        except Exception:
+            cantidad = None
+        if not cid:
+            return jsonify({'error': 'No identifiqué el colegio.'}), 400
+        if not pid:
+            return jsonify({'error': 'No identifiqué la prenda.'}), 404
+        if not talla or modo not in ('sumar', 'restar', 'fijar') or cantidad is None or cantidad < 0:
+            return jsonify({'error': 'Datos del ajuste inválidos.'}), 400
+        ident = get_current_identity()
+        tipo_mov = {'sumar': 'ENTRADA', 'restar': 'SALIDA', 'fijar': 'AJUSTE'}[modo]
+        try:
+            stock, _mov = registrar_movimiento(cid, pid, talla, tipo_mov, cantidad,
+                                               usuario=ident['usuario'], motivo='[Asistente]')
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.warning("asistente: ajustar_stock falló: %s", e)
+            return jsonify({'error': 'No pude aplicar el ajuste de stock.'}), 500
+        try:
+            registrar_auditoria('stock', stock.id_stock, tipo_mov,
+                                f'[Asistente] {pnombre} T{talla}: {modo} {cantidad} '
+                                f'-> {stock.cantidad} por {ident.get("usuario")}')
+        except Exception:
+            pass
+        return jsonify({
+            'ok': True,
+            'mensaje': f'✅ Stock actualizado: {pnombre} talla {talla} → '
+                       f'{stock.cantidad} unidades.',
         }), 200
 
     if tipo != 'cambiar_estado_pedido':
