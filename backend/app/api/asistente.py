@@ -16,7 +16,7 @@ import re
 import json
 import time
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 
 # Caché corta del contexto (evita reconsultar la BD en cada pregunta seguida).
 _CTX_CACHE = {'t': 0.0, 'data': None}
@@ -31,7 +31,7 @@ from app import db, limiter
 from app.utils.decorators import rol_requerido, get_current_identity, registrar_auditoria
 from app.models import (
     Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
-    Stock, Producto, Colegio, PedidoWeb, PrecioColegio,
+    Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 
@@ -70,6 +70,11 @@ MANUAL = (
     "incorrecta dentro de 5 días hábiles.\n"
     "- Pedidos web: flujo POR_ENTREGAR → EMPACADO → ENTREGADO; fabricación: "
     "EN_PRODUCCION → LISTO → ENTREGADO.\n"
+    "- Recordatorios/Tareas: SÍ existen. Están en el menú 'Tareas' del panel; se "
+    "puede crear una tarea con título y fecha. (No sugieras Google Calendar; el "
+    "sistema tiene su propio módulo de Tareas.)\n"
+    "- Reportes e histórico de ventas: menú 'Reportes' y 'Buscar facturas' (se puede "
+    "filtrar por fechas de meses anteriores).\n"
     "- Horario del punto: lunes y sábado 10:00 a.m. – 5:00 p.m."
 )
 
@@ -193,18 +198,30 @@ def _extraer_accion(texto):
             break
         except Exception:
             continue
-    if not isinstance(obj, dict) or obj.get('tipo') != 'cambiar_estado_pedido':
+    if not isinstance(obj, dict):
         return texto, None
-    estado = str(obj.get('estado', '')).upper().strip()
-    factura = str(obj.get('factura', '')).strip()
-    if estado not in _ESTADOS_ENTREGA or not factura:
+    tipo = obj.get('tipo')
+    accion = None
+    if tipo == 'cambiar_estado_pedido':
+        estado = str(obj.get('estado', '')).upper().strip()
+        factura = str(obj.get('factura', '')).strip()
+        if estado in _ESTADOS_ENTREGA and factura:
+            accion = {
+                'tipo': tipo, 'factura': factura, 'estado': estado,
+                'descripcion': f'Marcar la factura/pedido “{factura}” como: {_ESTADOS_ENTREGA[estado]}',
+            }
+    elif tipo == 'crear_tarea':
+        titulo = str(obj.get('titulo', '')).strip()
+        fecha = str(obj.get('fecha', '') or obj.get('fecha_vencimiento', '')).strip()[:10]
+        if titulo:
+            desc = f'Crear recordatorio: “{titulo}”' + (f' para el {fecha}' if fecha else '')
+            accion = {
+                'tipo': tipo, 'titulo': titulo[:200], 'fecha': fecha,
+                'descripcion_tarea': str(obj.get('descripcion', '')).strip()[:500],
+                'descripcion': desc,
+            }
+    if not accion:
         return texto, None
-    accion = {
-        'tipo': 'cambiar_estado_pedido',
-        'factura': factura,
-        'estado': estado,
-        'descripcion': f'Marcar la factura/pedido “{factura}” como: {_ESTADOS_ENTREGA[estado]}',
-    }
     texto_limpio = texto[:m.start()].rstrip() or 'Te propongo esta acción:'
     return texto_limpio, accion
 
@@ -293,6 +310,36 @@ def _tool_pedidos_telefono(tel):
     return {'encontrado': bool(pedidos), 'pedidos': pedidos}
 
 
+def _tool_ventas_periodo(desde=None, hasta=None, mes=None, anio=None):
+    """Ventas (facturas + total) en un mes/año o en un rango de fechas."""
+    d = h = None
+    if mes and anio:
+        try:
+            y, m = int(anio), int(mes)
+            d = date(y, m, 1)
+            h = date(y, 12, 31) if m == 12 else date(y, m + 1, 1) - timedelta(days=1)
+        except Exception:
+            pass
+    for val, attr in ((desde, 'd'), (hasta, 'h')):
+        if val:
+            try:
+                pd = datetime.strptime(str(val)[:10], '%Y-%m-%d').date()
+                if attr == 'd':
+                    d = pd
+                else:
+                    h = pd
+            except Exception:
+                pass
+    if not d or not h:
+        return {'error': 'Especifica un mes y año, o un rango de fechas (YYYY-MM-DD).'}
+    row = db.session.query(
+        func.count(Factura.id_factura), func.coalesce(func.sum(Factura.total), 0)
+    ).filter(and_(Factura.fecha_factura >= d, Factura.fecha_factura <= h,
+                  Factura.estado != 'ANULADA')).first()
+    return {'desde': d.isoformat(), 'hasta': h.isoformat(),
+            'facturas': int(row[0] or 0), 'total': float(row[1] or 0)}
+
+
 def _ejecutar_busqueda(obj):
     tipo = obj.get('tipo')
     if tipo == 'buscar_prenda':
@@ -301,6 +348,9 @@ def _ejecutar_busqueda(obj):
         return _tool_buscar_factura(obj.get('referencia') or obj.get('factura', ''))
     if tipo == 'pedidos_cliente':
         return _tool_pedidos_telefono(obj.get('telefono', ''))
+    if tipo == 'ventas_periodo':
+        return _tool_ventas_periodo(obj.get('desde'), obj.get('hasta'),
+                                    obj.get('mes'), obj.get('anio') or obj.get('año'))
     return {'error': 'búsqueda no soportada'}
 
 
@@ -419,7 +469,10 @@ def preguntar():
             "ÚLTIMA línea, agrega EXACTAMENTE:\n"
             "ACCION_JSON: {\"tipo\":\"cambiar_estado_pedido\",\"factura\":\"<numero de factura o referencia RALOZ-...>\",\"estado\":\"<EMPACADO|LISTO_LLAMAR|ENTREGADA>\"}\n"
             "Mapea: 'empacado'->EMPACADO; 'listo'/'llamar'->LISTO_LLAMAR; "
-            "'entregado'/'entregué'/'ya lo recogió'->ENTREGADA. "
+            "'entregado'/'entregué'/'ya lo recogió'->ENTREGADA.\n"
+            "Si el usuario pide CREAR UN RECORDATORIO / TAREA / agendar algo para un día, "
+            "propónlo y en la ÚLTIMA línea agrega EXACTAMENTE:\n"
+            "ACCION_JSON: {\"tipo\":\"crear_tarea\",\"titulo\":\"<qué recordar>\",\"fecha\":\"<YYYY-MM-DD o vacío>\",\"descripcion\":\"<detalle opcional>\"}\n"
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
         )
 
@@ -432,6 +485,7 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"buscar_prenda\",\"colegio\":\"<colegio>\",\"texto\":\"<nombre prenda>\"}\n"
         "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero o RALOZ-...>\"}\n"
         "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
+        "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
         "Solo UNA búsqueda por vez. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
 
@@ -493,7 +547,39 @@ def ejecutar():
         }), 403
 
     data = request.get_json(silent=True) or {}
-    if data.get('tipo') != 'cambiar_estado_pedido':
+    tipo = data.get('tipo')
+
+    # ── Crear recordatorio / tarea ──
+    if tipo == 'crear_tarea':
+        titulo = str(data.get('titulo', '')).strip()[:200]
+        if not titulo:
+            return jsonify({'error': 'Falta el título del recordatorio.'}), 400
+        fecha = None
+        if data.get('fecha'):
+            try:
+                fecha = datetime.strptime(str(data['fecha'])[:10], '%Y-%m-%d').date()
+            except Exception:
+                fecha = None
+        ident = get_current_identity()
+        t = Tarea(titulo=titulo,
+                  descripcion=(str(data.get('descripcion_tarea', '')).strip() or None),
+                  fecha_vencimiento=fecha,
+                  creada_por=ident['id_usuario'])
+        db.session.add(t)
+        db.session.commit()
+        try:
+            registrar_auditoria('tareas', t.id_tarea, 'CREADA',
+                                f'[Asistente] Recordatorio creado por {ident.get("usuario")}')
+        except Exception as e:
+            logger.warning("asistente: no se pudo auditar tarea: %s", e)
+        return jsonify({
+            'ok': True,
+            'mensaje': f'✅ Recordatorio creado: “{titulo}”'
+                       + (f' para el {fecha.isoformat()}' if fecha else '')
+                       + '. Lo ves en el menú *Tareas*.',
+        }), 200
+
+    if tipo != 'cambiar_estado_pedido':
         return jsonify({'error': 'Acción no soportada.'}), 400
 
     factura_ref = str(data.get('factura', '')).strip()
