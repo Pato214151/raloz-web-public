@@ -36,6 +36,12 @@ import WhatsApp from './components/whatsapp/WhatsApp'
 import BuscarContacto from './components/whatsapp/BuscarContacto'
 import Citas from './components/citas/Citas'
 import Leads from './components/leads/Leads'
+// Hubs (centros por área) — reúnen los componentes de arriba en pestañas
+import VentasHub from './components/secciones/VentasHub'
+import ClientesHub from './components/secciones/ClientesHub'
+import FinanzasHub from './components/secciones/FinanzasHub'
+import CatalogoHub from './components/secciones/CatalogoHub'
+import ConfigHub from './components/secciones/ConfigHub'
 
 function ProtectedRoute({ children, roles }) {
   const { usuario, loading } = useAuth()
@@ -73,13 +79,29 @@ export default function App() {
         }>
           <Route index element={<Dashboard />} />
           <Route path="asistente" element={<Asistente />} />
+
+          {/* ── ÁREAS PRINCIPALES (hubs con pestañas) ── */}
+          <Route path="ventas" element={<VentasHub />} />
+          <Route path="operacion" element={<Operaciones />} />
+          <Route path="catalogo" element={<CatalogoHub />} />
+          <Route path="clientes" element={<ClientesHub />} />
+          <Route path="finanzas" element={
+            <ProtectedRoute roles={['administrador', 'cajero', 'vendedor']}><FinanzasHub /></ProtectedRoute>
+          } />
+          <Route path="tienda" element={
+            <ProtectedRoute roles={['administrador']}><Publicaciones /></ProtectedRoute>
+          } />
+          <Route path="config" element={
+            <ProtectedRoute roles={['administrador', 'vendedor', 'cajero']}><ConfigHub /></ProtectedRoute>
+          } />
+
+          {/* ── Rutas directas (compatibilidad + barra móvil + enlaces internos) ── */}
           <Route path="facturacion" element={<Facturacion />} />
           <Route path="vender" element={<Vender />} />
           <Route path="buscar" element={<BuscarFacturas />} />
           <Route path="pagos" element={<Pagos />} />
           <Route path="stock" element={<StockView />} />
-          <Route path="ventas" element={<Ventas />} />
-          <Route path="clientes" element={<Clientes />} />
+          <Route path="hoja-ventas" element={<Ventas />} />
           <Route path="gastos" element={
             <ProtectedRoute roles={['administrador', 'cajero']}><Gastos /></ProtectedRoute>
           } />

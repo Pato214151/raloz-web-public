@@ -7,7 +7,7 @@ import {
   BookOpen, UserCog, Menu, X, LogOut, ChevronDown, BarChart3, AlertCircle,
   DollarSign, Settings, ClipboardList, Hammer, CreditCard, PackageCheck,
   ShoppingCart, Scissors, Truck, Activity, ChevronRight,   MessageCircle, CalendarClock, MessageSquare,
-  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap, Home, Sparkles,
+  Clock, Inbox, ListTodo, PackageX, Megaphone, Zap, Home, Sparkles, ShoppingBag,
 } from 'lucide-react'
 
 // ─── Barra inferior (solo móvil): accesos directos a lo más usado ──
@@ -19,92 +19,36 @@ const bottomNavItems = [
   { path: '/caja',        label: 'Caja',   icon: BookOpen,      roles: ['administrador', 'cajero']             },
 ]
 
-// ─── Grupos de navegación reorganizados ─────────────────────────
-const menuGroups = [
-  {
-    groupId: 'dashboard',
-    label: 'Inicio',
-    items: [
-      { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/asistente', label: 'Asistente', icon: Sparkles, roles: ['administrador', 'vendedor', 'cajero'] },
-    ],
-  },
-  {
-    groupId: 'ventas',
-    label: 'Ventas',
-    items: [
-      { path: '/vender',      label: 'Nueva Venta',     icon: ShoppingCart, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/buscar',      label: 'Buscar Facturas', icon: Search,       roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/pagos',       label: 'Registrar Pago',  icon: CreditCard,   roles: ['administrador', 'cajero']            },
-      { path: '/cuentas',     label: 'Por Cobrar',      icon: AlertCircle,  roles: ['administrador', 'vendedor']          },
-      { path: '/clientes',    label: 'Clientes',        icon: Users,        roles: ['administrador', 'vendedor', 'cajero'] },
-    ],
-  },
-  {
-    // Una sola entrada: la pantalla Operaciones ya junta Pedidos Web,
-    // Fabricación, Stock Fab, Empaque y Por Entregar en pestañas.
-    groupId: 'pedidos',
-    label: 'Pedidos y Entregas',
-    items: [
-      { path: '/operaciones', label: 'Pedidos y Entregas', icon: ClipboardList, roles: ['administrador', 'vendedor', 'cajero'] },
-    ],
-  },
-  {
-    groupId: 'inventario',
-    label: 'Inventario',
-    items: [
-      { path: '/stock',               label: 'Stock Actual',        icon: Activity,   roles: ['administrador', 'vendedor'] },
-      { path: '/precios',             label: 'Precios Colegios',    icon: DollarSign, roles: ['administrador']             },
-      { path: '/ordenes-produccion',  label: 'Órdenes de Producción', icon: Scissors, roles: ['administrador']           },
-    ],
-  },
-  {
-    groupId: 'finanzas',
-    label: 'Dinero',
-    items: [
-      { path: '/caja',      label: 'Caja',           icon: BookOpen,   roles: ['administrador', 'cajero']   },
-      { path: '/gastos',    label: 'Gastos',         icon: Wallet,     roles: ['administrador', 'cajero']   },
-      { path: '/reportes',  label: 'Reportes',       icon: BarChart3,  roles: ['administrador']             },
-      { path: '/ventas',    label: 'Hoja de Ventas', icon: TrendingUp, roles: ['administrador', 'vendedor'] },
-    ],
-  },
-  {
-    groupId: 'comunicacion',
-    label: 'Comunicación',
-    items: [
-      { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/citas',    label: 'Citas',    icon: CalendarClock, roles: ['administrador', 'vendedor', 'cajero'] },
-      { path: '/leads',    label: 'Leads',    icon: MessageSquare, roles: ['administrador', 'vendedor']           },
-      { path: '/avisos',   label: 'Avisos',   icon: Megaphone,     roles: ['administrador']                       },
-    ],
-  },
-  {
-    groupId: 'tienda',
-    label: 'Tienda online',
-    items: [
-      { path: '/publicaciones',  label: 'Publicaciones',  icon: Megaphone, roles: ['administrador'] },
-      { path: '/automatizacion', label: 'Automatización', icon: Zap,       roles: ['administrador'] },
-    ],
-  },
-  {
-    groupId: 'ajustes',
-    label: 'Ajustes',
-    items: [
-      { path: '/configuracion', label: 'Colegios', icon: Settings, roles: ['administrador']                        },
-      { path: '/usuarios',      label: 'Usuarios', icon: UserCog,  roles: ['administrador']                        },
-      { path: '/tareas',        label: 'Tareas',   icon: ListTodo, roles: ['administrador', 'vendedor', 'cajero'] },
-    ],
-  },
+// ─── Navegación consolidada: 9 áreas, sin submenús en el sidebar ────
+// Cada área es un "centro" con sus pestañas contextuales adentro (hubs).
+const ALL = ['administrador', 'vendedor', 'cajero']
+const NAV_ITEMS = [
+  { path: '/',          label: 'Inicio',        icon: Home,          roles: ALL, end: true },
+  { path: '/asistente', label: 'Asistente',     icon: Sparkles,      roles: ALL },
+  { path: '/ventas',    label: 'Ventas',        icon: ShoppingCart,  roles: ALL },
+  { path: '/operacion', label: 'Operación',     icon: ClipboardList, roles: ALL, badge: 'pedidos' },
+  { path: '/catalogo',  label: 'Catálogo',      icon: Package,       roles: ['administrador', 'vendedor'] },
+  { path: '/clientes',  label: 'Clientes',      icon: Users,         roles: ALL, badge: 'wa' },
+  { path: '/finanzas',  label: 'Finanzas',      icon: Wallet,        roles: ['administrador', 'cajero', 'vendedor'] },
+  { path: '/tienda',    label: 'Tienda Online', icon: ShoppingBag,   roles: ['administrador'] },
+  { path: '/config',    label: 'Configuración', icon: Settings,      roles: ['administrador', 'vendedor', 'cajero'] },
 ]
 
 // Mapeo ruta → título para el header dinámico
 const PAGE_TITLES = {
-  '/':                      'Dashboard',
+  '/':                      'Inicio',
+  '/ventas':                'Ventas',
+  '/operacion':             'Operación',
+  '/catalogo':              'Catálogo',
+  '/finanzas':              'Finanzas',
+  '/tienda':                'Tienda Online',
+  '/config':                'Configuración',
+  '/asistente':             'Asistente RALOZ',
   '/facturacion':           'Nueva Venta (clásica)',
   '/vender':                'Nueva Venta',
   '/buscar':                'Buscar Facturas',
   '/pagos':                 'Registrar Pago',
-  '/ventas':                'Hoja de Ventas',
+  '/hoja-ventas':           'Hoja de Ventas',
   '/cuentas':              'Cuentas por Cobrar',
   '/clientes':              'Clientes',
   '/whatsapp':              'WhatsApp',
@@ -131,17 +75,8 @@ const PAGE_TITLES = {
   '/operaciones':           'Pedidos y Entregas',
 }
 
-// Grupos que arrancan colapsados por defecto
-const DEFAULT_COLLAPSED = ['inventario', 'finanzas', 'comunicacion', 'tienda', 'ajustes']
-
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [expandedGroups, setExpandedGroups] = useState(
-    menuGroups.reduce((acc, g) => ({
-      ...acc,
-      [g.groupId]: !DEFAULT_COLLAPSED.includes(g.groupId),
-    }), {})
-  )
   const { usuario, logout } = useAuth()
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -211,11 +146,8 @@ export default function Layout() {
   }, [puedeVerLeads])
 
   const handleLogout = () => { logout(); navigate('/login') }
-  const toggleGroup  = (id) => setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }))
 
-  const filteredGroups = menuGroups
-    .map(g => ({ ...g, items: g.items.filter(i => i.roles.includes(usuario?.rol)) }))
-    .filter(g => g.items.length > 0)
+  const navItems = NAV_ITEMS.filter(i => i.roles.includes(usuario?.rol))
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? 'RALOZ'
 
@@ -253,86 +185,46 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Navegación */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5 scrollbar-thin">
-          {filteredGroups.map((group, gi) => (
-            <div key={group.groupId} className={gi > 0 ? 'pt-1' : ''}>
-
-              {/* Cabecera del grupo */}
-              {group.groupId !== 'dashboard' ? (
-                <button
-                  onClick={() => toggleGroup(group.groupId)}
-                  className="w-full flex items-center justify-between px-2 py-1.5 mb-0.5 rounded-md
-                             text-[10px] font-bold text-slate-500 uppercase tracking-widest
-                             hover:text-slate-400 hover:bg-slate-800/50 transition-all"
-                >
-                  <span>{group.label}</span>
-                  <ChevronDown
-                    size={11}
-                    className={`transition-transform duration-200 ${expandedGroups[group.groupId] ? 'rotate-180' : ''}`}
-                  />
-                </button>
-              ) : null}
-
-              {/* Items del grupo */}
-              <div className={`overflow-hidden transition-all duration-200 ${
-                group.groupId === 'dashboard' || expandedGroups[group.groupId] ? 'max-h-screen' : 'max-h-0'
-              }`}>
-                <div className="space-y-0.5">
-                  {group.items.map(item => (
-                    <NavLink
-                      key={item.path}
-                      to={item.path}
-                      end={item.path === '/'}
-                      onClick={() => setSidebarOpen(false)}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
-                          isActive
-                            ? 'bg-amber-400/12 text-amber-300 ring-1 ring-amber-400/20'
-                            : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                        }`
-                      }
-                    >
-                      {({ isActive }) => {
-                        const showPedidosBadge = item.path === '/pedidos-online' && nuevosPedidos > 0
-                        const showWaBadge = item.path === '/whatsapp' && waNoLeidos > 0
-                        const showCitasBadge = item.path === '/citas' && citasPend > 0
-                        const showLeadsBadge = item.path === '/leads' && leadsPend > 0
-                        return (
-                          <>
-                            <item.icon size={14} className={isActive ? 'text-amber-400' : ''} />
-                            <span className="truncate">{item.label}</span>
-                            {showPedidosBadge ? (
-                              <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
-                                {nuevosPedidos > 99 ? '99+' : nuevosPedidos}
-                              </span>
-                            ) : showWaBadge ? (
-                              <span className="ml-auto bg-green-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
-                                {waNoLeidos > 99 ? '99+' : waNoLeidos}
-                              </span>
-                            ) : showLeadsBadge ? (
-                              <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
-                                {leadsPend > 99 ? '99+' : leadsPend}
-                              </span>
-                            ) : showCitasBadge ? (
-                              <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
-                                {citasPend > 99 ? '99+' : citasPend}
-                              </span>
-                            ) : isActive ? (
-                              <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                            ) : null}
-                          </>
-                        )
-                      }}
-                    </NavLink>
-                  ))}
-                </div>
-              </div>
-
-              {/* Separador entre grupos (excepto el último) */}
-              {gi < filteredGroups.length - 1 && group.groupId !== 'dashboard' && (
-                <div className="mt-2 border-t border-slate-800/60" />
-              )}
+        {/* Navegación — 9 áreas, cada una es un centro con sus pestañas */}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1 scrollbar-thin">
+          {navItems.map((item, i) => (
+            <div key={item.path}>
+              {/* Separador sutil tras Inicio+Asistente */}
+              {i === 2 && <div className="my-2 border-t border-slate-800/60" />}
+              <NavLink
+                to={item.path}
+                end={item.end}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium transition-all ${
+                    isActive
+                      ? 'bg-amber-400/12 text-amber-300 ring-1 ring-amber-400/20'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`
+                }
+              >
+                {({ isActive }) => {
+                  const pedidosBadge = item.badge === 'pedidos' && nuevosPedidos > 0
+                  const waBadge = item.badge === 'wa' && waNoLeidos > 0
+                  return (
+                    <>
+                      <item.icon size={16} className={isActive ? 'text-amber-400' : ''} />
+                      <span className="truncate">{item.label}</span>
+                      {pedidosBadge ? (
+                        <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
+                          {nuevosPedidos > 99 ? '99+' : nuevosPedidos}
+                        </span>
+                      ) : waBadge ? (
+                        <span className="ml-auto bg-green-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0 animate-pulse">
+                          {waNoLeidos > 99 ? '99+' : waNoLeidos}
+                        </span>
+                      ) : isActive ? (
+                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                      ) : null}
+                    </>
+                  )
+                }}
+              </NavLink>
             </div>
           ))}
         </nav>
