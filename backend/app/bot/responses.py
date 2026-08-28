@@ -494,6 +494,17 @@ def _detectar_producto(t: str):
     return None
 
 
+# Prendas con género obvio: no hay que preguntar "¿niño o niña?".
+#   blusa/jardinera/falda = niña · camisa (cuello) = niño.
+# 'pantalon' NO va aquí: el diario es de niño pero el de ed. física es unisex.
+_PRENDA_GENERO = {"blusa": "nina", "jardinera": "nina", "falda": "nina", "camisa": "nino"}
+
+
+def _genero_de_prenda(producto):
+    """Si la prenda ya define el género, lo devuelve ('nina'/'nino'); si no, None."""
+    return _PRENDA_GENERO.get(producto or "")
+
+
 # Sinónimos coloquiales → términos que SÍ aparecen en los nombres reales.
 # Ej: la gente dice "sudadera" y se refiere al uniforme de Educación Física.
 _SINONIMOS = {
@@ -1007,6 +1018,10 @@ def _guardar_colegio_y_pedir_siguiente(chat_id: str, idc: int, nombre: str, tall
     set_dato(chat_id, "precio_col_nom", nombre)
     if talla:
         set_dato(chat_id, "precio_talla", talla)
+        # Si la prenda ya define el género (blusa→niña, camisa→niño), no preguntamos.
+        gen = _genero_de_prenda(get_dato(chat_id, "precio_producto", "") or None)
+        if gen:
+            return _mostrar_precios(chat_id, idc, nombre, talla, gen)
         set_estado(chat_id, "precio_genero")
         return Respuesta(PEDIR_GENERO_PRECIO)
     set_estado(chat_id, "precio_talla")
@@ -1037,7 +1052,10 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _COMPRAR_AQUI = ["compr", "apart", "reserv", "me la das", "me lo das", "me das",
                  "la quiero", "lo quiero", "quiero", "kiero", "necesito", "dame",
                  "me la llevo", "me lo llevo", "la llevo", "lo llevo", "las llevo",
-                 "los llevo", "pedir", "encarg", "hacer el pedido", "porfa"]
+                 "los llevo", "pedir", "encarg", "hacer el pedido", "porfa",
+                 # "no quiero entrar a la página" → cerramos la venta aquí mismo
+                 "por aqui", "por aca", "aca mismo", "por whatsapp", "por wasa",
+                 "por el chat", "sin entrar", "no quiero entrar", "no entrar"]
 # Palabras que indican que quiere VER otra cosa, no comprar (para no arrancar el checkout)
 _VER_OTRA = ["ver otra", "otra talla", "muestra", "mostrar", "cambiar", "diferente",
              "otro colegio", "otra prenda"]
@@ -1284,6 +1302,12 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
                 return Respuesta(CITA_PEDIR_NOMBRE)
         talla = talla_det or texto.strip().upper()
         set_dato(chat_id, "precio_talla", talla)
+        # Prenda con género obvio (blusa→niña, camisa→niño) → no preguntamos género
+        gen = _genero_de_prenda(get_dato(chat_id, "precio_producto", "") or None)
+        if gen:
+            idc = int(get_dato(chat_id, "precio_col_id", "0"))
+            nombre = get_dato(chat_id, "precio_col_nom", "")
+            return _mostrar_precios(chat_id, idc, nombre, talla, gen)
         set_estado(chat_id, "precio_genero")
         return Respuesta(PEDIR_GENERO_PRECIO)
 
