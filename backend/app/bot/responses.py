@@ -338,8 +338,29 @@ def _detectar_colegio(t: str):
 
 
 def _detectar_talla(t: str):
+    # Grupos tipo "10-12", "6-8", "s-m" (algunas prendas se manejan así, p. ej. medias)
+    m = re.search(r"\b(\d{1,2}\s*-\s*\d{1,2}|[sml]\s*-\s*[sml])\b", t)
+    if m:
+        return m.group(1).replace(" ", "").upper()
     m = re.search(r"\b(\d{1,2}|xl|xs|s|m|l)\b", t)
     return m.group(1).upper() if m else None
+
+
+def _talla_tokens(x):
+    """'10-12' → {'10-12','10','12'};  '10' → {'10'}. Para comparar tallas
+    individuales contra grupos (medias, ropa por rango)."""
+    x = str(x).upper().replace(" ", "")
+    s = {x}
+    if "-" in x:
+        s |= set(x.split("-"))
+    return s
+
+
+def _talla_match(q, prod) -> int:
+    """2 = talla exacta, 1 = compatible (una individual dentro de un grupo), 0 = no."""
+    if str(q).upper().replace(" ", "") == str(prod).upper().replace(" ", ""):
+        return 2
+    return 1 if (_talla_tokens(q) & _talla_tokens(prod)) else 0
 
 
 _PALABRAS_DIA = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
@@ -386,10 +407,15 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
     for p in data.get("productos", []):
         if not _coincide_genero(p["nombre"], genero):
             continue
+        mejor, mejor_rank = None, 0
         for tt in p.get("tallas", []):
-            if str(tt["talla"]).upper() == talla:
-                encontrados.append((p.get("id_producto"), p["nombre"], tt["precio"], tt["stock"]))
-                break
+            r = _talla_match(talla, tt["talla"])
+            if r > mejor_rank:
+                mejor, mejor_rank = tt, r
+                if r == 2:      # coincidencia exacta → no busques más
+                    break
+        if mejor:
+            encontrados.append((p.get("id_producto"), p["nombre"], mejor["precio"], mejor["stock"]))
 
     etiqueta_gen = {"nino": " · niño", "nina": " · niña"}.get(genero, "")
     nota = ""
@@ -399,11 +425,13 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
         if filtrados:
             encontrados = filtrados
         else:
-            nota = f"🤔 No encontré *{producto}* en talla *{talla}*. Te muestro lo demás:\n\n"
+            nota = (f"Uy, *{producto}* en talla *{talla}* no la tengo a mano ahora mismo 🙈. "
+                    "¡Pero mira lo que sí tengo para ti!\n\n")
 
     if not encontrados:
-        return (f"🤔 No encontré prendas en talla *{talla}*{etiqueta_gen} para *{nombre_colegio}*.\n"
-                "¿Seguro es esa talla? También puedes ver todo en la tienda 👉 " + TIENDA_URL), []
+        return (f"Mmm, en talla *{talla}*{etiqueta_gen} no me aparece nada para "
+                f"*{nombre_colegio}* 🤔. ¿Será otra talla? O escribe *asesor* y con "
+                "muchísimo gusto te ayudo a encontrarla. 🙌"), []
 
     def _linea(n, pr):
         return f"• {n} — " + f"${int(pr):,}".replace(",", ".")
@@ -421,13 +449,11 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
     _slug = {1: "marillac", 2: "adventista", 3: "manyanet"}.get(id_colegio, "")
     _prenda_q = ("&prenda=" + prod.split()[0]) if (_slug and prod) else ""
     _link = TIENDA_URL + ("/?colegio=" + _slug + _prenda_q if _slug else "")
-    partes.append("\n🛒 *Cómpralo en línea* 👉 " + _link +
-                  "\nPagas por *link seguro* (MercadoPago), te *reservamos la talla* "
-                  "y te llega la *factura* al correo. 🧾"
-                  "\n_O acércate al punto para medir la talla._")
     if items_disp:
-        partes.append("\n💬 ¿Prefieres que te la *aparte y te pase el link de pago aquí "
-                      "mismo*? Escribe *comprar*.")
+        partes.append("\n✨ ¿Te la *aparto* y te paso el *link de pago aquí mismo*? "
+                      "Escribe *comprar* y en un minuto queda (con factura al correo 🧾).")
+    partes.append("\n🛒 También en la tienda 👉 " + _link +
+                  "\n_O pásate al punto y con gusto te ayudamos con la talla._")
     return "\n".join(partes), items_disp
 
 
