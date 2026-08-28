@@ -541,8 +541,7 @@ NOTA_ATENCION = (
 VOLVER = "\n\n_Escribe *menú* para volver al inicio._"
 
 # Se agrega al final de los precios para invitar a consultar otra talla sin repetir todo
-OTRA_TALLA = ("\n\n🔁 ¿Ver *otra talla*? Escríbela (ej: *10*). "
-              "También puedes cambiar de *niño/niña* u *otro colegio*, o escribir *menú*.")
+OTRA_TALLA = "\n\n🔁 ¿Otra *talla* o *colegio*? Escríbelo, o *menú*."
 
 # ─── ENTREGA (cuando el pedido está listo) ─────────────────────────
 ENTREGA_PREGUNTA = (

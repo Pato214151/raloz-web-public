@@ -82,7 +82,10 @@ def _descargar_media(media_id: str):
         binf = requests.get(url, headers={'Authorization': f'Bearer {token}'}, timeout=30)
         if binf.status_code >= 300 or len(binf.content) > 5_000_000:
             return None, None
-        data_url = f'data:{mime};base64,{base64.b64encode(binf.content).decode()}'
+        # WhatsApp manda "audio/ogg; codecs=opus": el parámetro y el espacio rompen
+        # el data URL (no carga ni suena). Dejamos solo el tipo base.
+        mime_base = mime.split(';')[0].strip() or 'application/octet-stream'
+        data_url = f'data:{mime_base};base64,{base64.b64encode(binf.content).decode()}'
         if mime.startswith('image/'):
             tipo = 'image'
         elif mime.startswith('audio/'):

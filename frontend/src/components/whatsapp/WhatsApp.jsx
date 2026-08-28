@@ -127,7 +127,10 @@ function Media({ id, tipo }) {
   if (tipo === 'audio') {
     return (
       <div className="mb-1">
-        <audio controls src={src} className="max-w-[260px] w-[260px]" />
+        <audio controls preload="metadata" src={src} className="max-w-[260px] w-[260px]" />
+        <a href={src} download="nota-de-voz.ogg" className="block text-[11px] text-[#8696a0] underline mt-0.5">
+          Descargar audio
+        </a>
       </div>
     )
   }
