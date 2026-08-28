@@ -1001,13 +1001,43 @@ def _mostrar_precios(chat_id: str, idc: int, nombre: str, talla: str, genero: st
 
 # ─── COMPRAR EN EL CHAT (link de pago + factura, sin salir de WhatsApp) ───
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_COMPRAR_AQUI = ["comprar", "comprarla", "comprarlo", "aparta", "apartar", "apartame",
-                 "apártame", "reservar", "resérvame", "reservame", "me la das",
-                 "me lo das", "me das", "la quiero", "lo quiero", "quiero pedir",
-                 "quiero comprar", "pedirla", "pedirlo", "encargar", "encargarla",
-                 "hacer el pedido", "la llevo", "lo llevo", "las llevo", "los llevo"]
+# Stems (substring) para captar variantes/typos: "compr" cubre comprar/compro/compra;
+# "apart" cubre apartar/aparta/aparte/apártame; "reserv" cubre reservar/resérvame.
+_COMPRAR_AQUI = ["compr", "apart", "reserv", "me la das", "me lo das", "me das",
+                 "la quiero", "lo quiero", "quiero", "kiero", "necesito", "dame",
+                 "me la llevo", "me lo llevo", "la llevo", "lo llevo", "las llevo",
+                 "los llevo", "pedir", "encarg", "hacer el pedido", "porfa"]
+# Palabras que indican que quiere VER otra cosa, no comprar (para no arrancar el checkout)
+_VER_OTRA = ["ver otra", "otra talla", "muestra", "mostrar", "cambiar", "diferente",
+             "otro colegio", "otra prenda"]
+# Afirmaciones sueltas (tras cotizar, un "sí/dale/listo" = quiere comprar)
+_AFIRMA = {"si", "sí", "sii", "siii", "claro", "ok", "okay", "oki", "dale", "listo",
+           "de una", "eso", "esa", "ese", "hazlo", "hagale", "hágale", "va", "vale",
+           "sipo", "obvio", "porfa"}
 _NUM_PAL = {"un": 1, "una": 1, "uno": 1, "dos": 2, "par": 2, "tres": 3, "cuatro": 4,
             "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10}
+
+
+def _es_afirmacion(t: str) -> bool:
+    return t.strip() in _AFIRMA
+
+
+def _refrescar_items(chat_id: str):
+    """Recalcula los items disponibles según la última cotización (colegio/talla/
+    género/prenda) y los guarda en compra_items. Devuelve la lista."""
+    idc = int(get_dato(chat_id, "precio_col_id", "0"))
+    nombre = get_dato(chat_id, "precio_col_nom", "")
+    talla = get_dato(chat_id, "precio_talla_val", "")
+    gen = get_dato(chat_id, "precio_genero_val", "ambos")
+    producto = get_dato(chat_id, "precio_producto", "") or None
+    if not idc or not talla:
+        return []
+    _texto, items = _consultar_precios(idc, nombre, talla, gen, producto)
+    try:
+        set_dato(chat_id, "compra_items", json.dumps(items))
+    except Exception:
+        pass
+    return items
 
 
 def _cop(n) -> str:
@@ -1275,9 +1305,6 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return _compra_finalizar(chat_id, correo)
 
     if estado == "precio_otra":
-        # ¿Quiere apartar/comprar lo que acabo de cotizarle? → checkout en el chat
-        if _tiene(t, _COMPRAR_AQUI):
-            return _compra_iniciar(chat_id)
         idc2, nombre2 = _detectar_colegio(t)
         if idc2:  # cambió de colegio → pedir talla de nuevo
             set_dato(chat_id, "precio_col_id", str(idc2))
@@ -1296,10 +1323,22 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         idc = int(get_dato(chat_id, "precio_col_id", "0"))
         nombre = get_dato(chat_id, "precio_col_nom", "")
         gen = get_dato(chat_id, "precio_genero_val", "ambos")
-        talla = _detectar_talla(t)
-        if talla:
-            return _mostrar_precios(chat_id, idc, nombre, talla, gen)
-        if genero_nuevo or prod_nuevo:  # cambió género/prenda → re-mostrar última talla
+        talla_msg = _detectar_talla(t)
+        talla_actual = (get_dato(chat_id, "precio_talla_val", "") or "").upper()
+
+        # ¿Quiere VER otra cosa (otra talla distinta / otra prenda)? → NO es compra
+        pide_otra = _tiene(t, _VER_OTRA) or (bool(talla_msg) and talla_msg.upper() != talla_actual)
+
+        # ¿Quiere COMPRAR/APARTAR lo cotizado? (incluye "sí", "quiero", "aparta", typos)
+        if not pide_otra and (_tiene(t, _COMPRAR_AQUI) or _es_afirmacion(t)):
+            if prod_nuevo or genero_nuevo:      # nombró una prenda/género → afinar items
+                _refrescar_items(chat_id)
+            return _compra_iniciar(chat_id)
+
+        # Navegación normal: otra talla, o cambio de género/prenda → re-mostrar
+        if talla_msg:
+            return _mostrar_precios(chat_id, idc, nombre, talla_msg, gen)
+        if genero_nuevo or prod_nuevo:
             talla_prev = get_dato(chat_id, "precio_talla_val", "")
             if talla_prev:
                 return _mostrar_precios(chat_id, idc, nombre, talla_prev, gen)
@@ -1310,7 +1349,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
             set_estado(chat_id, "cita_nombre")
             return Respuesta(CITA_PEDIR_NOMBRE)
         return Respuesta("🔁 Escríbeme la *talla* que quieres ver (ej: *10*, *S*, *M*), "
-                         "o *menú* para volver al inicio.")
+                         "o escribe *comprar* para apartarla, o *menú*.")
 
     # ── Flujo AGENDAR CITA ────────────────────────────────────────
     if estado == "cita_nombre":
@@ -1469,7 +1508,9 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     # Envíos / domicilios (pregunta de venta) — ANTES que "pedido no llegado",
     # porque ambos mencionan la palabra "envío".
     if _tiene(t, _ENVIOS):
-        return Respuesta(RESP_DOMICILIO + VOLVER)
+        # Dejamos el chat esperando la dirección → la captura el flujo entrega_direccion
+        set_estado(chat_id, "entrega_direccion")
+        return Respuesta(RESP_DOMICILIO)
 
     # Pedido no llegado escrito directamente
     if _tiene(t, _PEDIDO):
@@ -1500,6 +1541,11 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
                   "buena tarde", "buena noche", "buenas", "hola"]):
         reset_estado(chat_id)
         return Respuesta(MENU_PRINCIPAL)
+
+    # Acks cortos ("ya", "ok", "listo", "gracias") → respuesta breve, NO IA
+    # (evita que la IA suelte un saludo genérico sin contexto).
+    if _es_afirmacion(t) or t.strip() in ("ya", "yap", "perfecto", "genial", "de acuerdo"):
+        return Respuesta("👍 ¡Perfecto! Si necesitas algo más escribe *menú*. 🙂")
 
     # ── 7) No reconocido → IA de respaldo (si está activada) o menú ──
     if BOT_IA_FALLBACK and contenido == "texto":
