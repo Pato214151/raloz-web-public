@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Users, Plus, Search, Edit, X, Eye, Printer, Download, RefreshCw } from 'lucide-react'
+import { Users, Plus, Search, Edit, X, Eye, Printer, Download, RefreshCw, MessageCircle } from 'lucide-react'
 
 const fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -129,6 +129,19 @@ export default function Clientes() {
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error eliminando cliente')
     }
+  }
+
+  // Contactar al cliente por WhatsApp (abre el chat; no envía solo)
+  const contactarWhatsApp = () => {
+    const tel = String(selectedCliente?.telefono || selectedCliente?.celular || '').replace(/\D/g, '')
+    if (!tel) { toast.error('Este cliente no tiene teléfono'); return }
+    const num = tel.length === 10 ? '57' + tel : tel
+    const nombre = (selectedCliente?.nombre || '').split(' ')[0]
+    const saldo = Number(resumenHistorial?.saldo_pendiente || 0)
+    const msg = saldo > 0
+      ? `¡Hola ${nombre}! 👋 Te escribimos de RALOZ COL. Tienes un saldo pendiente de ${fmt(saldo)}. ¿Coordinamos el pago? 🙌`
+      : `¡Hola ${nombre}! 👋 Te escribimos de RALOZ COL. ¿En qué te ayudamos con el uniforme? 😊`
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener')
   }
 
   const imprimirHistorial = () => {
@@ -365,6 +378,9 @@ export default function Clientes() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">Detalles de Cliente</h3>
               <div className="flex gap-2">
+                {(selectedCliente.telefono || selectedCliente.celular) && (
+                  <button onClick={contactarWhatsApp} className="flex items-center gap-1 text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-3 py-1.5 rounded-lg" title="Escribirle por WhatsApp"><MessageCircle size={14} /> WhatsApp</button>
+                )}
                 <button onClick={exportarFacturaElectronica} className="btn-secondary flex items-center gap-1 text-sm" title="Exportar datos para factura electrónica"><Download size={14} /> Exportar</button>
                 <button onClick={imprimirHistorial} className="btn-secondary flex items-center gap-1 text-sm"><Printer size={14} /> Imprimir</button>
               </div>
