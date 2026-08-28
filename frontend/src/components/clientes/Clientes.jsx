@@ -18,6 +18,10 @@ export default function Clientes() {
   const [colegios, setColegios] = useState([])
   const [historialCompras, setHistorialCompras] = useState([])
   const [resumenHistorial, setResumenHistorial] = useState(null)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [pages, setPages] = useState(1)
+  const PER_PAGE = 50
   const [form, setForm] = useState({
     nombre: '', apellidos: '', tipo_documento: 'CC', numero_documento: '', dv: '',
     razon_social: '', telefono: '', celular: '', email: '', direccion: '',
@@ -39,11 +43,14 @@ export default function Clientes() {
     }
   }
 
-  const loadClientes = async (q = '', showToast = false) => {
+  const loadClientes = async (q = '', p = 1, showToast = false) => {
     setLoading(true)
     try {
-      const res = await api.get('/clientes', { params: { buscar: q, per_page: 100 } })
+      const res = await api.get('/clientes', { params: { buscar: q, page: p, per_page: PER_PAGE } })
       setClientes(res.data.clientes || [])
+      setTotal(res.data.total || 0)
+      setPages(res.data.pages || 1)
+      setPage(p)
       if (showToast) toast.success('Lista actualizada')
     } catch {
       toast.error('Error cargando clientes')
@@ -52,9 +59,14 @@ export default function Clientes() {
     }
   }
 
+  const irAPagina = (p) => {
+    if (p < 1 || p > pages || p === page) return
+    loadClientes(buscar, p)
+  }
+
   const handleSearch = (e) => {
     e.preventDefault()
-    loadClientes(buscar)
+    loadClientes(buscar, 1)
   }
 
   const blankForm = () => ({
@@ -102,7 +114,7 @@ export default function Clientes() {
       }
       setShowForm(false)
       setEditingId(null)
-      loadClientes()
+      loadClientes(buscar, page)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error guardando cliente')
     }
@@ -125,7 +137,7 @@ export default function Clientes() {
     try {
       await api.delete(`/clientes/${id}`)
       toast.success('Cliente eliminado')
-      loadClientes()
+      loadClientes(buscar, page)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error eliminando cliente')
     }
@@ -253,13 +265,13 @@ export default function Clientes() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
         <div className="flex gap-2">
-          <button onClick={() => { setBuscar(''); loadClientes('', true) }} className="btn-secondary flex items-center gap-2" title="Actualizar lista"><RefreshCw size={16} /> Actualizar</button>
+          <button onClick={() => { setBuscar(''); loadClientes('', 1, true) }} className="btn-secondary flex items-center gap-2" title="Actualizar lista"><RefreshCw size={16} /> Actualizar</button>
           <button onClick={() => openForm()} className="btn-primary flex items-center gap-2"><Plus size={18} /> Nuevo Cliente</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card"><p className="text-sm text-gray-600">Total Clientes</p><p className="text-3xl font-bold text-raloz-600">{clientes.length}</p></div>
+        <div className="card"><p className="text-sm text-gray-600">Total Clientes</p><p className="text-3xl font-bold text-raloz-600">{total}</p></div>
         <div className="card"><p className="text-sm text-gray-600">Con Colegio</p><p className="text-3xl font-bold text-blue-600">{clientes.filter(c => c.id_colegio).length}</p></div>
         <div className="card"><p className="text-sm text-gray-600">Con Documento</p><p className="text-3xl font-bold text-green-600">{clientes.filter(c => c.numero_documento).length}</p></div>
       </div>
@@ -308,6 +320,26 @@ export default function Clientes() {
               ))}
             </tbody>
           </table>
+
+          {/* Paginación */}
+          {pages > 1 && (
+            <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-gray-100 flex-wrap">
+              <p className="text-xs text-gray-500">
+                Mostrando <b>{(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)}</b> de <b>{total}</b> clientes
+              </p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => irAPagina(page - 1)} disabled={page <= 1 || loading}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  ‹ Anterior
+                </button>
+                <span className="text-sm font-medium text-gray-700">Página {page} de {pages}</span>
+                <button onClick={() => irAPagina(page + 1)} disabled={page >= pages || loading}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Siguiente ›
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
