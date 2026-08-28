@@ -408,6 +408,15 @@ MIGRACIONES = [
             "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS bot_datos TEXT",
         ],
     },
+    {
+        'version': '0026',
+        'descripcion': 'Gestión de la bandeja de WhatsApp: asignación, etiquetas y notas',
+        'sql': [
+            "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS asignado_a VARCHAR(120)",
+            "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS etiquetas TEXT",
+            "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS notas TEXT",
+        ],
+    },
 ]
 
 

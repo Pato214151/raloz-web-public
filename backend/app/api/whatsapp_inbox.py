@@ -16,6 +16,7 @@ import os
 import re
 import csv
 import io
+import json
 import base64
 from datetime import datetime, timedelta
 
@@ -174,6 +175,55 @@ def cambiar_modo(chat_id):
     conv.modo = modo
     db.session.commit()
     return jsonify({'ok': True, 'modo': modo})
+
+
+@wa_inbox_bp.route('/conversaciones/<chat_id>/asignar', methods=['POST'])
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def asignar_conversacion(chat_id):
+    """Asigna la conversación a un asesor (o la deja sin asignar con null/''.)."""
+    data = request.get_json(silent=True) or {}
+    asignado = (data.get('asignado_a') or '').strip() or None
+    conv = _upsert_conversacion(chat_id)
+    conv.asignado_a = asignado
+    # Al asignar a una persona, el chat pasa a modo humano (el bot se calla).
+    if asignado:
+        conv.modo = 'humano'
+    db.session.commit()
+    return jsonify({'ok': True, 'asignado_a': conv.asignado_a, 'modo': conv.modo})
+
+
+@wa_inbox_bp.route('/conversaciones/<chat_id>/etiquetas', methods=['POST'])
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def etiquetas_conversacion(chat_id):
+    """Reemplaza la lista de etiquetas de la conversación."""
+    data = request.get_json(silent=True) or {}
+    etiquetas = data.get('etiquetas')
+    if not isinstance(etiquetas, list):
+        return jsonify({'error': 'etiquetas debe ser una lista'}), 400
+    # Limpiar, recortar y quitar duplicados/ vacíos (máx 12, 30 chars c/u)
+    limpias = []
+    for e in etiquetas:
+        s = str(e).strip()[:30]
+        if s and s not in limpias:
+            limpias.append(s)
+        if len(limpias) >= 12:
+            break
+    conv = _upsert_conversacion(chat_id)
+    conv.etiquetas = json.dumps(limpias, ensure_ascii=False)
+    db.session.commit()
+    return jsonify({'ok': True, 'etiquetas': limpias})
+
+
+@wa_inbox_bp.route('/conversaciones/<chat_id>/notas', methods=['POST'])
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def notas_conversacion(chat_id):
+    """Guarda las notas internas de la conversación."""
+    data = request.get_json(silent=True) or {}
+    notas = (data.get('notas') or '')[:4000]
+    conv = _upsert_conversacion(chat_id)
+    conv.notas = notas
+    db.session.commit()
+    return jsonify({'ok': True, 'notas': conv.notas})
 
 
 @wa_inbox_bp.route('/conversaciones/<chat_id>/enviar', methods=['POST'])

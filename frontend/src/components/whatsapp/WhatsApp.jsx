@@ -436,14 +436,14 @@ export default function WhatsApp() {
   const totalSinLeer = conversaciones.reduce((s, c) => s + (c.no_leidos || 0), 0)
   const totalConv = conversaciones.length
   const contConNoLeidos = conversaciones.filter(c => (c.no_leidos || 0) > 0).length
-  const contConAsesor = conversaciones.filter(c => c.modo === 'humano').length
+  const contAsignadas = conversaciones.filter(c => c.asignado_a).length
 
   // Filtro + búsqueda sobre la lista
   const q = busqueda.trim().toLowerCase()
   const convFiltradas = conversaciones.filter(c => {
     if (filtro === 'no_leidas' && !(c.no_leidos > 0)) return false
-    if (filtro === 'asesor' && c.modo !== 'humano') return false
-    if (filtro === 'bot' && c.modo === 'humano') return false
+    if (filtro === 'asignadas' && !c.asignado_a) return false
+    if (filtro === 'sin_asignar' && c.asignado_a) return false
     if (q) {
       const txt = `${c.nombre || ''} ${c.chat_id || ''} ${c.ultimo_mensaje || ''}`.toLowerCase()
       if (!txt.includes(q)) return false
@@ -452,10 +452,10 @@ export default function WhatsApp() {
   })
 
   const FILTROS = [
-    { id: 'todas',     label: 'Todas',     n: totalConv },
-    { id: 'no_leidas', label: 'No leídas', n: contConNoLeidos },
-    { id: 'asesor',    label: 'Con asesor', n: contConAsesor },
-    { id: 'bot',       label: 'Con bot',   n: totalConv - contConAsesor },
+    { id: 'todas',       label: 'Todas',       n: totalConv },
+    { id: 'no_leidas',   label: 'No leídas',   n: contConNoLeidos },
+    { id: 'asignadas',   label: 'Asignadas',   n: contAsignadas },
+    { id: 'sin_asignar', label: 'Sin asignar', n: totalConv - contAsignadas },
   ]
 
   return (
@@ -741,7 +741,7 @@ export default function WhatsApp() {
       ──────────────────────────────────── */}
       {activo && (
         <div className="hidden xl:flex flex-col bg-white w-[330px] shrink-0 border-l border-gray-200/80">
-          <FichaConversacion conv={convActiva} onEnviarMensaje={enviarTexto} onToggleModo={cambiarModo} />
+          <FichaConversacion conv={convActiva} onEnviarMensaje={enviarTexto} onToggleModo={cambiarModo} onActualizar={cargarConversaciones} />
         </div>
       )}
     </div>

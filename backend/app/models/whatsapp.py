@@ -18,6 +18,18 @@ class WaConversacion(db.Model):
     # para que funcione con varios workers de gunicorn). Ej: 'menu', 'garantia_fotos'.
     bot_estado = db.Column(db.String(40), default='menu')
     bot_datos = db.Column(db.Text)   # JSON con datos temporales de la conversación
+    # Gestión desde el panel (bandeja tipo CRM):
+    asignado_a = db.Column(db.String(120))  # usuario/asesor responsable (None = sin asignar)
+    etiquetas = db.Column(db.Text)          # JSON: lista de etiquetas ["Interesado", ...]
+    notas = db.Column(db.Text)              # notas internas del asesor
+
+    def _etiquetas_list(self):
+        import json
+        try:
+            v = json.loads(self.etiquetas) if self.etiquetas else []
+            return v if isinstance(v, list) else []
+        except Exception:
+            return []
 
     def to_dict(self):
         return {
@@ -28,6 +40,9 @@ class WaConversacion(db.Model):
             'ultima_fecha': self.ultima_fecha.isoformat() + 'Z' if self.ultima_fecha else None,
             'no_leidos': self.no_leidos or 0,
             'modo': self.modo or 'bot',
+            'asignado_a': self.asignado_a,
+            'etiquetas': self._etiquetas_list(),
+            'notas': self.notas or '',
         }
 
 
