@@ -6,7 +6,7 @@ import {
   DollarSign, CreditCard, TrendingUp, TrendingDown, AlertCircle,
   ShoppingCart, Scissors, RefreshCw, FileText, Search, Package,
   PackageCheck, Wallet, ArrowRight, BookOpen, MessageCircle, Users, Clock, Truck,
-  MessageSquare,
+  MessageSquare, ClipboardList,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -65,14 +65,12 @@ function KPICard({ icon: Icon, label, value, sub, color = 'blue', onClick, showA
   )
 }
 
-// ─── Accesos rápidos (filtrados por rol) ─────────────────────────
+// ─── Acciones rápidas (filtradas por rol) → apuntan a los hubs nuevos ─
 const ACCESOS_DEF = [
-  { label: 'Nueva Venta',      icon: FileText,     path: '/facturacion',   bg: 'bg-slate-800',   roles: ['administrador', 'vendedor', 'cajero'] },
-  { label: 'Centro Pedidos',  icon: ShoppingCart, path: '/pedidos-online', bg: 'bg-blue-600',    roles: ['administrador', 'vendedor']           },
-  { label: 'Registrar Pago',  icon: CreditCard,  path: '/pagos',          bg: 'bg-violet-600',  roles: ['administrador', 'cajero']            },
-  { label: 'Buscar',          icon: Search,      path: '/buscar',         bg: 'bg-slate-500',   roles: ['administrador', 'vendedor', 'cajero'] },
-  { label: 'WhatsApp',        icon: MessageCircle, path: '/whatsapp',      bg: 'bg-green-600',   roles: ['administrador', 'vendedor', 'cajero'] },
-  { label: 'Clientes',         icon: Users,       path: '/clientes',        bg: 'bg-indigo-600', roles: ['administrador', 'vendedor', 'cajero'] },
+  { label: 'Nueva venta',    icon: ShoppingCart, path: '/ventas?tab=nueva',     bg: 'bg-slate-800',  roles: ['administrador', 'vendedor', 'cajero'] },
+  { label: 'Registrar pago', icon: CreditCard,   path: '/ventas?tab=pago',      bg: 'bg-violet-600', roles: ['administrador', 'cajero']             },
+  { label: 'Nuevo cliente',  icon: Users,        path: '/clientes?tab=clientes', bg: 'bg-indigo-600', roles: ['administrador', 'vendedor', 'cajero'] },
+  { label: 'Pedidos',        icon: ClipboardList, path: '/operacion',           bg: 'bg-blue-600',   roles: ['administrador', 'vendedor']          },
 ]
 
 // ─── Skeleton de carga ───────────────────────────────────────────
@@ -171,7 +169,7 @@ export default function Dashboard() {
       {/* ── Caja del día ── */}
       {(rol === 'administrador' || rol === 'cajero') && data?.caja && (
         <div
-          onClick={() => navigate('/caja')}
+          onClick={() => navigate('/finanzas?tab=caja')}
           className={`rounded-xl p-4 flex items-center justify-between cursor-pointer shadow-sm hover:shadow-md transition-all text-white ${
             data.caja.abierta
               ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
@@ -246,7 +244,7 @@ export default function Dashboard() {
       {/* ── Canal web (leads) ── */}
       {isAdmin && (data?.leads_pendientes > 0 || data?.leads_mes > 0) && (
         <div
-          onClick={() => navigate('/leads')}
+          onClick={() => navigate('/clientes?tab=leads')}
           className="rounded-xl border border-green-200 bg-green-50 p-4 cursor-pointer hover:bg-green-100 transition-colors"
         >
           <div className="flex items-center justify-between mb-2">
@@ -295,7 +293,7 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center justify-between mb-2 px-0.5">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pedidos pendientes</p>
-          <button onClick={() => navigate('/pedidos-online')}
+          <button onClick={() => navigate('/operacion')}
             className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1">
             Ver todo <ArrowRight size={11} />
           </button>
@@ -307,7 +305,7 @@ export default function Dashboard() {
             value={data?.pedidos_web_pendientes ?? 0}
             sub="por procesar"
             color="blue"
-            onClick={() => navigate('/pedidos-online')}
+            onClick={() => navigate('/operacion')}
             showAlert={(data?.pedidos_web_pendientes || 0) > 0}
           />
           <KPICard
@@ -316,7 +314,7 @@ export default function Dashboard() {
             value={data?.fabricacion_en_curso ?? 0}
             sub="pedidos activos"
             color="amber"
-            onClick={() => navigate('/fabricacion')}
+            onClick={() => navigate('/operacion')}
           />
           <KPICard
             icon={Package}
@@ -324,7 +322,7 @@ export default function Dashboard() {
             value={data?.pendientes_entrega ?? 0}
             sub="prendas"
             color="orange"
-            onClick={() => navigate('/pendientes')}
+            onClick={() => navigate('/operacion')}
             showAlert={(data?.pendientes_entrega || 0) > 0}
           />
           <KPICard
@@ -332,7 +330,7 @@ export default function Dashboard() {
             label="Por cobrar"
             value={fmt(data?.total_por_cobrar)}
             color="red"
-            onClick={() => navigate('/cuentas')}
+            onClick={() => navigate('/ventas?tab=porcobrar')}
             showAlert={(data?.total_por_cobrar || 0) > 0}
           />
         </div>
