@@ -318,8 +318,9 @@ def _solicitar_link_saldo(referencia: str) -> str:
     return "😕 No pude generar el link ahora. Intenta más tarde o escríbenos a un asesor."
 
 # aviso_admin opcional · handoff=True pide pasar el chat a un asesor humano
-Respuesta = namedtuple("Respuesta", ["texto", "aviso_admin", "handoff"],
-                       defaults=(None, False))
+# confuso=True marca un "no entendí": si pasa 2 veces seguidas, escalamos.
+Respuesta = namedtuple("Respuesta", ["texto", "aviso_admin", "handoff", "confuso"],
+                       defaults=(None, False, False))
 
 
 # ─── CONSULTA DE PRECIOS Y STOCK (llama al catálogo del backend) ────
@@ -1186,6 +1187,36 @@ def _resp_comprobante(chat_id: str, via: str = "archivo") -> Respuesta:
 
 
 def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
+    """Envuelve la lógica del bot con un CONTADOR DE CONFUSIÓN: si el bot no
+    entiende 2 veces seguidas, intenta la IA y, si tampoco resuelve, pasa el
+    chat a un asesor (como haría una persona)."""
+    resp = _responder(chat_id, texto, contenido)
+    if contenido != "texto":
+        return resp
+    n = 0
+    try:
+        n = int(get_dato(chat_id, "confusion", "0") or 0)
+    except Exception:
+        n = 0
+    if getattr(resp, "confuso", False):
+        n += 1
+        if n >= 2:
+            set_dato(chat_id, "confusion", "0")
+            _ia = _respuesta_ia(chat_id, texto)   # 1º la IA (si está activada)
+            if _ia:
+                return _ia
+            _guardar_lead(chat_id, f"Cliente confundido (2x): {texto[:200]}")
+            reset_estado(chat_id)
+            return Respuesta(
+                "Perdona, no logro ayudarte bien por aquí 🙈. Te paso con un "
+                "*asesor* que te atiende enseguida. 🙌", handoff=True)
+        set_dato(chat_id, "confusion", str(n))
+    elif n:
+        set_dato(chat_id, "confusion", "0")   # respondió bien → reinicia el contador
+    return resp
+
+
+def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
     """
     Decide la respuesta según el mensaje y el estado de la conversación.
     contenido: "texto" | "foto" | "otro"  (tipo de mensaje recibido)
@@ -1271,7 +1302,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
             return Respuesta(GARANTIA_INFO)
         # No aclaró → volvemos al menú principal
         reset_estado(chat_id)
-        return Respuesta(RESP_NO_ENTIENDO)
+        return Respuesta(RESP_NO_ENTIENDO, confuso=True)
 
     # ── Flujo PAGAR SALDO: esperando el número de pedido ──────────
     if estado == "saldo_ref":
@@ -1424,7 +1455,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
             set_estado(chat_id, "cita_nombre")
             return Respuesta(CITA_PEDIR_NOMBRE)
         return Respuesta("🔁 Escríbeme la *talla* que quieres ver (ej: *10*, *S*, *M*), "
-                         "o escribe *comprar* para apartarla, o *menú*.")
+                         "o escribe *comprar* para apartarla, o *menú*.", confuso=True)
 
     # ── Flujo AGENDAR CITA ────────────────────────────────────────
     if estado == "cita_nombre":
@@ -1522,7 +1553,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
             reset_estado(chat_id)
             return Respuesta(RESP_ASESOR, handoff=True)
         # algo no claro dentro de soporte → repetir submenú
-        return Respuesta("No entendí. " + SOPORTE_MENU)
+        return Respuesta("No entendí. " + SOPORTE_MENU, confuso=True)
 
     # ── 6) Menú principal / detección por palabras clave ──────────
     # "No me llegó la factura" (va ANTES de comprobante y de pedido-no-llegado)
@@ -1627,4 +1658,4 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         _ia = _respuesta_ia(chat_id, texto)
         if _ia:
             return _ia
-    return Respuesta(RESP_NO_ENTIENDO)
+    return Respuesta(RESP_NO_ENTIENDO, confuso=True)
