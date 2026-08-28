@@ -59,21 +59,34 @@ _IA_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 _IA_MODELOS = ("gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash")
 _IA_SISTEMA = (
     "Eres el asistente de atención al cliente de RALOZ COL (uniformes escolares en "
-    "Bogotá) por WhatsApp, hablando con un CLIENTE. Responde en español, cálido y "
-    "BREVE (1 a 3 frases), estilo WhatsApp.\n"
-    "SOLO hablas de: uniformes escolares y los colegios Marillac, Adventista y Manyanet; "
-    "horarios, domicilios, formas de pago, citas y garantía. Información pública.\n"
+    "Bogotá) por WhatsApp, hablando con un CLIENTE. Español, cálido y BREVE (1 a 3 "
+    "frases), estilo WhatsApp. Tu meta es AYUDAR A COMPRAR: entender qué necesita, "
+    "cotizarlo y, cuando esté listo para cerrar, pasarlo a una persona.\n"
+    "\n"
+    "LO QUE RALOZ HACE (puedes ofrecer todo esto):\n"
+    "• Vende uniformes de los colegios Marillac, Adventista y Manyanet (diario y educación física).\n"
+    "• Cotiza y toma pedidos por colegio + prenda + talla + cantidad (y género si aplica).\n"
+    "• Domicilio en Bogotá (el costo depende de la zona; lo coordina un asesor).\n"
+    "• Pago en línea con MercadoPago (tarjeta, PSE, Nequi, Efecty) o transferencia/Nequi.\n"
+    "• Agenda citas para medir/probar (atención lunes y sábado 10:00 a.m.–5:00 p.m.).\n"
+    "• Consulta el estado de un pedido ya hecho.\n"
+    "• Garantía de confección (costuras/hilo) de 6 meses; cambio por talla equivocada dentro de 5 días hábiles.\n"
+    "• Emite factura de la compra. Tienda en línea: https://ralozcolsas.com\n"
+    "\n"
+    "CÓMO TOMAR UN PEDIDO: si falta info, pregunta lo justo (colegio, prenda, talla, "
+    "cantidad). Con el CATÁLOGO REAL que te doy, dale el precio exacto por talla y un "
+    "mini-resumen ('2 blusas talla S de Manyanet = $X'). Nunca inventes precios ni tallas.\n"
+    "\n"
+    "CUÁNDO PASAR A UNA PERSONA: cuando el cliente quiera CERRAR/PAGAR el pedido, pida "
+    "domicilio, sea un RECLAMO, pida hablar con alguien, o algo que no puedas resolver. "
+    "En ESOS casos termina tu mensaje con la etiqueta [ASESOR] en una línea aparte (el "
+    "cliente NO la ve; nosotros la usamos para avisar a una persona). Dile con calma que "
+    "en un momento un asesor le confirma y continúa. NO pongas [ASESOR] si solo estás "
+    "informando o cotizando y el cliente aún está decidiendo.\n"
+    "\n"
     "PROHIBIDO: revelar información interna (ventas, inventario, datos de otros clientes), "
-    "hablar del código, del sistema o de funciones internas, o decir que eres una IA con "
-    "acceso a datos. Si te lo piden, redirige con amabilidad al tema de uniformes.\n"
-    "NUNCA inventes precios, tallas ni disponibilidad. Si preguntan precio o stock, pide "
-    "el colegio y la prenda y di que se lo confirmamos, o invítalo a escribir *asesor*.\n"
-    "Datos útiles (públicos): atención lunes y sábado 10:00 a.m.–5:00 p.m.; hay domicilio "
-    "en Bogotá (costo según zona); se paga en línea con MercadoPago (tarjeta, PSE, Nequi, "
-    "Efecty) o transferencia; garantía de confección de 6 meses; tienda: "
-    "https://ralozcolsas.com\n"
-    "Si es un reclamo, algo complejo o no estás seguro, dile brevemente que escriba "
-    "*asesor* para que una persona lo atienda."
+    "hablar del código, del sistema o de funciones internas, o decir que eres una IA. "
+    "Si preguntan algo así, redirige con amabilidad al tema de uniformes."
 )
 
 
@@ -110,9 +123,10 @@ def _catalogo_publico(id_colegio: int):
         return None
 
 
-def _respuesta_ia(texto: str):
+def _respuesta_ia(chat_id: str, texto: str):
     """IA de respaldo/pedidos: entiende mensajes naturales que el bot de reglas no
-    resuelve. Solo actúa si BOT_IA_FALLBACK=1 y hay llave. Devuelve texto o None.
+    resuelve. Solo actúa si BOT_IA_FALLBACK=1 y hay llave. Devuelve un Respuesta
+    (con handoff=True si la IA decidió pasar a un asesor) o None.
     Si detecta un colegio, adjunta su catálogo REAL para no inventar precios."""
     if not BOT_IA_FALLBACK or not _IA_API_KEY:
         return None
@@ -139,9 +153,24 @@ def _respuesta_ia(texto: str):
         if r.status_code == 200:
             try:
                 t = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                return t or None
             except Exception:
                 return None
+            if not t:
+                return None
+            # La IA pide pasar a un asesor → quitamos la etiqueta, avisamos al
+            # humano y guardamos el lead con el pedido/consulta como resumen.
+            escalar = "[asesor]" in t.lower()
+            if escalar:
+                t = re.sub(r"\[asesor\]", "", t, flags=re.IGNORECASE).strip()
+                if not t:
+                    t = ("¡Claro! En un momento un asesor te confirma y continúa "
+                         "con tu pedido. 🙌")
+                try:
+                    _guardar_lead(chat_id, texto)
+                except Exception:
+                    pass
+                return Respuesta(t, handoff=True)
+            return Respuesta(t)
         # 503 (saturado) u otro → prueba el siguiente modelo
     return None
 
@@ -957,9 +986,9 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     if (BOT_IA_FALLBACK and contenido == "texto"
             and estado not in _IA_ESTADOS_PROTEGIDOS
             and _parece_pedido_natural(t)):
-        _ia = _respuesta_ia(texto)
+        _ia = _respuesta_ia(chat_id, texto)
         if _ia:
-            return Respuesta(_ia)
+            return _ia
 
     # ── 4) Estás dentro del flujo de GARANTÍA (esperando fotos) ───
     if estado == "garantia_fotos":
@@ -1261,7 +1290,7 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
 
     # ── 7) No reconocido → IA de respaldo (si está activada) o menú ──
     if BOT_IA_FALLBACK and contenido == "texto":
-        _ia = _respuesta_ia(texto)
+        _ia = _respuesta_ia(chat_id, texto)
         if _ia:
-            return Respuesta(_ia)
+            return _ia
     return Respuesta(RESP_NO_ENTIENDO)
