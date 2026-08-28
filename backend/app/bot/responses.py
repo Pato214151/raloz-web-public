@@ -57,6 +57,8 @@ WA_LOG_TOKEN = os.getenv("WA_LOG_TOKEN", "").strip()
 BOT_IA_FALLBACK = os.getenv("BOT_IA_FALLBACK", "").strip() == "1"
 _IA_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 _IA_MODELOS = ("gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash")
+# Respaldo cuando Gemini falla o está saturado. Opcional: pon DEEPSEEK_API_KEY en Render.
+_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 _IA_SISTEMA = (
     "Eres el asistente de atención al cliente de RALOZ COL (uniformes escolares en "
     "Bogotá) por WhatsApp, hablando con un CLIENTE. Español, cálido y BREVE (1 a 3 "
@@ -140,7 +142,7 @@ def _respuesta_ia(chat_id: str, texto: str):
     resuelve. Solo actúa si BOT_IA_FALLBACK=1 y hay llave. Devuelve un Respuesta
     (con handoff=True si la IA decidió pasar a un asesor) o None.
     Si detecta un colegio, adjunta su catálogo REAL para no inventar precios."""
-    if not BOT_IA_FALLBACK or not _IA_API_KEY:
+    if not BOT_IA_FALLBACK or (not _IA_API_KEY and not _DEEPSEEK_API_KEY):
         return None
     contexto = ""
     try:
@@ -155,36 +157,12 @@ def _respuesta_ia(chat_id: str, texto: str):
                              "precios y disponibilidad; NUNCA inventes):\n" + cat)
     except Exception:
         pass
-    # Instrucciones en system_instruction (NO en el turno del usuario): así el
-    # modelo no las "responde" ni las filtra. El mensaje del cliente va aparte.
     sistema = _IA_SISTEMA + contexto
-    gen = {"temperature": 0.3, "maxOutputTokens": 600}
-    cuerpo_base = {
-        "system_instruction": {"parts": [{"text": sistema}]},
-        "contents": [{"role": "user", "parts": [{"text": (texto or "")[:500]}]}],
-    }
-    # thinkingBudget=0 apaga el "pensamiento" de los modelos flash: si no se apaga,
-    # se come el presupuesto de tokens y corta la respuesta a media palabra.
-    cuerpo_sin_pensar = dict(cuerpo_base,
-                             generationConfig=dict(gen, thinkingConfig={"thinkingBudget": 0}))
-    cuerpo_normal = dict(cuerpo_base, generationConfig=gen)
-    t = None
-    for modelo in _IA_MODELOS:
-        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{modelo}:generateContent?key={_IA_API_KEY}")
-        for cuerpo in (cuerpo_sin_pensar, cuerpo_normal):
-            try:
-                r = requests.post(url, json=cuerpo, timeout=15)
-            except Exception:
-                break
-            if r.status_code == 200:
-                t = _ia_extraer_texto(r.json())
-                break
-            if r.status_code == 400:
-                continue  # el modelo no acepta thinkingConfig → reintenta sin él
-            break         # 503 (saturado) u otro → prueba el siguiente modelo
-        if t:
-            break
+    mensaje = (texto or "")[:500]
+    # 1º Gemini (gratis); si falla o está saturado (503), 2º DeepSeek como respaldo.
+    t = _ia_gemini(sistema, mensaje) if _IA_API_KEY else None
+    if not t and _DEEPSEEK_API_KEY:
+        t = _ia_deepseek(sistema, mensaje)
     if not t:
         return None
     # La IA pide pasar a un asesor → quitamos la etiqueta, avisamos al humano y
@@ -210,6 +188,62 @@ def _ia_extraer_texto(data):
         parts = (cand.get("content") or {}).get("parts") or []
         txt = "".join(p.get("text", "") for p in parts).strip()
         return txt or None
+    except Exception:
+        return None
+
+
+def _ia_gemini(sistema: str, mensaje: str):
+    """Llama a Gemini (gratis). Instrucciones en system_instruction para que no las
+    filtre; thinkingBudget=0 para que no gaste tokens 'pensando' y no corte la
+    respuesta. Devuelve el texto o None si todos los modelos fallan/saturan."""
+    gen = {"temperature": 0.3, "maxOutputTokens": 600}
+    cuerpo_base = {
+        "system_instruction": {"parts": [{"text": sistema}]},
+        "contents": [{"role": "user", "parts": [{"text": mensaje}]}],
+    }
+    cuerpo_sin_pensar = dict(cuerpo_base,
+                             generationConfig=dict(gen, thinkingConfig={"thinkingBudget": 0}))
+    cuerpo_normal = dict(cuerpo_base, generationConfig=gen)
+    for modelo in _IA_MODELOS:
+        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{modelo}:generateContent?key={_IA_API_KEY}")
+        for cuerpo in (cuerpo_sin_pensar, cuerpo_normal):
+            try:
+                r = requests.post(url, json=cuerpo, timeout=15)
+            except Exception:
+                break
+            if r.status_code == 200:
+                txt = _ia_extraer_texto(r.json())
+                if txt:
+                    return txt
+                break                       # 200 sin texto → siguiente modelo
+            if r.status_code == 400:
+                continue                    # no acepta thinkingConfig → reintenta sin él
+            break                           # 503 (saturado) u otro → siguiente modelo
+    return None
+
+
+def _ia_deepseek(sistema: str, mensaje: str):
+    """Respaldo cuando Gemini no responde. API estilo OpenAI. 'deepseek-chat' NO es
+    un modelo 'pensante', así que no tiene el problema de cortar la respuesta."""
+    try:
+        r = requests.post(
+            "https://api.deepseek.com/chat/completions",
+            headers={"Authorization": f"Bearer {_DEEPSEEK_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": "deepseek-chat",
+                  "messages": [{"role": "system", "content": sistema},
+                               {"role": "user", "content": mensaje}],
+                  "temperature": 0.3, "max_tokens": 600, "stream": False},
+            timeout=15,
+        )
+    except Exception:
+        return None
+    if r.status_code != 200:
+        logger.warning("DeepSeek respondió %s", r.status_code)
+        return None
+    try:
+        return (r.json()["choices"][0]["message"]["content"] or "").strip() or None
     except Exception:
         return None
 
