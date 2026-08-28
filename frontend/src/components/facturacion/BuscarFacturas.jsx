@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X, PackageCheck } from 'lucide-react'
+import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X, PackageCheck, MessageCircle } from 'lucide-react'
 
 const ESTADOS = [
   { value: '', label: 'Todos' },
@@ -293,6 +293,19 @@ export default function BuscarFacturas() {
     } finally {
       setSavingEdit(false)
     }
+  }
+
+  // === CONTACTAR POR WHATSAPP (abre el chat con el cliente, no envía solo) ===
+  const contactarWhatsApp = () => {
+    const tel = String(selected?.cliente_telefono || '').replace(/\D/g, '')
+    if (!tel) { toast.error('Esta factura no tiene teléfono del cliente'); return }
+    const num = tel.length === 10 ? '57' + tel : tel   // celular CO sin indicativo
+    const nombre = (selected?.cliente_nombre || '').split(' ')[0]
+    const saldo = Number(selected?.saldo || 0)
+    const msg = saldo > 0
+      ? `¡Hola ${nombre}! 👋 Te escribimos de RALOZ COL por tu factura ${selected?.numero_factura || ''}. Tienes un saldo pendiente de ${fmt(saldo)}. ¿Coordinamos el pago? 🙌`
+      : `¡Hola ${nombre}! 👋 Te escribimos de RALOZ COL sobre tu factura ${selected?.numero_factura || ''}.`
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener')
   }
 
   // === IMPRIMIR ===
@@ -727,6 +740,12 @@ export default function BuscarFacturas() {
                 {selected.estado === 'ANULADA' && isAdmin() && (
                   <button onClick={reactivarFactura} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2">
                     <RefreshCw size={16} /> Reactivar
+                  </button>
+                )}
+                {selected.cliente_telefono && (
+                  <button onClick={contactarWhatsApp} title="Escribirle al cliente por WhatsApp"
+                    className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2">
+                    <MessageCircle size={16} /> WhatsApp
                   </button>
                 )}
                 <button onClick={imprimirTicket} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2">
