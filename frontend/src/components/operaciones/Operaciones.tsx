@@ -8,8 +8,10 @@ import {
   PackageCheck,
   Package,
   Hammer,
+  LayoutGrid,
   type LucideIcon,
 } from 'lucide-react'
+import TableroKanban from './TableroKanban'
 import CentroOperaciones from './CentroOperaciones'
 import PedidosOnline from '../pedidos/PedidosOnline'
 import PedidosFabricacion from '../fabricacion/PedidosFabricacion'
@@ -28,6 +30,7 @@ interface Tab {
 
 // Pestañas (viñetas) de la ventana única de Operaciones
 const TABS: Tab[] = [
+  { id: 'tablero',     label: 'Tablero',      icon: LayoutGrid,    Comp: TableroKanban,      roles: ['administrador', 'vendedor', 'cajero'] },
   { id: 'resumen',     label: 'Resumen',      icon: ClipboardList, Comp: CentroOperaciones,  roles: ['administrador', 'vendedor', 'cajero'] },
   { id: 'web',         label: 'Pedidos Web',  icon: ShoppingCart,  Comp: PedidosOnline,      roles: ['administrador', 'vendedor'] },
   { id: 'fabricacion', label: 'Fabricación',  icon: Scissors,      Comp: PedidosFabricacion, roles: ['administrador', 'vendedor'] },
@@ -42,7 +45,7 @@ export default function Operaciones() {
   const rol = usuario?.rol
 
   const visibles = rol ? TABS.filter((t) => t.roles.includes(rol)) : []
-  const activeId = params.get('tab') || 'resumen'
+  const activeId = params.get('tab') || 'tablero'
   const active = visibles.find((t) => t.id === activeId) || visibles[0]
   if (!active) return null
   const Active = active.Comp
