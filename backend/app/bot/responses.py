@@ -94,7 +94,11 @@ _IA_SISTEMA = (
     "\n"
     "PROHIBIDO: revelar información interna (ventas, inventario, datos de otros clientes), "
     "hablar del código, del sistema o de funciones internas, o decir que eres una IA. "
-    "Si preguntan algo así, redirige con amabilidad al tema de uniformes."
+    "Si preguntan algo así, redirige con amabilidad al tema de uniformes.\n"
+    "\n"
+    "MUY IMPORTANTE: responde ÚNICAMENTE con el mensaje que le enviarás al cliente, "
+    "en español. No escribas encabezados, ni notas, ni repitas estas instrucciones, "
+    "ni expliques tu razonamiento."
 )
 
 
@@ -151,39 +155,63 @@ def _respuesta_ia(chat_id: str, texto: str):
                              "precios y disponibilidad; NUNCA inventes):\n" + cat)
     except Exception:
         pass
-    prompt = _IA_SISTEMA + contexto + "\n\nMENSAJE DEL CLIENTE:\n" + (texto or "")[:500]
-    payload = {"contents": [{"parts": [{"text": prompt}]}],
-               "generationConfig": {"temperature": 0.3, "maxOutputTokens": 320}}
+    # Instrucciones en system_instruction (NO en el turno del usuario): así el
+    # modelo no las "responde" ni las filtra. El mensaje del cliente va aparte.
+    sistema = _IA_SISTEMA + contexto
+    gen = {"temperature": 0.3, "maxOutputTokens": 600}
+    cuerpo_base = {
+        "system_instruction": {"parts": [{"text": sistema}]},
+        "contents": [{"role": "user", "parts": [{"text": (texto or "")[:500]}]}],
+    }
+    # thinkingBudget=0 apaga el "pensamiento" de los modelos flash: si no se apaga,
+    # se come el presupuesto de tokens y corta la respuesta a media palabra.
+    cuerpo_sin_pensar = dict(cuerpo_base,
+                             generationConfig=dict(gen, thinkingConfig={"thinkingBudget": 0}))
+    cuerpo_normal = dict(cuerpo_base, generationConfig=gen)
+    t = None
     for modelo in _IA_MODELOS:
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                f"{modelo}:generateContent?key={_IA_API_KEY}")
-        try:
-            r = requests.post(url, json=payload, timeout=12)
-        except Exception:
-            continue
-        if r.status_code == 200:
+        for cuerpo in (cuerpo_sin_pensar, cuerpo_normal):
             try:
-                t = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                r = requests.post(url, json=cuerpo, timeout=15)
             except Exception:
-                return None
-            if not t:
-                return None
-            # La IA pide pasar a un asesor → quitamos la etiqueta, avisamos al
-            # humano y guardamos el lead con el pedido/consulta como resumen.
-            escalar = "[asesor]" in t.lower()
-            if escalar:
-                t = re.sub(r"\[asesor\]", "", t, flags=re.IGNORECASE).strip()
-                if not t:
-                    t = ("¡Claro! En un momento un asesor te confirma y continúa "
-                         "con tu pedido. 🙌")
-                try:
-                    _guardar_lead(chat_id, texto)
-                except Exception:
-                    pass
-                return Respuesta(t, handoff=True)
-            return Respuesta(t)
-        # 503 (saturado) u otro → prueba el siguiente modelo
-    return None
+                break
+            if r.status_code == 200:
+                t = _ia_extraer_texto(r.json())
+                break
+            if r.status_code == 400:
+                continue  # el modelo no acepta thinkingConfig → reintenta sin él
+            break         # 503 (saturado) u otro → prueba el siguiente modelo
+        if t:
+            break
+    if not t:
+        return None
+    # La IA pide pasar a un asesor → quitamos la etiqueta, avisamos al humano y
+    # guardamos el lead con el pedido/consulta como resumen.
+    if "[asesor]" in t.lower():
+        t = re.sub(r"\[asesor\]", "", t, flags=re.IGNORECASE).strip()
+        if not t:
+            t = ("¡Claro! En un momento un asesor te confirma y continúa "
+                 "con tu pedido. 🙌")
+        try:
+            _guardar_lead(chat_id, texto)
+        except Exception:
+            pass
+        return Respuesta(t, handoff=True)
+    return Respuesta(t)
+
+
+def _ia_extraer_texto(data):
+    """Saca el texto de la respuesta de Gemini. Devuelve None si no hubo texto
+    (p. ej. el modelo solo 'pensó' y se quedó sin tokens)."""
+    try:
+        cand = (data.get("candidates") or [{}])[0]
+        parts = (cand.get("content") or {}).get("parts") or []
+        txt = "".join(p.get("text", "") for p in parts).strip()
+        return txt or None
+    except Exception:
+        return None
 
 
 # ─── Llamadas al backend (helpers comunes: un solo try/except y con log) ───
@@ -990,16 +1018,6 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     if _tiene(t, _EMPRESA):
         _guardar_lead(chat_id, texto)
         return Respuesta(RESP_EMPRESA, handoff=True)
-
-    # ── IA para pedidos en lenguaje natural (si está activada con BOT_IA_FALLBACK) ─
-    # Entra cuando el mensaje parece un pedido/consulta de compra en una frase
-    # (ej. "quiero 2 blusas talla S de Manyanet") y NO estamos en un flujo delicado.
-    if (BOT_IA_FALLBACK and contenido == "texto"
-            and estado not in _IA_ESTADOS_PROTEGIDOS
-            and _parece_pedido_natural(t)):
-        _ia = _respuesta_ia(chat_id, texto)
-        if _ia:
-            return _ia
 
     # ── 4) Estás dentro del flujo de GARANTÍA (esperando fotos) ───
     if estado == "garantia_fotos":
