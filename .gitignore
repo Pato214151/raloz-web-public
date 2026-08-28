@@ -36,3 +36,8 @@ backups/
 respaldo_*.csv
 backend/respaldo_*.csv
 *.dead
+
+.claude/
+CLAUDE.md
+.agents/
+para_claude.txt

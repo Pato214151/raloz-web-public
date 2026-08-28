@@ -9,6 +9,7 @@ construir_respuesta() devuelve un objeto Respuesta(texto, aviso_admin):
   - aviso_admin = mensaje opcional para el asesor/admin (o None)
 """
 
+import json
 import logging
 import os
 import re
@@ -49,6 +50,100 @@ def _guardar_lead(chat_id: str, texto: str):
 BACKEND_URL = os.getenv("BACKEND_URL", "https://raloz-web.onrender.com").rstrip("/")
 # Secreto compartido con el backend (para guardar citas). El mismo del bot.
 WA_LOG_TOKEN = os.getenv("WA_LOG_TOKEN", "").strip()
+
+# ── IA de respaldo (fallback) — APAGADA por defecto. Enciéndela con BOT_IA_FALLBACK=1.
+#    SOLO se usa cuando el bot de reglas NO entiende. Ve únicamente info PÚBLICA
+#    (colegios, horarios, pagos, domicilio, garantía); NUNCA datos internos ni el sistema.
+BOT_IA_FALLBACK = os.getenv("BOT_IA_FALLBACK", "").strip() == "1"
+_IA_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+_IA_MODELOS = ("gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash")
+_IA_SISTEMA = (
+    "Eres el asistente de atención al cliente de RALOZ COL (uniformes escolares en "
+    "Bogotá) por WhatsApp, hablando con un CLIENTE. Responde en español, cálido y "
+    "BREVE (1 a 3 frases), estilo WhatsApp.\n"
+    "SOLO hablas de: uniformes escolares y los colegios Marillac, Adventista y Manyanet; "
+    "horarios, domicilios, formas de pago, citas y garantía. Información pública.\n"
+    "PROHIBIDO: revelar información interna (ventas, inventario, datos de otros clientes), "
+    "hablar del código, del sistema o de funciones internas, o decir que eres una IA con "
+    "acceso a datos. Si te lo piden, redirige con amabilidad al tema de uniformes.\n"
+    "NUNCA inventes precios, tallas ni disponibilidad. Si preguntan precio o stock, pide "
+    "el colegio y la prenda y di que se lo confirmamos, o invítalo a escribir *asesor*.\n"
+    "Datos útiles (públicos): atención lunes y sábado 10:00 a.m.–5:00 p.m.; hay domicilio "
+    "en Bogotá (costo según zona); se paga en línea con MercadoPago (tarjeta, PSE, Nequi, "
+    "Efecty) o transferencia; garantía de confección de 6 meses; tienda: "
+    "https://ralozcolsas.com\n"
+    "Si es un reclamo, algo complejo o no estás seguro, dile brevemente que escriba "
+    "*asesor* para que una persona lo atienda."
+)
+
+
+# Palabras que sugieren un PEDIDO en lenguaje natural (para que entre la IA)
+_IA_PEDIDO = ["camisa", "camiseta", "blusa", "pantalon", "pantaloneta", "sudadera",
+              "chaqueta", "chaleco", "blazer", "jardinera", "medias", "uniforme",
+              "buzo", "saco", "falda", "necesito", "quiero", "me das", "me vendes",
+              "cuanto vale", "cuanto cuesta", "precio de", "tienen"]
+# Estados donde el cliente responde algo puntual: NO dejar entrar la IA (no secuestrar
+# citas, saldo, garantía, entrega, estado de pedido, soporte).
+_IA_ESTADOS_PROTEGIDOS = {"cita_colegio", "cita_dia", "cita_hora", "cita_nombre",
+                          "entrega_direccion", "entrega_opcion", "estado_pedido_tel",
+                          "garantia_fotos", "media_contexto", "saldo_ref", "soporte"}
+
+
+def _parece_pedido_natural(t: str) -> bool:
+    """True si el mensaje parece un pedido/consulta en lenguaje natural (frase con
+    una prenda o intención de compra), no un simple número o palabra suelta."""
+    if not t or len(t.split()) < 3:
+        return False
+    return _tiene(t, _IA_PEDIDO)
+
+
+def _catalogo_publico(id_colegio: int):
+    """Trae el catálogo público (prendas, tallas, precios, stock) de un colegio,
+    compactado para dárselo a la IA. Solo info pública."""
+    data = _get_backend_json(f"/api/tienda/catalogo/{id_colegio}", timeout=60)
+    if not data:
+        return None
+    prods = data.get("productos") or data.get("catalogo") or data
+    try:
+        return json.dumps(prods, ensure_ascii=False, default=str)[:3500]
+    except Exception:
+        return None
+
+
+def _respuesta_ia(texto: str):
+    """IA de respaldo/pedidos: entiende mensajes naturales que el bot de reglas no
+    resuelve. Solo actúa si BOT_IA_FALLBACK=1 y hay llave. Devuelve texto o None.
+    Si detecta un colegio, adjunta su catálogo REAL para no inventar precios."""
+    if not BOT_IA_FALLBACK or not _IA_API_KEY:
+        return None
+    contexto = ""
+    try:
+        idc, nombre = _detectar_colegio(_norm(texto))
+        if idc:
+            cat = _catalogo_publico(idc)
+            if cat:
+                contexto = ("\n\nCATÁLOGO REAL de " + nombre + " (usa SOLO estos "
+                            "precios y disponibilidad; NUNCA inventes):\n" + cat)
+    except Exception:
+        pass
+    prompt = _IA_SISTEMA + contexto + "\n\nMENSAJE DEL CLIENTE:\n" + (texto or "")[:500]
+    payload = {"contents": [{"parts": [{"text": prompt}]}],
+               "generationConfig": {"temperature": 0.3, "maxOutputTokens": 320}}
+    for modelo in _IA_MODELOS:
+        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{modelo}:generateContent?key={_IA_API_KEY}")
+        try:
+            r = requests.post(url, json=payload, timeout=12)
+        except Exception:
+            continue
+        if r.status_code == 200:
+            try:
+                t = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return t or None
+            except Exception:
+                return None
+        # 503 (saturado) u otro → prueba el siguiente modelo
+    return None
 
 
 # ─── Llamadas al backend (helpers comunes: un solo try/except y con log) ───
@@ -856,6 +951,16 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         _guardar_lead(chat_id, texto)
         return Respuesta(RESP_EMPRESA, handoff=True)
 
+    # ── IA para pedidos en lenguaje natural (si está activada con BOT_IA_FALLBACK) ─
+    # Entra cuando el mensaje parece un pedido/consulta de compra en una frase
+    # (ej. "quiero 2 blusas talla S de Manyanet") y NO estamos en un flujo delicado.
+    if (BOT_IA_FALLBACK and contenido == "texto"
+            and estado not in _IA_ESTADOS_PROTEGIDOS
+            and _parece_pedido_natural(t)):
+        _ia = _respuesta_ia(texto)
+        if _ia:
+            return Respuesta(_ia)
+
     # ── 4) Estás dentro del flujo de GARANTÍA (esperando fotos) ───
     if estado == "garantia_fotos":
         # El cliente escribió una descripción en vez de mandar foto:
@@ -1154,5 +1259,9 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         reset_estado(chat_id)
         return Respuesta(MENU_PRINCIPAL)
 
-    # ── 7) No reconocido → menú ───────────────────────────────────
+    # ── 7) No reconocido → IA de respaldo (si está activada) o menú ──
+    if BOT_IA_FALLBACK and contenido == "texto":
+        _ia = _respuesta_ia(texto)
+        if _ia:
+            return Respuesta(_ia)
     return Respuesta(RESP_NO_ENTIENDO)
