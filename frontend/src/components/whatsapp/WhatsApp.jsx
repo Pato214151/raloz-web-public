@@ -3,6 +3,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download, Bell } from 'lucide-react'
 import { activarNotificaciones, estadoNotificaciones } from '../../services/push'
+import FichaConversacion from './FichaConversacion'
 
 // ── Error boundary: aísla fallos de render ──
 // Evita que un solo mensaje/chat problemático tumbe toda la bandeja.
@@ -276,6 +277,8 @@ export default function WhatsApp() {
 
   const convActiva = conversaciones.find(c => c.chat_id === activo)
   const [panelMovil, setPanelMovil] = useState('lista')
+  const [filtro, setFiltro] = useState('todas')   // todas | no_leidas | bot | asesor
+  const [busqueda, setBusqueda] = useState('')
 
   const [descargando, setDescargando] = useState(false)
   const [notif, setNotif] = useState(estadoNotificaciones())
@@ -384,6 +387,19 @@ export default function WhatsApp() {
     } finally { setEnviando(false) }
   }
 
+  // Enviar un texto puntual (p. ej. "Enviar catálogo" desde la ficha)
+  const enviarTexto = async (t) => {
+    if (!t || !activo) return
+    try {
+      await api.post(`/wa/conversaciones/${activo}/enviar`, { texto: t })
+      await cargarMensajes(activo)
+      cargarConversaciones()
+      toast.success('Mensaje enviado ✅')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'No se pudo enviar')
+    }
+  }
+
   const enviarImagen = (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -419,6 +435,28 @@ export default function WhatsApp() {
   // Totales
   const totalSinLeer = conversaciones.reduce((s, c) => s + (c.no_leidos || 0), 0)
   const totalConv = conversaciones.length
+  const contConNoLeidos = conversaciones.filter(c => (c.no_leidos || 0) > 0).length
+  const contConAsesor = conversaciones.filter(c => c.modo === 'humano').length
+
+  // Filtro + búsqueda sobre la lista
+  const q = busqueda.trim().toLowerCase()
+  const convFiltradas = conversaciones.filter(c => {
+    if (filtro === 'no_leidas' && !(c.no_leidos > 0)) return false
+    if (filtro === 'asesor' && c.modo !== 'humano') return false
+    if (filtro === 'bot' && c.modo === 'humano') return false
+    if (q) {
+      const txt = `${c.nombre || ''} ${c.chat_id || ''} ${c.ultimo_mensaje || ''}`.toLowerCase()
+      if (!txt.includes(q)) return false
+    }
+    return true
+  })
+
+  const FILTROS = [
+    { id: 'todas',     label: 'Todas',     n: totalConv },
+    { id: 'no_leidas', label: 'No leídas', n: contConNoLeidos },
+    { id: 'asesor',    label: 'Con asesor', n: contConAsesor },
+    { id: 'bot',       label: 'Con bot',   n: totalConv - contConAsesor },
+  ]
 
   return (
     <div className={`flex h-[calc(100vh-80px)] lg:h-[calc(100vh-120px)] overflow-hidden`}>
@@ -468,7 +506,7 @@ export default function WhatsApp() {
           </div>
         </div>
 
-        {/* Search bar (visual, funcionalmente no filtra aún) */}
+        {/* Buscador funcional */}
         <div className="px-3 py-2 border-b border-gray-100/60">
           <div className="flex items-center gap-2 bg-[#f0f2f5] rounded-lg px-3 py-2">
             <svg width="14" height="14" fill="#8696a0" viewBox="0 0 24 24">
@@ -476,10 +514,25 @@ export default function WhatsApp() {
             </svg>
             <input
               type="text"
-              placeholder="Buscar o iniciar.chat"
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              placeholder="Buscar conversación…"
               className="flex-1 bg-transparent text-[13px] text-gray-700 placeholder-[#8696a0] outline-none"
             />
           </div>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-gray-100/60 overflow-x-auto scrollbar-thin">
+          {FILTROS.map(f => (
+            <button key={f.id} onClick={() => setFiltro(f.id)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors ${
+                filtro === f.id ? 'bg-[#25d366] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}>
+              {f.label}
+              <span className={`text-[10px] font-bold ${filtro === f.id ? 'text-white/90' : 'text-gray-400'}`}>{f.n}</span>
+            </button>
+          ))}
         </div>
 
         {/* Lista */}
@@ -497,7 +550,12 @@ export default function WhatsApp() {
               <p className="text-[13px] text-[#8696a0] font-medium">Aún no hay conversaciones</p>
               <p className="text-[11px] text-[#8696a0]/70">Los mensajes de clientes aparecerán aquí</p>
             </div>
-          ) : conversaciones.map(c => (
+          ) : convFiltradas.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2 text-center px-6">
+              <p className="text-[13px] text-[#8696a0] font-medium">Sin resultados</p>
+              <p className="text-[11px] text-[#8696a0]/70">Prueba otro filtro o búsqueda</p>
+            </div>
+          ) : convFiltradas.map(c => (
             <ConvItem
               key={c.chat_id}
               c={c}
@@ -676,6 +734,16 @@ export default function WhatsApp() {
         )}
         </ErrorBoundary>
       </div>
+
+      {/* ────────────────────────────────────
+          PANEL FICHA (Cliente 360) — 3ª columna
+          Se muestra en pantallas anchas cuando hay un chat activo.
+      ──────────────────────────────────── */}
+      {activo && (
+        <div className="hidden xl:flex flex-col bg-white w-[330px] shrink-0 border-l border-gray-200/80">
+          <FichaConversacion conv={convActiva} onEnviarMensaje={enviarTexto} onToggleModo={cambiarModo} />
+        </div>
+      )}
     </div>
   )
 }
