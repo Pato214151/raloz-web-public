@@ -77,8 +77,16 @@ _IA_SISTEMA = (
     "cantidad). Con el CATÁLOGO REAL que te doy, dale el precio exacto por talla y un "
     "mini-resumen ('2 blusas talla S de Manyanet = $X'). Nunca inventes precios ni tallas.\n"
     "\n"
-    "CUÁNDO PASAR A UNA PERSONA: cuando el cliente quiera CERRAR/PAGAR el pedido, pida "
-    "domicilio, sea un RECLAMO, pida hablar con alguien, o algo que no puedas resolver. "
+    "CÓMO CERRAR LA VENTA (autoservicio, es lo mejor): cuando el cliente ya quiere "
+    "comprar, dile que lo paga fácil y seguro en la tienda en línea y MÁNDALE EL LINK del "
+    "colegio que te doy más abajo (LINK DE COMPRA). Ahí elige talla, agrega al carrito y "
+    "paga con tarjeta, PSE, Nequi o Efecty; la factura le llega al correo. NUNCA pidas ni "
+    "recibas datos de pago (número de tarjeta, CVV, clave) por el chat: el pago SIEMPRE es "
+    "en la página segura. Puedes pedir solo lo básico para orientarlo (colegio, prenda, "
+    "talla), no datos sensibles.\n"
+    "\n"
+    "CUÁNDO PASAR A UNA PERSONA: cuando el cliente quiera DOMICILIO, necesite ayuda para "
+    "pagar, sea un RECLAMO, pida hablar con alguien, o algo que no puedas resolver. "
     "En ESOS casos termina tu mensaje con la etiqueta [ASESOR] en una línea aparte (el "
     "cliente NO la ve; nosotros la usamos para avisar a una persona). Dile con calma que "
     "en un momento un asesor le confirma y continúa. NO pongas [ASESOR] si solo estás "
@@ -134,10 +142,13 @@ def _respuesta_ia(chat_id: str, texto: str):
     try:
         idc, nombre = _detectar_colegio(_norm(texto))
         if idc:
+            contexto = ("\n\nLINK DE COMPRA de " + nombre + " (mándalo tal cual para "
+                        "que pague en línea): https://ralozcolsas.com/?colegio="
+                        + str(idc))
             cat = _catalogo_publico(idc)
             if cat:
-                contexto = ("\n\nCATÁLOGO REAL de " + nombre + " (usa SOLO estos "
-                            "precios y disponibilidad; NUNCA inventes):\n" + cat)
+                contexto += ("\n\nCATÁLOGO REAL de " + nombre + " (usa SOLO estos "
+                             "precios y disponibilidad; NUNCA inventes):\n" + cat)
     except Exception:
         pass
     prompt = _IA_SISTEMA + contexto + "\n\nMENSAJE DEL CLIENTE:\n" + (texto or "")[:500]
