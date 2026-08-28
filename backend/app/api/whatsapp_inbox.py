@@ -153,6 +153,20 @@ def listar_mensajes(chat_id):
     return jsonify([m.to_dict() for m in msgs])
 
 
+@wa_inbox_bp.route('/conversaciones/<chat_id>/mensajes/<int:id_mensaje>', methods=['DELETE'])
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def eliminar_mensaje(chat_id, id_mensaje):
+    """Borra un mensaje de la BANDEJA (solo del panel). OJO: no lo elimina del
+    WhatsApp del cliente — la Cloud API de Meta no permite borrar/editar mensajes
+    ya enviados. Sirve para limpiar el historial interno."""
+    msg = db.session.get(WaMensaje, id_mensaje)
+    if not msg or msg.chat_id != chat_id:
+        return jsonify({'error': 'mensaje no encontrado'}), 404
+    db.session.delete(msg)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @wa_inbox_bp.route('/media/<int:id_mensaje>', methods=['GET'])
 @rol_requerido('administrador', 'vendedor', 'cajero')
 def obtener_media(id_mensaje):

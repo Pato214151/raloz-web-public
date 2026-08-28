@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download, Bell } from 'lucide-react'
+import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download, Bell, Trash2 } from 'lucide-react'
 import { activarNotificaciones, estadoNotificaciones } from '../../services/push'
 import FichaConversacion from './FichaConversacion'
 
@@ -143,10 +143,20 @@ function Media({ id, tipo }) {
 }
 
 // ── Burbuja de mensaje ──
-function Mensaje({ m }) {
+function Mensaje({ m, onEliminar }) {
   const esOut = m.direccion === 'out'
   return (
-    <div className={`flex ${esOut ? 'justify-end' : 'justify-start'} animate-[fadeInUp_0.2s_ease-out]`}>
+    <div className={`group flex items-center gap-1 ${esOut ? 'justify-end' : 'justify-start'} animate-[fadeInUp_0.2s_ease-out]`}>
+      {/* Borrar (aparece al pasar el mouse) — solo del panel */}
+      {esOut && onEliminar && (
+        <button
+          onClick={() => onEliminar(m.id_mensaje)}
+          title="Borrar del panel (no del WhatsApp del cliente)"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[#8696a0] hover:text-red-500 p-1 shrink-0 order-first"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
       <div className={`relative max-w-[80%] lg:max-w-[70%] rounded-2xl px-3 py-1.5 shadow-sm ${
         esOut
           ? 'bg-[#dcf8c6] rounded-tr-sm'
@@ -400,6 +410,21 @@ export default function WhatsApp() {
     }
   }
 
+  // Borra un mensaje SOLO del panel (no del WhatsApp del cliente — Meta no lo permite)
+  const eliminarMensaje = async (idMensaje) => {
+    if (!activo || !idMensaje) return
+    if (!window.confirm('¿Borrar este mensaje del panel?\n\nOjo: se quita solo de aquí, NO del WhatsApp del cliente.')) return
+    // Optimista: lo quitamos de la vista ya
+    setMensajes(prev => prev.filter(m => m.id_mensaje !== idMensaje))
+    try {
+      await api.delete(`/wa/conversaciones/${activo}/mensajes/${idMensaje}`)
+      cargarConversaciones()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'No se pudo borrar')
+      cargarMensajes(activo)   // revertir si falló
+    }
+  }
+
   const enviarImagen = (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -630,9 +655,12 @@ export default function WhatsApp() {
                 <p className="text-[15px] font-semibold text-gray-800 truncate">
                   {convActiva?.nombre || activo}
                 </p>
-                <p className="text-[11.5px] text-[#8696a0] truncate">
-                  {activo}
-                  {convActiva?.modo === 'humano' ? ' · Atendido por ti' : ' · Atendido por bot'}
+                <p className="text-[11.5px] text-[#8696a0] truncate flex items-center gap-1">
+                  {convActiva?.asignado_a ? (
+                    <span className="text-amber-600 font-medium">Asignado a {convActiva.asignado_a}</span>
+                  ) : (
+                    <>{activo}{convActiva?.modo === 'humano' ? ' · Atendido por ti' : ' · Atendido por bot'}</>
+                  )}
                 </p>
               </div>
 
@@ -665,7 +693,7 @@ export default function WhatsApp() {
                     <div key={m.id_mensaje}>
                       {sep && <DiaSeparador fecha={m.fecha} />}
                       <ErrorBoundary resetKey={m.id_mensaje}>
-                        <Mensaje m={m} />
+                        <Mensaje m={m} onEliminar={eliminarMensaje} />
                       </ErrorBoundary>
                     </div>
                   )
