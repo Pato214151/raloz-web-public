@@ -875,6 +875,12 @@ _SALUDOS   = {"menu", "menu principal", "hola", "inicio", "buenas", "buenos dias
 _GRACIAS   = {"gracias", "muchas gracias", "ok", "okay", "listo", "vale",
              "perfecto", "de acuerdo", "dale", "graciass"}
 _ASESOR    = ["asesor", "humano", "persona", "agente", "hablar con", "alguien", "vendedor"]
+# Molestia / queja del cliente → pasar YA a un asesor (retención)
+_QUEJA     = ["mal servicio", "pesimo", "pésimo", "malo el servicio", "no sirve",
+              "no me sirve", "no me ayudas", "no me estas ayudando", "no me estás ayudando",
+              "no entiendes", "no entiendes nada", "terrible", "horrible", "que mal",
+              "qué mal", "estafa", "no funciona", "inservible", "perdiendo el tiempo",
+              "me voy", "que fastidio", "qué fastidio"]
 # Consultas de empresa / dotación institucional (ventas grandes → asesor)
 _EMPRESA   = ["empresa", "empresas", "dotacion", "dotaciones", "constructora",
              "institucional", "institucion", "corporativ", "por referencia",
@@ -1186,6 +1192,13 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     if _tiene(t, _ASESOR):
         _guardar_lead(chat_id, texto)
         return Respuesta(RESP_ASESOR, handoff=True)
+    # Cliente molesto / quejándose → cortar el flujo y pasarlo a una persona YA
+    if _tiene(t, _QUEJA):
+        _guardar_lead(chat_id, f"Cliente molesto: {texto[:400]}")
+        reset_estado(chat_id)
+        return Respuesta(
+            "¡Ofrezco disculpas! 🙏 Te paso de una con un *asesor* para ayudarte "
+            "personalmente y resolverlo bien.", handoff=True)
     # Consultas de EMPRESA / dotación (ventas grandes) → directo a un asesor
     if _tiene(t, _EMPRESA):
         _guardar_lead(chat_id, texto)
@@ -1272,22 +1285,35 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         except Exception:
             items = []
         n = _num_cantidad(t)
-        if not items or not n or n < 1 or n > len(items):
-            return Respuesta("Responde con el *número* de la prenda que quieres apartar 🙂.")
-        set_dato(chat_id, "compra_idx", str(n - 1))
-        set_estado(chat_id, "comprar_cantidad")
-        it = items[n - 1]
-        return Respuesta(f"¡Va! *{it['nombre']}* talla *{it['talla']}* ({_cop(it['precio'])} c/u).\n\n"
-                         "¿*Cuántas* quieres? Escribe un número (ej: *1*).")
+        if items and n and 1 <= n <= len(items):
+            set_dato(chat_id, "compra_idx", str(n - 1))
+            set_estado(chat_id, "comprar_cantidad")
+            it = items[n - 1]
+            return Respuesta(f"¡Va! *{it['nombre']}* talla *{it['talla']}* ({_cop(it['precio'])} c/u).\n\n"
+                             "¿*Cuántas* quieres? Escribe un número (ej: *1*).")
+        if n:  # escribió un número fuera de rango
+            return Respuesta(f"Elige un número del *1* al *{len(items)}* 🙂, o escribe *menú*.")
+        # Escribió palabras, no un número → NO está eligiendo (pregunta otra cosa,
+        # no encontró lo suyo, etc.) → mejor una persona que seguir en el bucle.
+        _guardar_lead(chat_id, texto)
+        reset_estado(chat_id)
+        return Respuesta("Parece que no era ninguna de esas 🙈. Te paso con un *asesor* "
+                         "que te ayuda a encontrar justo lo que buscas. 🙌", handoff=True)
 
     if estado == "comprar_cantidad":
         n = _num_cantidad(t)
-        if not n or n < 1 or n > 20:
-            return Respuesta("Dime *cuántas* con un número, por favor (ej: *1*, *2*). "
-                             "Para pedidos grandes escribe *asesor*. 🙂")
-        set_dato(chat_id, "compra_cant", str(n))
-        set_estado(chat_id, "comprar_nombre")
-        return Respuesta("¿A nombre de *quién* va el pedido? Escríbeme *nombre y apellido*. 🙂")
+        if n and 1 <= n <= 20:
+            set_dato(chat_id, "compra_cant", str(n))
+            set_estado(chat_id, "comprar_nombre")
+            return Respuesta("¿A nombre de *quién* va el pedido? Escríbeme *nombre y apellido*. 🙂")
+        if n and n > 20:
+            return Respuesta("Para pedidos de más de *20* escribe *asesor* 🙂. "
+                             "Si no, dime cuántas (1 a 20).")
+        # No dio un número → salir del checkout con gracia hacia un asesor
+        _guardar_lead(chat_id, f"Iba a comprar pero respondió: {texto[:200]}")
+        reset_estado(chat_id)
+        return Respuesta("Mmm, no te entendí la cantidad 🙈. Te paso con un *asesor* "
+                         "para completar tu pedido sin enredos. 🙌", handoff=True)
 
     if estado == "comprar_nombre":
         nom = texto.strip()
