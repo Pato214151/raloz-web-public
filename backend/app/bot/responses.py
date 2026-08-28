@@ -378,24 +378,24 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
     data = _get_backend_json(f"/api/tienda/catalogo/{id_colegio}", timeout=90)
     if not data:
         return ("😕 No pude consultar los precios en este momento. "
-                "Intenta de nuevo en un momento o míralos en la tienda 👉 " + TIENDA_URL)
+                "Intenta de nuevo en un momento o míralos en la tienda 👉 " + TIENDA_URL), []
 
     talla = talla.upper()
     prod = _norm(producto) if producto else None
-    encontrados = []  # (nombre, precio, stock)
+    encontrados = []  # (id_producto, nombre, precio, stock)
     for p in data.get("productos", []):
         if not _coincide_genero(p["nombre"], genero):
             continue
         for tt in p.get("tallas", []):
             if str(tt["talla"]).upper() == talla:
-                encontrados.append((p["nombre"], tt["precio"], tt["stock"]))
+                encontrados.append((p.get("id_producto"), p["nombre"], tt["precio"], tt["stock"]))
                 break
 
     etiqueta_gen = {"nino": " · niño", "nina": " · niña"}.get(genero, "")
     nota = ""
     if prod:
         terminos = _terminos_producto(prod)
-        filtrados = [e for e in encontrados if any(term in _norm(e[0]) for term in terminos)]
+        filtrados = [e for e in encontrados if any(term in _norm(e[1]) for term in terminos)]
         if filtrados:
             encontrados = filtrados
         else:
@@ -403,12 +403,15 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
 
     if not encontrados:
         return (f"🤔 No encontré prendas en talla *{talla}*{etiqueta_gen} para *{nombre_colegio}*.\n"
-                "¿Seguro es esa talla? También puedes ver todo en la tienda 👉 " + TIENDA_URL)
+                "¿Seguro es esa talla? También puedes ver todo en la tienda 👉 " + TIENDA_URL), []
 
     def _linea(n, pr):
         return f"• {n} — " + f"${int(pr):,}".replace(",", ".")
-    disp = [_linea(n, pr) for (n, pr, st) in encontrados if st > 0]
-    encargo = [_linea(n, pr) for (n, pr, st) in encontrados if st <= 0]
+    disp = [_linea(n, pr) for (pid, n, pr, st) in encontrados if st > 0]
+    encargo = [_linea(n, pr) for (pid, n, pr, st) in encontrados if st <= 0]
+    # Items disponibles ahora (con id_producto) para poder cerrar la venta en el chat
+    items_disp = [{"id_producto": pid, "nombre": n, "precio": int(pr), "talla": talla}
+                  for (pid, n, pr, st) in encontrados if st > 0 and pid]
 
     partes = [nota + f"🏷️ *Precios {nombre_colegio} · talla {talla}{etiqueta_gen}*\n"]
     if disp:
@@ -422,7 +425,10 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
                   "\nPagas por *link seguro* (MercadoPago), te *reservamos la talla* "
                   "y te llega la *factura* al correo. 🧾"
                   "\n_O acércate al punto para medir la talla._")
-    return "\n".join(partes)
+    if items_disp:
+        partes.append("\n💬 ¿Prefieres que te la *aparte y te pase el link de pago aquí "
+                      "mismo*? Escribe *comprar*.")
+    return "\n".join(partes), items_disp
 
 
 PEDIR_COLEGIO_PRECIO = (
@@ -984,7 +990,109 @@ def _mostrar_precios(chat_id: str, idc: int, nombre: str, talla: str, genero: st
     set_dato(chat_id, "precio_talla_val", talla)
     set_dato(chat_id, "precio_genero_val", genero)
     set_estado(chat_id, "precio_otra")
-    return Respuesta(_consultar_precios(idc, nombre, talla, genero, producto) + OTRA_TALLA)
+    texto, items_disp = _consultar_precios(idc, nombre, talla, genero, producto)
+    # Guardamos los items disponibles (con id_producto) por si quiere comprar en el chat
+    try:
+        set_dato(chat_id, "compra_items", json.dumps(items_disp))
+    except Exception:
+        set_dato(chat_id, "compra_items", "[]")
+    return Respuesta(texto + OTRA_TALLA)
+
+
+# ─── COMPRAR EN EL CHAT (link de pago + factura, sin salir de WhatsApp) ───
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_COMPRAR_AQUI = ["comprar", "comprarla", "comprarlo", "aparta", "apartar", "apartame",
+                 "apártame", "reservar", "resérvame", "reservame", "me la das",
+                 "me lo das", "me das", "la quiero", "lo quiero", "quiero pedir",
+                 "quiero comprar", "pedirla", "pedirlo", "encargar", "encargarla",
+                 "hacer el pedido", "la llevo", "lo llevo", "las llevo", "los llevo"]
+_NUM_PAL = {"un": 1, "una": 1, "uno": 1, "dos": 2, "par": 2, "tres": 3, "cuatro": 4,
+            "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10}
+
+
+def _cop(n) -> str:
+    return f"${int(n):,}".replace(",", ".")
+
+
+def _num_cantidad(t: str):
+    """Saca una cantidad del texto (dígitos o palabras 'dos'...). None si no hay."""
+    m = re.search(r"\d+", t)
+    if m:
+        try:
+            return int(m.group())
+        except Exception:
+            return None
+    for pal in t.split():
+        if pal in _NUM_PAL:
+            return _NUM_PAL[pal]
+    return None
+
+
+def _compra_iniciar(chat_id: str) -> Respuesta:
+    """Arranca el checkout en el chat usando los items disponibles ya mostrados."""
+    try:
+        items = json.loads(get_dato(chat_id, "compra_items", "[]"))
+    except Exception:
+        items = []
+    if not items:
+        return Respuesta("Para apartártela necesito la talla 🙂. Escríbeme la *talla* "
+                         "(ej: *10*, *M*) y te muestro el precio para comprarla.")
+    if len(items) == 1:
+        set_dato(chat_id, "compra_idx", "0")
+        set_estado(chat_id, "comprar_cantidad")
+        it = items[0]
+        return Respuesta(f"¡Perfecto! *{it['nombre']}* talla *{it['talla']}* "
+                         f"({_cop(it['precio'])} c/u).\n\n"
+                         "¿*Cuántas* quieres? Escribe un número (ej: *1*).")
+    lineas = [f"{i+1}. {it['nombre']} — {_cop(it['precio'])}" for i, it in enumerate(items)]
+    set_estado(chat_id, "comprar_cual")
+    return Respuesta("¿*Cuál* quieres apartar? Responde con el número:\n" + "\n".join(lineas))
+
+
+def _compra_finalizar(chat_id: str, correo: str) -> Respuesta:
+    """Crea el pedido en el backend y devuelve el link de pago (o pasa a asesor)."""
+    try:
+        items = json.loads(get_dato(chat_id, "compra_items", "[]"))
+        idx = int(get_dato(chat_id, "compra_idx", "0"))
+        it = items[idx]
+    except Exception:
+        reset_estado(chat_id)
+        return Respuesta("Uy, se me perdió el detalle del pedido 😅. Escríbeme la *talla* "
+                         "otra vez y lo intentamos de nuevo.")
+    cant = int(get_dato(chat_id, "compra_cant", "1"))
+    nombre = get_dato(chat_id, "compra_nombre", "Cliente WhatsApp")
+    idc = int(get_dato(chat_id, "precio_col_id", "0"))
+    payload = {
+        "nombre_cliente": nombre,
+        "email_cliente": correo,
+        "telefono_cliente": chat_id,
+        "id_colegio": idc,
+        "items": [{"id_producto": it["id_producto"], "nombre": it["nombre"],
+                   "talla": it["talla"], "cantidad": cant}],
+    }
+    status, data = _post_backend("/api/tienda/pedido", payload, timeout=30)
+    reset_estado(chat_id)
+    if status == 201 and data.get("pago_url"):
+        ped = data.get("pedido", {}) or {}
+        total = ped.get("total_cobrar") or (it["precio"] * cant)
+        ref = ped.get("referencia", "")
+        _guardar_lead(chat_id, f"Pedido por chat: {cant}x {it['nombre']} talla {it['talla']} "
+                               f"({nombre}, {correo}) ref {ref}")
+        return Respuesta(
+            f"✅ ¡Listo, {nombre.split()[0]}! Aparté *{cant}x {it['nombre']} "
+            f"talla {it['talla']}*.\n"
+            f"💵 Total: *{_cop(total)}*\n\n"
+            f"👉 Paga aquí (link seguro de MercadoPago):\n{data['pago_url']}\n\n"
+            "Al pagar te llega la *factura* al correo y la talla queda *reservada* "
+            "mientras pagas. 🧾",
+            aviso_admin=("🛒 *PEDIDO POR WHATSAPP*\n"
+                         f"Cliente: {chat_id} ({nombre})\n"
+                         f"{cant}x {it['nombre']} talla {it['talla']} — {_cop(total)}\n"
+                         f"Correo: {correo} · Ref: {ref}\nEsperando el pago."),
+        )
+    _guardar_lead(chat_id, f"Quiso comprar en chat {cant}x {it['nombre']} pero falló el link")
+    return Respuesta("😕 No pude generar el link de pago ahora mismo. Un *asesor* te ayuda "
+                     "a completar la compra enseguida. 🙌", handoff=True)
 
 
 def _resp_comprobante(chat_id: str, via: str = "archivo") -> Respuesta:
@@ -1127,7 +1235,49 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         return _mostrar_precios(chat_id, idc, nombre, talla, genero)
 
     # ── Flujo PRECIOS: ya mostró precios, permite ver otra talla ──
+    # ── COMPRAR EN EL CHAT: pasos guiados (cantidad → nombre → correo → link) ──
+    if estado == "comprar_cual":
+        try:
+            items = json.loads(get_dato(chat_id, "compra_items", "[]"))
+        except Exception:
+            items = []
+        n = _num_cantidad(t)
+        if not items or not n or n < 1 or n > len(items):
+            return Respuesta("Responde con el *número* de la prenda que quieres apartar 🙂.")
+        set_dato(chat_id, "compra_idx", str(n - 1))
+        set_estado(chat_id, "comprar_cantidad")
+        it = items[n - 1]
+        return Respuesta(f"¡Va! *{it['nombre']}* talla *{it['talla']}* ({_cop(it['precio'])} c/u).\n\n"
+                         "¿*Cuántas* quieres? Escribe un número (ej: *1*).")
+
+    if estado == "comprar_cantidad":
+        n = _num_cantidad(t)
+        if not n or n < 1 or n > 20:
+            return Respuesta("Dime *cuántas* con un número, por favor (ej: *1*, *2*). "
+                             "Para pedidos grandes escribe *asesor*. 🙂")
+        set_dato(chat_id, "compra_cant", str(n))
+        set_estado(chat_id, "comprar_nombre")
+        return Respuesta("¿A nombre de *quién* va el pedido? Escríbeme *nombre y apellido*. 🙂")
+
+    if estado == "comprar_nombre":
+        nom = texto.strip()
+        if len(nom) < 3:
+            return Respuesta("Escríbeme tu *nombre y apellido* para el pedido, por favor.")
+        set_dato(chat_id, "compra_nombre", nom[:120])
+        set_estado(chat_id, "comprar_correo")
+        return Respuesta("¿A qué *correo* te enviamos la factura? (ej: *nombre@correo.com*) 📧")
+
+    if estado == "comprar_correo":
+        correo = texto.strip()
+        if not _EMAIL_RE.match(correo):
+            return Respuesta("Ese correo no parece válido 🤔. Escríbelo así: "
+                             "*nombre@correo.com* (o escribe *asesor* si prefieres ayuda).")
+        return _compra_finalizar(chat_id, correo)
+
     if estado == "precio_otra":
+        # ¿Quiere apartar/comprar lo que acabo de cotizarle? → checkout en el chat
+        if _tiene(t, _COMPRAR_AQUI):
+            return _compra_iniciar(chat_id)
         idc2, nombre2 = _detectar_colegio(t)
         if idc2:  # cambió de colegio → pedir talla de nuevo
             set_dato(chat_id, "precio_col_id", str(idc2))
