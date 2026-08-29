@@ -533,6 +533,7 @@ def preguntar():
         return _error_gemini(detalle)
 
     # Bucle de búsqueda: si la IA pide un dato con BUSCAR, lo consultamos y se lo damos.
+    ultima_busqueda = None   # para devolver datos estructurados a la UI (tarjetas)
     for _ in range(2):
         consulta = _extraer_json_marcador(texto, 'BUSCAR')
         if not consulta:
@@ -542,6 +543,7 @@ def preguntar():
         except Exception as e:
             logger.warning("asistente: búsqueda falló: %s", e)
             resultado = {'error': 'la búsqueda falló'}
+        ultima_busqueda = {'tipo': consulta.get('tipo'), 'resultado': resultado}
         seguimiento = (
             f"{base}\n\n=== RESULTADO DE LA BÚSQUEDA ({consulta.get('tipo')}) ===\n"
             f"{json.dumps(resultado, ensure_ascii=False, default=str)}\n\n"
@@ -556,6 +558,10 @@ def preguntar():
         texto = 'No obtuve una respuesta. Intenta reformular la pregunta.'
 
     respuesta = {'respuesta': texto}
+    # Datos estructurados de la última búsqueda → la UI los pinta como tarjetas.
+    if ultima_busqueda and isinstance(ultima_busqueda.get('resultado'), dict) \
+            and not ultima_busqueda['resultado'].get('error'):
+        respuesta['datos'] = ultima_busqueda
     if puede_accionar:
         texto_limpio, accion = _extraer_accion(texto)
         if accion:

@@ -146,6 +146,62 @@ function ResultadoRaloz({ texto }) {
   )
 }
 
+const cop = (n) => '$' + Math.round(Number(n || 0)).toLocaleString('es-CO')
+
+// ── Tarjetas de datos estructurados (inventario, métricas…) ──
+function TarjetasDatos({ datos }) {
+  const r = datos?.resultado || {}
+  if (datos?.tipo === 'buscar_prenda' && r.encontrado && Array.isArray(r.prendas)) {
+    return (
+      <div className="mt-2 grid gap-2">
+        {r.prendas.slice(0, 4).map((p, i) => {
+          const tallas = Object.entries(p.stock_por_talla || {}).filter(([, q]) => q > 0)
+          const total = p.stock_total ?? tallas.reduce((s, [, q]) => s + q, 0)
+          return (
+            <div key={i} className="rounded-2xl border border-[#E7EBF1] bg-white p-3.5" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[14px] font-semibold text-[#10213F]">{p.prenda}</p>
+                <span className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                  total > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${total > 0 ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  {total > 0 ? 'Disponible' : 'Agotado'}
+                </span>
+              </div>
+              <p className="text-[13px] text-[#718096] mt-0.5">{total} unidad{total === 1 ? '' : 'es'} en total</p>
+              {tallas.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {tallas.map(([t, q]) => (
+                    <span key={t} className="text-[11.5px] font-medium text-[#10213F] bg-[#F7F8FA] border border-[#E7EBF1] rounded-lg px-2 py-0.5">
+                      Talla {t} · <b>{q}</b>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  if (datos?.tipo === 'ventas_periodo' && (r.total !== undefined)) {
+    return (
+      <div className="mt-2 grid grid-cols-2 gap-2 max-w-sm">
+        <div className="rounded-2xl border border-[#E7EBF1] bg-white p-3.5">
+          <p className="text-[11.5px] text-[#718096]">Total vendido</p>
+          <p className="text-[18px] font-bold text-[#10213F] mt-0.5">{cop(r.total)}</p>
+        </div>
+        <div className="rounded-2xl border border-[#E7EBF1] bg-white p-3.5">
+          <p className="text-[11.5px] text-[#718096]">Facturas</p>
+          <p className="text-[18px] font-bold text-[#10213F] mt-0.5">{r.facturas ?? 0}</p>
+        </div>
+        <p className="col-span-2 text-[11px] text-[#718096] px-1">{r.desde} → {r.hasta}</p>
+      </div>
+    )
+  }
+  return null
+}
+
 // ── Mensaje de RALOZ ──
 function MensajeRaloz({ m, onConfirmar, onCancelar, onCopiar, onRegenerar, puedeRegenerar }) {
   return (
@@ -160,6 +216,8 @@ function MensajeRaloz({ m, onConfirmar, onCancelar, onCopiar, onRegenerar, puede
             ? <div className="flex items-start gap-2"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{m.texto}</div>
             : renderRich(m.texto)}
         </div>
+
+        {m.datos && <TarjetasDatos datos={m.datos} />}
 
         {m.accion && (
           <TarjetaConfirmar accion={m.accion} estado={m.accionEstado}
@@ -208,7 +266,7 @@ export default function Asistente() {
     setCargando(true)
     try {
       const res = await api.post('/asistente/preguntar', { pregunta }, { timeout: 130000 })
-      setMensajes((m) => [...m, { rol: 'bot', texto: res.data.respuesta, accion: res.data.accion || null }])
+      setMensajes((m) => [...m, { rol: 'bot', texto: res.data.respuesta, accion: res.data.accion || null, datos: res.data.datos || null }])
     } catch (err) {
       const data = err?.response?.data || {}
       let msg = data.code === 'sin_config'
