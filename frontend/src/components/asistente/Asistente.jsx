@@ -125,6 +125,27 @@ function BurbujaUsuario({ texto }) {
   )
 }
 
+// Quita emojis de estado al inicio del texto (para que no parezca log)
+const limpiarPrefijo = (t) => String(t || '').replace(/^\s*[✅✔️☑️🎉👍]+\s*/u, '')
+
+// ── Resultado de una acción (tarjeta de éxito limpia, sin aspecto de log) ──
+function ResultadoRaloz({ texto }) {
+  return (
+    <div className="flex gap-3">
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ background: NAVY }}>
+        <Sparkles size={16} color={YELLOW} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-semibold text-[#718096] mb-1">RALOZ</p>
+        <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+          <Check size={15} className="text-emerald-600 shrink-0" />
+          <span className="text-[13.5px] text-[#10213F]">{limpiarPrefijo(texto)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Mensaje de RALOZ ──
 function MensajeRaloz({ m, onConfirmar, onCancelar, onCopiar, onRegenerar, puedeRegenerar }) {
   return (
@@ -292,6 +313,8 @@ export default function Asistente() {
               {mensajes.map((m, i) => (
                 m.rol === 'user'
                   ? <BurbujaUsuario key={i} texto={m.texto} />
+                  : m.resultado
+                  ? <ResultadoRaloz key={i} texto={m.texto} />
                   : <MensajeRaloz key={i} m={m}
                       onConfirmar={() => confirmarAccion(i)}
                       onCancelar={() => cancelarAccion(i)}
@@ -316,6 +339,15 @@ export default function Asistente() {
 
         {/* Input fijo */}
         <div className="border-t border-[#E7EBF1] p-3">
+          {/* Atajos siempre a mano (para no tener que subir) */}
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-thin pb-2 -mx-1 px-1">
+            {ATAJOS.map(a => (
+              <button key={a.id} onClick={() => preguntar(a.prompt)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#E7EBF1] text-[12.5px] font-medium text-[#10213F] hover:bg-[#F7F8FA] whitespace-nowrap shrink-0 transition-colors">
+                <a.icon size={13} className="text-[#071E49]" /> {a.label}
+              </button>
+            ))}
+          </div>
           <form onSubmit={(e) => { e.preventDefault(); preguntar() }}
             className="flex items-end gap-2 rounded-2xl border border-[#E7EBF1] bg-[#F7F8FA] px-3 py-2 focus-within:border-[#071E49]/30 transition-colors">
             <textarea
