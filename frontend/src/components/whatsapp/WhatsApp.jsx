@@ -485,7 +485,7 @@ export default function WhatsApp() {
   ]
 
   return (
-    <div className={`flex h-[calc(100vh-80px)] lg:h-[calc(100vh-120px)] overflow-hidden`}>
+    <div className={`flex h-[calc(100dvh-160px)] lg:h-[calc(100vh-120px)] overflow-hidden rounded-none lg:rounded-xl`}>
 
       {/* ────────────────────────────────────
           PANEL LISTA DE CONVERSACIONES

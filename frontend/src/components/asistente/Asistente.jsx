@@ -359,10 +359,10 @@ export default function Asistente() {
   const vacio = mensajes.length === 0
 
   return (
-    <div className="grid lg:grid-cols-[minmax(0,1fr)_310px] gap-5" style={{ height: 'calc(100vh - 90px)' }}>
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_310px] gap-5 h-[calc(100dvh-168px)] lg:h-[calc(100vh-96px)]">
 
       {/* ══ Columna principal ══ */}
-      <div className="flex flex-col min-w-0 bg-white rounded-2xl border border-[#E7EBF1]"
+      <div className="flex flex-col min-h-0 min-w-0 bg-white rounded-2xl border border-[#E7EBF1]"
         style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
 
         {/* Header */}
