@@ -1385,7 +1385,11 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
         if n and 1 <= n <= 20:
             set_dato(chat_id, "compra_cant", str(n))
             set_estado(chat_id, "comprar_nombre")
-            return Respuesta("¿A nombre de *quién* va el pedido? Escríbeme *nombre y apellido*. 🙂")
+            return Respuesta(
+                "¿A nombre de *quién* va el pedido? Escríbeme *nombre y apellido*. 🙂\n\n"
+                "_Al continuar autorizas el tratamiento de tus datos, solo para gestionar "
+                "tu pedido y factura (Ley 1581 de 2012). Más info: "
+                "https://ralozcolsas.com/terminos.html_")
         if n and n > 20:
             return Respuesta("Para pedidos de más de *20* escribe *asesor* 🙂. "
                              "Si no, dime cuántas (1 a 20).")

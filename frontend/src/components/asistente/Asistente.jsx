@@ -184,6 +184,43 @@ function TarjetasDatos({ datos }) {
       </div>
     )
   }
+  if (datos?.tipo === 'buscar_factura' && r.encontrado) {
+    const badge = r.estado === 'PAGADA' ? 'bg-emerald-50 text-emerald-700'
+      : r.estado === 'ANULADA' ? 'bg-gray-100 text-gray-600' : 'bg-amber-50 text-amber-700'
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-md" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[14px] font-semibold text-[#10213F]">Factura {r.numero_factura}</p>
+          <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full ${badge}`}>{r.estado}</span>
+        </div>
+        {(r.cliente || r.fecha) && <p className="text-[12.5px] text-[#718096] mt-0.5">{[r.cliente, r.fecha].filter(Boolean).join(' · ')}</p>}
+        <div className="flex gap-4 mt-2 text-[13px]">
+          <span className="text-[#10213F]">Total <b>{cop(r.total)}</b></span>
+          {r.saldo_pendiente > 0
+            ? <span className="text-red-600">Saldo <b>{cop(r.saldo_pendiente)}</b></span>
+            : <span className="text-emerald-600 font-medium">Sin saldo</span>}
+        </div>
+      </div>
+    )
+  }
+  if (datos?.tipo === 'pedidos_cliente' && r.encontrado && Array.isArray(r.pedidos)) {
+    return (
+      <div className="mt-2 grid gap-2 max-w-md">
+        {r.pedidos.slice(0, 5).map((p, i) => (
+          <div key={i} className="rounded-xl border border-[#E7EBF1] bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[13px] font-semibold text-[#10213F]">{p.referencia}</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#F7F8FA] text-[#718096]">{p.estado}</span>
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[12px]">
+              <span className="text-[#718096]">{p.fecha ? new Date(p.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) : ''}</span>
+              <span className="font-semibold text-[#10213F]">{cop(p.total)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
   if (datos?.tipo === 'ventas_periodo' && (r.total !== undefined)) {
     return (
       <div className="mt-2 grid grid-cols-2 gap-2 max-w-sm">
