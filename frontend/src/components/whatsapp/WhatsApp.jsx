@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download, Bell, Trash2 } from 'lucide-react'
+import { Send, RefreshCw, MessageCircle, Image as ImageIcon, ArrowLeft, AlertTriangle, Download, Bell, Trash2, UserRound, X } from 'lucide-react'
 import { activarNotificaciones, estadoNotificaciones } from '../../services/push'
 import FichaConversacion from './FichaConversacion'
 
@@ -289,6 +289,7 @@ export default function WhatsApp() {
   const [panelMovil, setPanelMovil] = useState('lista')
   const [filtro, setFiltro] = useState('todas')   // todas | no_leidas | bot | asesor
   const [busqueda, setBusqueda] = useState('')
+  const [fichaMovil, setFichaMovil] = useState(false)  // ficha como panel deslizante en <xl
 
   const [descargando, setDescargando] = useState(false)
   const [notif, setNotif] = useState(estadoNotificaciones())
@@ -679,6 +680,11 @@ export default function WhatsApp() {
                   Yo
                 </button>
               )}
+              {/* Ver ficha del cliente (solo <xl, donde la 3ª columna no cabe) */}
+              <button onClick={() => setFichaMovil(true)} title="Ficha del cliente"
+                className="xl:hidden p-2 text-[#54656f] hover:text-[#075e54] hover:bg-gray-100 rounded-full transition">
+                <UserRound size={18} />
+              </button>
             </div>
 
             {/* Área de mensajes */}
@@ -770,6 +776,24 @@ export default function WhatsApp() {
       {activo && (
         <div className="hidden xl:flex flex-col bg-white w-[330px] shrink-0 border-l border-gray-200/80">
           <FichaConversacion conv={convActiva} onEnviarMensaje={enviarTexto} onToggleModo={cambiarModo} onActualizar={cargarConversaciones} />
+        </div>
+      )}
+
+      {/* Ficha como panel deslizante en pantallas <xl */}
+      {activo && fichaMovil && (
+        <div className="xl:hidden fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFichaMovil(false)} />
+          <div className="relative bg-white w-[85%] max-w-[340px] h-full flex flex-col shadow-2xl animate-[fadeInUp_0.15s_ease-out]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="text-[14px] font-semibold text-gray-800">Ficha del cliente</span>
+              <button onClick={() => setFichaMovil(false)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <FichaConversacion conv={convActiva} onEnviarMensaje={enviarTexto} onToggleModo={cambiarModo} onActualizar={cargarConversaciones} />
+            </div>
+          </div>
         </div>
       )}
     </div>
