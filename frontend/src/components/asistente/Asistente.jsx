@@ -200,6 +200,30 @@ function TarjetasDatos({ datos }) {
             ? <span className="text-red-600">Saldo <b>{cop(r.saldo_pendiente)}</b></span>
             : <span className="text-emerald-600 font-medium">Sin saldo</span>}
         </div>
+
+        {/* Disponibilidad del pedido */}
+        {Array.isArray(r.detalles) && r.detalles.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-[#E7EBF1]">
+            {r.todo_disponible !== null && (
+              <span className={`inline-flex items-center gap-1 text-[11.5px] font-semibold px-2 py-0.5 rounded-full mb-2 ${
+                r.todo_disponible ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${r.todo_disponible ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                {r.todo_disponible ? 'Todo en stock' : 'Falta stock'}
+              </span>
+            )}
+            <div className="space-y-1.5">
+              {r.detalles.map((d, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-[12.5px]">
+                  <span className="text-[#10213F] truncate">{d.prenda} · T{d.talla} · x{d.cantidad}</span>
+                  <span className={`shrink-0 font-medium ${d.suficiente ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {d.suficiente ? `✓ ${d.stock_actual} en stock` : `faltan (hay ${d.stock_actual})`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }

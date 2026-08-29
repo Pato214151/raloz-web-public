@@ -306,6 +306,21 @@ def _tool_buscar_factura(ref):
     f = _buscar_factura(str(ref).strip())
     if not f:
         return {'encontrado': False}
+    # Prendas del pedido + stock actual de cada una (para responder "¿hay todo en stock?")
+    detalles, todo_disp = [], True
+    for d in f.detalles.all():
+        st = Stock.query.filter_by(
+            id_colegio=f.id_colegio, id_producto=d.id_producto,
+            talla_individual=d.talla_individual).first()
+        disp = int(st.cantidad or 0) if st else 0
+        suf = disp >= (d.cantidad or 0)
+        if not suf:
+            todo_disp = False
+        detalles.append({
+            'prenda': d.producto.nombre if d.producto else '—',
+            'talla': d.talla_individual, 'cantidad': d.cantidad,
+            'stock_actual': disp, 'suficiente': suf,
+        })
     return {
         'encontrado': True,
         'numero_factura': f.numero_factura,
@@ -316,6 +331,8 @@ def _tool_buscar_factura(ref):
         'cliente': getattr(f, 'cliente_nombre', None),
         'telefono': getattr(f, 'cliente_telefono', None),
         'fecha': f.fecha_factura.isoformat() if f.fecha_factura else None,
+        'detalles': detalles,
+        'todo_disponible': todo_disp if detalles else None,
     }
 
 
