@@ -817,6 +817,23 @@ RESP_POLITICAS = (
     "*MercadoPago*: no guardamos los datos de tu tarjeta."
 )
 
+RESP_LAVADO = (
+    "🧼 *Cuidado de la prenda*\n\n"
+    "Para que te duren como nuevas:\n"
+    "• Lava a mano o en ciclo suave con *agua fría*.\n"
+    "• *No uses blanqueador* (cloro) ni la dejes mucho tiempo en remojo.\n"
+    "• Seca a la *sombra* y plancha a temperatura media.\n\n"
+    "Así conservan el color y la forma. 😊"
+)
+
+RESP_TIEMPOS = (
+    "⏱️ *Tiempos de entrega*\n\n"
+    "• *En stock:* de una — mismo día en el punto, o coordinamos domicilio.\n"
+    "• *Por encargo* (cuando no hay stock): la confección tarda aprox. *1 a 2 meses*.\n"
+    "• *Domicilio en Bogotá:* según la zona, lo coordina un asesor.\n\n"
+    "¿Te confirmo una prenda puntual? Escribe *precio* o el *colegio*. 🙌"
+)
+
 GARANTIA_INFO = (
     "🧵 *Garantía / arreglo de prenda*\n\n"
     "Nuestra garantía cubre fallas de confección (costuras/hilo) por *6 meses*:\n"
@@ -965,6 +982,13 @@ _DEVOLUCIONES = ["devolucion", "devoluciones", "devolver", "retracto", "reembols
              "me quedo grande", "me quedo pequeñ"]
 _POLITICAS = ["politica", "politicas", "privacidad", "terminos", "condiciones",
              "datos personales", "habeas data", "tratamiento de datos", "cookies"]
+_LAVADO = ["lavar", "lavado", "como se lava", "como lavar", "planchar", "plancha",
+           "encoge", "encoger", "decolora", "destiñe", "destine", "como cuidar",
+           "cuidado de la prenda", "se despinta", "se despintan"]
+_TIEMPOS = ["cuanto se demora", "cuanto tarda", "cuanto tardan", "cuanto demora",
+            "se demoran", "tiempo de entrega", "que tan rapido", "en cuanto tiempo",
+            "para cuando esta", "para cuando estan", "cuanto tiempo tarda",
+            "demora el encargo", "cuanto se demoran"]
 _COMPROBANTE = ["comprobante", "ya pague", "ya pagué", "ya realice el pago",
              "ya hice el pago", "hice el pago", "hice la transferencia", "ya transferi",
              "ya consigne", "le consigne", "soporte de pago", "soporte del pago",
@@ -1620,6 +1644,14 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
     if _tiene(t, _GARANTIA):
         set_estado(chat_id, "garantia_fotos")
         return Respuesta(GARANTIA_INFO)
+
+    # FAQ: cuidado/lavado de la prenda
+    if _tiene(t, _LAVADO):
+        return Respuesta(RESP_LAVADO + VOLVER)
+
+    # FAQ: tiempos de entrega / cuánto se demora
+    if _tiene(t, _TIEMPOS):
+        return Respuesta(RESP_TIEMPOS + VOLVER)
 
     # Envíos / domicilios (pregunta de venta) — ANTES que "pedido no llegado",
     # porque ambos mencionan la palabra "envío".
