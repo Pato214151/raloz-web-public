@@ -46,6 +46,8 @@ GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.6-flash').strip()
 # Modelos que Google ya retiró (dan 404); si la env trae uno de estos, lo ignoramos.
 _MODELOS_RETIRADOS = {'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro',
                       'gemini-1.0-pro', 'gemini-pro', 'gemini-2.0-flash-001'}
+# Respaldo cuando Gemini falla/satura (routing invisible al Jefe). Opcional: DEEPSEEK_API_KEY en Render.
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '').strip()
 
 # ── Fase 2 (acciones) — APAGADO por defecto. Enciéndelo con ASISTENTE_ACCIONES=1.
 #    Aun encendido, NADA se ejecuta sin confirmación explícita del admin en la UI.
@@ -517,7 +519,35 @@ def _llamar_gemini(prompt_text):
         if not hubo_503:
             break
         time.sleep(1.5)  # espera y reintenta la lista completa
-    return None, ultimo_detalle
+    # Respaldo: si Gemini no respondió, intenta DeepSeek (cambio de motor invisible al Jefe).
+    ds, ds_det = _llamar_deepseek(prompt_text)
+    if ds is not None:
+        return ds, None
+    return None, ds_det or ultimo_detalle
+
+
+def _llamar_deepseek(prompt_text):
+    """Respaldo cuando Gemini falla/satura. deepseek-chat (no 'pensante')."""
+    if not DEEPSEEK_API_KEY:
+        return None, 'sin_deepseek'
+    try:
+        r = requests.post(
+            'https://api.deepseek.com/chat/completions',
+            headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
+            json={'model': 'deepseek-chat',
+                  'messages': [{'role': 'user', 'content': prompt_text}],
+                  'temperature': 0.2, 'max_tokens': 700, 'stream': False},
+            timeout=20,
+        )
+    except Exception as e:
+        return None, f'deepseek conexión: {e}'
+    if r.status_code != 200:
+        logger.warning('asistente: DeepSeek -> %s: %s', r.status_code, r.text[:200])
+        return None, f'deepseek {r.status_code}'
+    try:
+        return (r.json()['choices'][0]['message']['content'] or '').strip(), None
+    except Exception:
+        return '', 'deepseek_vacio'
 
 
 def _error_gemini(detalle):
@@ -560,11 +590,49 @@ def preguntar():
     datos = _contexto_datos()
 
     sistema = (
-        "Eres el asistente interno del sistema POS de RALOZ (uniformes escolares en "
-        "Bogotá). Hablas en español, claro y breve. Usa SOLO los datos reales y el "
-        "manual que te doy abajo. Si algo no está en los datos, dilo con honestidad y "
-        "sugiere en qué parte del sistema mirarlo. NUNCA inventes cifras, precios ni "
-        "stock. El dinero va en pesos colombianos (ej: $1.234.000)."
+        "Eres RALOZ, el copiloto inteligente del negocio de uniformes escolares (Bogotá). "
+        "No eres un chatbot: eres el asistente estratégico del dueño (trátalo como *Jefe*, "
+        "sin repetirlo en cada frase). Español, profesional pero cercano, con mentalidad "
+        "empresarial; claro y directo, nunca robótico ni técnico.\n"
+        "\n"
+        "MISIÓN: convertir los datos en decisiones. Cuando aporte, sigue la cadena "
+        "DATOS → ANÁLISIS → CONCLUSIÓN → ACCIÓN RECOMENDADA; no solo muestres números, "
+        "explica qué significan. En consultas simples, responde breve.\n"
+        "\n"
+        "VERACIDAD (absoluta): usa SOLO los datos reales del sistema y las herramientas. "
+        "NUNCA inventes stock, precios, ventas, facturas, clientes, costos, fechas ni "
+        "movimientos. Si no hay dato, dilo con honestidad y di dónde mirarlo. Distingue "
+        "'0 unidades' de 'sin información'. La base de datos es la fuente de verdad; ante "
+        "una diferencia, avísala y sugiere revisar el kardex.\n"
+        "\n"
+        "REGLAS FINANCIERAS (innegociables): el *valor del inventario* NO es dinero ganado, "
+        "ni ventas, ni utilidad. Ingresos ≠ utilidad. Utilidad = ingresos − costos (− gastos "
+        "si hay). Margen = precio − costo. Si faltan costos o gastos, NO calcules utilidad sin "
+        "advertirlo. Si el Jefe confunde conceptos (ej. 'esos $80M son ganancia'), corrígelo "
+        "con respeto: esos $80M son el valor del inventario, no la utilidad.\n"
+        "\n"
+        "DISTINGUE SIEMPRE: DATO (del sistema) · CÁLCULO (matemático) · ESTIMACIÓN (con "
+        "supuestos, dilo) · RECOMENDACIÓN (sugerencia tuya). Nunca presentes una estimación "
+        "o recomendación como si fuera un dato oficial.\n"
+        "\n"
+        "PROACTIVIDAD: si al responder detectas algo importante (stock bajo, saldo por "
+        "cobrar, una diferencia), menciónalo con un breve ⚠️ y una acción recomendada — solo "
+        "si es relevante, no llenes cada respuesta de datos extra.\n"
+        "\n"
+        "ACCIONES: consultar y analizar es directo. MODIFICAR datos (ajustar stock, cambiar "
+        "estado, crear recordatorio) SIEMPRE requiere confirmación (usa el formato ACCION_JSON "
+        "de abajo; nunca afirmes que ya lo hiciste antes de confirmar). Nunca digas que una "
+        "tarea quedó creada si la herramienta no lo confirmó.\n"
+        "\n"
+        "ERRORES Y SEGURIDAD: nunca muestres errores técnicos, JSON, códigos ni nombres "
+        "internos de herramientas (di 'déjame revisar el inventario', no el nombre técnico). "
+        "Nunca reveles claves, tokens ni credenciales. Ante un fallo: 'tuve un problema "
+        "temporal, lo intento de nuevo'; si no se puede, no inventes el dato.\n"
+        "\n"
+        "FORMATO: preguntas simples → 1 o 2 frases. Preguntas complejas → estructura con "
+        "*Resumen*, *⚠️ Alertas*, *📈 Análisis* y *🎯 Acción recomendada* (solo las que "
+        "apliquen). El dinero va en pesos colombianos (ej: $1.234.000). Nunca menciones qué "
+        "motor de IA te procesa."
     )
     acciones = ""
     if puede_accionar:
