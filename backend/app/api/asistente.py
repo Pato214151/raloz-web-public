@@ -245,11 +245,16 @@ def _extraer_accion(texto):
 
 
 def _buscar_factura(ref):
-    """Busca una factura por su número, o por la referencia de un pedido web."""
-    f = Factura.query.filter_by(numero_factura=ref).first()
+    """Busca una factura por su número o por la referencia de un pedido web.
+    Si piden 'la última / nueva / reciente' (o viene vacío), devuelve la más reciente."""
+    r = str(ref or '').strip()
+    if not r or any(p in r.lower() for p in ('ultim', 'última', 'ultima', 'nuev', 'recient')):
+        return Factura.query.filter(Factura.estado != 'ANULADA') \
+            .order_by(Factura.fecha_factura.desc(), Factura.id_factura.desc()).first()
+    f = Factura.query.filter_by(numero_factura=r).first()
     if f:
         return f
-    pedido = PedidoWeb.query.filter_by(referencia=ref).first()
+    pedido = PedidoWeb.query.filter_by(referencia=r).first()
     if pedido and pedido.id_factura:
         return Factura.query.get(pedido.id_factura)
     return None
@@ -588,7 +593,7 @@ def preguntar():
         "nada más:\n"
         "BUSCAR: {\"tipo\":\"buscar_prenda\",\"colegio\":\"<colegio>\",\"texto\":\"<nombre prenda>\"}\n"
         "BUSCAR: {\"tipo\":\"movimientos\",\"colegio\":\"<colegio>\",\"texto\":\"<prenda>\",\"talla\":\"<talla o vacío>\"}  → kardex de la prenda: entradas/salidas/ajustes con el stock antes y después, la factura y quién lo movió (úsalo para '¿cuánto había antes?', '¿quién ajustó el stock?', '¿qué movimientos tuvo?')\n"
-        "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero o RALOZ-...>\"}\n"
+        "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero, RALOZ-..., o 'ultima' para la más reciente>\"}  → devuelve la factura con sus prendas, cuánto descontó del inventario (antes→después) y si descontó todo bien\n"
         "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
         "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
         "Solo UNA búsqueda por vez. Si la respuesta ya está en el resumen, NO uses BUSCAR."
