@@ -286,6 +286,28 @@ function TarjetasDatos({ datos }) {
       </div>
     )
   }
+  if (datos?.tipo === 'top_productos' && r.encontrado && Array.isArray(r.productos)) {
+    const medalla = ['🥇', '🥈', '🥉']
+    const maxU = Math.max(...r.productos.map(p => p.unidades || 0), 1)
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-lg" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+        <p className="text-[13px] font-semibold text-[#10213F] mb-2">Más vendidas <span className="text-[#718096] font-normal">· {r.periodo}</span></p>
+        <div className="space-y-2">
+          {r.productos.map((p, i) => (
+            <div key={i}>
+              <div className="flex items-center justify-between gap-2 text-[13px]">
+                <span className="text-[#10213F] truncate">{medalla[i] || `${i + 1}.`} {p.prenda}</span>
+                <span className="shrink-0 text-[#718096]"><b className="text-[#10213F]">{p.unidades}</b> uds · {cop(p.total)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[#F7F8FA] mt-1 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.round((p.unidades / maxU) * 100)}%`, background: NAVY }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
   if (datos?.tipo === 'ventas_periodo' && (r.total !== undefined)) {
     return (
       <div className="mt-2 grid grid-cols-2 gap-2 max-w-sm">

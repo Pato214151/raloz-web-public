@@ -30,7 +30,7 @@ from sqlalchemy import func, and_
 from app import db, limiter
 from app.utils.decorators import rol_requerido, get_current_identity, registrar_auditoria
 from app.models import (
-    Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
+    Factura, FacturaDetalle, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea, MovimientoInventario,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
@@ -426,6 +426,52 @@ def _tool_ventas_periodo(desde=None, hasta=None, mes=None, anio=None):
             'facturas': int(row[0] or 0), 'total': float(row[1] or 0)}
 
 
+def _tool_top_productos(desde=None, hasta=None, mes=None, anio=None, limite=8):
+    """Prendas más vendidas (unidades y $) en un periodo. Sin periodo = histórico."""
+    d = h = None
+    if mes and anio:
+        try:
+            y, m = int(anio), int(mes)
+            d = date(y, m, 1)
+            h = date(y, 12, 31) if m == 12 else date(y, m + 1, 1) - timedelta(days=1)
+        except Exception:
+            pass
+    for val, attr in ((desde, 'd'), (hasta, 'h')):
+        if val:
+            try:
+                pd = datetime.strptime(str(val)[:10], '%Y-%m-%d').date()
+                if attr == 'd':
+                    d = pd
+                else:
+                    h = pd
+            except Exception:
+                pass
+    try:
+        limite = max(1, min(int(limite or 8), 20))
+    except Exception:
+        limite = 8
+    q = (db.session.query(
+            FacturaDetalle.id_producto,
+            func.sum(FacturaDetalle.cantidad),
+            func.sum(FacturaDetalle.total_linea))
+         .join(Factura, Factura.id_factura == FacturaDetalle.id_factura)
+         .filter(Factura.estado != 'ANULADA'))
+    if d and h:
+        q = q.filter(and_(Factura.fecha_factura >= d, Factura.fecha_factura <= h))
+    q = q.group_by(FacturaDetalle.id_producto) \
+         .order_by(func.sum(FacturaDetalle.cantidad).desc()).limit(limite)
+    filas = q.all()
+    if not filas:
+        return {'encontrado': False, 'mensaje': 'No hay ventas registradas en ese periodo.'}
+    pids = [f[0] for f in filas]
+    nombres = {p.id_producto: p.nombre for p in Producto.query.filter(Producto.id_producto.in_(pids)).all()}
+    productos = [{'prenda': nombres.get(f[0], f'Prod#{f[0]}'),
+                  'unidades': int(f[1] or 0), 'total': float(f[2] or 0)} for f in filas]
+    return {'encontrado': True,
+            'periodo': (f'{d.isoformat()} → {h.isoformat()}' if d and h else 'histórico'),
+            'productos': productos}
+
+
 def _tool_movimientos_prenda(colegio, texto, talla=None):
     """Kardex de una prenda: entradas/salidas/ajustes recientes, con el stock
     antes y después de cada movimiento, su factura/motivo y quién lo hizo."""
@@ -472,6 +518,10 @@ def _ejecutar_busqueda(obj):
     if tipo == 'ventas_periodo':
         return _tool_ventas_periodo(obj.get('desde'), obj.get('hasta'),
                                     obj.get('mes'), obj.get('anio') or obj.get('año'))
+    if tipo == 'top_productos':
+        return _tool_top_productos(obj.get('desde'), obj.get('hasta'),
+                                   obj.get('mes'), obj.get('anio') or obj.get('año'),
+                                   obj.get('limite') or 8)
     return {'error': 'búsqueda no soportada'}
 
 
@@ -701,6 +751,7 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero, RALOZ-..., o 'ultima' para la más reciente>\"}  → devuelve la factura con sus prendas, cuánto descontó del inventario (antes→después) y si descontó todo bien\n"
         "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
         "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
+        "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
         "Solo UNA búsqueda por vez. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
 
