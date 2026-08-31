@@ -34,7 +34,7 @@ from app.models import (
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
-from app.utils.inventario import registrar_movimiento
+from app.utils.inventario import registrar_movimiento, stock_descontado_neto
 
 logger = logging.getLogger("raloz.asistente")
 
@@ -306,8 +306,13 @@ def _tool_buscar_factura(ref):
     f = _buscar_factura(str(ref).strip())
     if not f:
         return {'encontrado': False}
-    # Prendas del pedido + stock actual de cada una (para responder "¿hay todo en stock?")
-    detalles, todo_disp = [], True
+    # Cuánto descontó ESTA factura del inventario (leído del kardex) → verdad absoluta
+    try:
+        netos = stock_descontado_neto(f.numero_factura, f.id_colegio)
+    except Exception:
+        netos = {}
+    # Prendas del pedido + stock actual + cuánto salió del inventario por esta venta
+    detalles, todo_disp, desconto_total = [], True, 0
     for d in f.detalles.all():
         st = Stock.query.filter_by(
             id_colegio=f.id_colegio, id_producto=d.id_producto,
@@ -316,10 +321,13 @@ def _tool_buscar_factura(ref):
         suf = disp >= (d.cantidad or 0)
         if not suf:
             todo_disp = False
+        desc = int(netos.get((d.id_producto, d.talla_individual), 0))
+        desconto_total += desc
         detalles.append({
             'prenda': d.producto.nombre if d.producto else '—',
             'talla': d.talla_individual, 'cantidad': d.cantidad,
             'stock_actual': disp, 'suficiente': suf,
+            'descontado': desc,  # unidades que ESTA venta sacó del inventario
         })
     return {
         'encontrado': True,
@@ -333,6 +341,8 @@ def _tool_buscar_factura(ref):
         'fecha': f.fecha_factura.isoformat() if f.fecha_factura else None,
         'detalles': detalles,
         'todo_disponible': todo_disp if detalles else None,
+        'descontado_inventario': desconto_total,   # total de unidades que salieron del inventario
+        'unidades_pedido': sum((d.get('cantidad') or 0) for d in detalles),
     }
 
 

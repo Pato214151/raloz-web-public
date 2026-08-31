@@ -201,23 +201,32 @@ function TarjetasDatos({ datos }) {
             : <span className="text-emerald-600 font-medium">Sin saldo</span>}
         </div>
 
-        {/* Disponibilidad del pedido */}
+        {/* Descuento de inventario (leído del kardex) + stock actual */}
         {Array.isArray(r.detalles) && r.detalles.length > 0 && (
           <div className="mt-3 pt-3 border-t border-[#E7EBF1]">
-            {r.todo_disponible !== null && (
+            {r.descontado_inventario !== undefined && (
               <span className={`inline-flex items-center gap-1 text-[11.5px] font-semibold px-2 py-0.5 rounded-full mb-2 ${
-                r.todo_disponible ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                r.descontado_inventario >= r.unidades_pedido ? 'bg-emerald-50 text-emerald-700'
+                  : r.descontado_inventario > 0 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
               }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${r.todo_disponible ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                {r.todo_disponible ? 'Todo en stock' : 'Falta stock'}
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  r.descontado_inventario >= r.unidades_pedido ? 'bg-emerald-500'
+                    : r.descontado_inventario > 0 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                {r.descontado_inventario >= r.unidades_pedido
+                  ? 'Inventario descontado ✓'
+                  : r.descontado_inventario > 0
+                  ? `Descontó ${r.descontado_inventario}/${r.unidades_pedido} (resto a fabricación)`
+                  : 'No descontó del inventario'}
               </span>
             )}
             <div className="space-y-1.5">
               {r.detalles.map((d, i) => (
                 <div key={i} className="flex items-center justify-between gap-2 text-[12.5px]">
                   <span className="text-[#10213F] truncate">{d.prenda} · T{d.talla} · x{d.cantidad}</span>
-                  <span className={`shrink-0 font-medium ${d.suficiente ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {d.suficiente ? `✓ ${d.stock_actual} en stock` : `faltan (hay ${d.stock_actual})`}
+                  <span className="shrink-0 text-[#718096]">
+                    {d.descontado > 0
+                      ? <span className="text-emerald-600 font-medium">salió {d.descontado} · quedan {d.stock_actual}</span>
+                      : <span className="text-red-600 font-medium">no salió · quedan {d.stock_actual}</span>}
                   </span>
                 </div>
               ))}
