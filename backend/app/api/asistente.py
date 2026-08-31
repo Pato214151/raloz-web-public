@@ -31,7 +31,7 @@ from app import db, limiter
 from app.utils.decorators import rol_requerido, get_current_identity, registrar_auditoria
 from app.models import (
     Factura, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
-    Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea,
+    Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea, MovimientoInventario,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.inventario import registrar_movimiento, stock_descontado_neto
@@ -323,11 +323,21 @@ def _tool_buscar_factura(ref):
             todo_disp = False
         desc = int(netos.get((d.id_producto, d.talla_individual), 0))
         desconto_total += desc
+        # Stock antes/después de ESTA venta, leído del kardex (SALIDA con su referencia)
+        antes = despues = None
+        movs_salida = MovimientoInventario.query.filter_by(
+            referencia=f.numero_factura, id_producto=d.id_producto,
+            talla_individual=d.talla_individual, tipo='SALIDA').all()
+        if movs_salida:
+            ult = max(movs_salida, key=lambda mv: mv.fecha or datetime.min)
+            despues = ult.stock_resultante
+            antes = (ult.stock_resultante or 0) + sum(mv.cantidad for mv in movs_salida)
         detalles.append({
             'prenda': d.producto.nombre if d.producto else '—',
             'talla': d.talla_individual, 'cantidad': d.cantidad,
             'stock_actual': disp, 'suficiente': suf,
             'descontado': desc,  # unidades que ESTA venta sacó del inventario
+            'stock_antes': antes, 'stock_despues': despues,  # según el kardex
         })
     return {
         'encontrado': True,

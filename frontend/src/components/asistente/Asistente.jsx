@@ -224,7 +224,9 @@ function TarjetasDatos({ datos }) {
                 <div key={i} className="flex items-center justify-between gap-2 text-[12.5px]">
                   <span className="text-[#10213F] truncate">{d.prenda} · T{d.talla} · x{d.cantidad}</span>
                   <span className="shrink-0 text-[#718096]">
-                    {d.descontado > 0
+                    {d.stock_antes != null
+                      ? <span className="text-emerald-600 font-medium">{d.stock_antes} → {d.stock_despues} (−{d.descontado})</span>
+                      : d.descontado > 0
                       ? <span className="text-emerald-600 font-medium">salió {d.descontado} · quedan {d.stock_actual}</span>
                       : <span className="text-red-600 font-medium">no salió · quedan {d.stock_actual}</span>}
                   </span>
