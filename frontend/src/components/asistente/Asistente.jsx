@@ -323,6 +323,44 @@ function TarjetasDatos({ datos }) {
       </div>
     )
   }
+  if (datos?.tipo === 'simular_precio' && r.encontrado) {
+    const sube = (r.porcentaje || 0) >= 0
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-lg" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="text-[13px] font-semibold text-[#10213F]">
+            Simulación <span className="text-[#718096] font-normal">· precio {sube ? '+' : ''}{r.porcentaje}%</span>
+          </p>
+          <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-[#FFF7DB] text-[#8A6D00]">Escenario · no aplicado</span>
+        </div>
+        <div className="space-y-2">
+          {(r.items || []).map((it, i) => {
+            const mejora = it.margen_nuevo - it.margen_actual
+            return (
+              <div key={i} className="rounded-xl border border-[#E7EBF1] bg-[#F7F8FA] p-2.5">
+                <div className="flex items-center justify-between gap-2 text-[12.5px]">
+                  <span className="text-[#10213F] font-medium truncate">{it.prenda} <span className="text-[#718096]">· T{it.talla_grupo}</span></span>
+                  <span className="shrink-0 text-[#718096]">
+                    {cop(it.precio_actual)} <span className="text-[#10213F] font-semibold">→ {cop(it.precio_nuevo)}</span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11.5px] mt-1">
+                  <span className="text-[#718096]">Margen {it.margen_actual}% <span className="text-[#10213F] font-semibold">→ {it.margen_nuevo}%</span>
+                    <span className={`ml-1 font-semibold ${mejora >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>({mejora >= 0 ? '+' : ''}{mejora} pts)</span>
+                  </span>
+                  <span className="text-[#718096]">Util. {cop(it.utilidad_actual)} → <b className="text-[#10213F]">{cop(it.utilidad_nueva)}</b></span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {r.sin_costo > 0 && (
+          <p className="text-[11px] text-amber-600 mt-2">⚠️ {r.sin_costo} referencia{r.sin_costo === 1 ? '' : 's'} sin costo cargado — no se pueden simular.</p>
+        )}
+        {r.nota && <p className="text-[11px] text-[#718096] mt-1.5">{r.nota}</p>}
+      </div>
+    )
+  }
   return null
 }
 

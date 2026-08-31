@@ -472,6 +472,49 @@ def _tool_top_productos(desde=None, hasta=None, mes=None, anio=None, limite=8):
             'productos': productos}
 
 
+def _tool_simular_precio(colegio, prenda, porcentaje):
+    """SIMULACIÓN (no toca la BD): compara margen actual vs con un % de cambio de
+    precio, usando precios y costos REALES. Solo simula lo que tiene costo."""
+    try:
+        pct = float(porcentaje)
+    except Exception:
+        return {'error': 'Indica el porcentaje de cambio (ej: 5 o -10).'}
+    cid = _resolver_colegio_id(colegio) if colegio else None
+    pid, _pn = _resolver_producto_id(prenda) if prenda else (None, None)
+    q = PrecioColegio.query
+    if cid:
+        q = q.filter_by(id_colegio=cid)
+    if pid:
+        q = q.filter_by(id_producto=pid)
+    rows = q.limit(300).all()
+    if not rows:
+        return {'encontrado': False, 'mensaje': 'No hay precios para simular con esos filtros.'}
+    nombres = {p.id_producto: p.nombre for p in
+               Producto.query.filter(Producto.id_producto.in_({r.id_producto for r in rows})).all()}
+    items, sin_costo = [], 0
+    for r in rows:
+        if r.costo_unitario is None:
+            sin_costo += 1
+            continue
+        pa, co = r.precio_unitario, r.costo_unitario
+        pn = round(pa * (1 + pct / 100))
+        items.append({
+            'prenda': nombres.get(r.id_producto, f'Prod#{r.id_producto}'),
+            'talla_grupo': r.talla_grupo,
+            'precio_actual': pa, 'costo': co,
+            'margen_actual': round((pa - co) / pa * 100) if pa else 0,
+            'precio_nuevo': pn,
+            'margen_nuevo': round((pn - co) / pn * 100) if pn else 0,
+            'utilidad_actual': round(pa - co), 'utilidad_nueva': round(pn - co),
+        })
+    return {
+        'encontrado': bool(items) or sin_costo > 0,
+        'tipo_sim': 'simular_precio', 'porcentaje': pct,
+        'items': items[:12], 'con_costo': len(items), 'sin_costo': sin_costo,
+        'nota': 'Escenario matemático: asume las mismas ventas; la demanda real puede cambiar.',
+    }
+
+
 def _tool_movimientos_prenda(colegio, texto, talla=None):
     """Kardex de una prenda: entradas/salidas/ajustes recientes, con el stock
     antes y después de cada movimiento, su factura/motivo y quién lo hizo."""
@@ -522,6 +565,9 @@ def _ejecutar_busqueda(obj):
         return _tool_top_productos(obj.get('desde'), obj.get('hasta'),
                                    obj.get('mes'), obj.get('anio') or obj.get('año'),
                                    obj.get('limite') or 8)
+    if tipo == 'simular_precio':
+        return _tool_simular_precio(obj.get('colegio'), obj.get('prenda') or obj.get('texto'),
+                                    obj.get('porcentaje'))
     return {'error': 'búsqueda no soportada'}
 
 
@@ -770,6 +816,7 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
         "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
         "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
+        "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
         "Solo UNA búsqueda por vez. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
 
