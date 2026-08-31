@@ -32,6 +32,7 @@ from app.utils.decorators import rol_requerido, get_current_identity, registrar_
 from app.models import (
     Factura, FacturaDetalle, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea, MovimientoInventario,
+    AccionAsistente,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.inventario import registrar_movimiento, stock_descontado_neto
@@ -252,6 +253,18 @@ def _extraer_accion(texto):
                 'tipo': tipo, 'colegio': colegio, 'prenda': prenda[:100], 'costo': costo,
                 'descripcion': f'Fijar el costo de “{prenda}” en ${int(costo):,} — {colegio}'.replace(',', '.'),
             }
+    elif tipo == 'revertir':
+        try:
+            id_accion = int(obj.get('id_accion'))
+        except Exception:
+            id_accion = None
+        if id_accion:
+            acc = AccionAsistente.query.get(id_accion)
+            if acc and acc.reversible and acc.resultado != 'REVERTIDA':
+                accion = {
+                    'tipo': tipo, 'id_accion': id_accion,
+                    'descripcion': f'Deshacer: {acc.descripcion or ("acción #" + str(id_accion))}',
+                }
     if not accion:
         return texto, None
     texto_limpio = texto[:m.start()].rstrip() or 'Te propongo esta acción:'
@@ -568,7 +581,30 @@ def _ejecutar_busqueda(obj):
     if tipo == 'simular_precio':
         return _tool_simular_precio(obj.get('colegio'), obj.get('prenda') or obj.get('texto'),
                                     obj.get('porcentaje'))
+    if tipo == 'bitacora':
+        return _tool_bitacora(obj.get('limite') or 10)
     return {'error': 'búsqueda no soportada'}
+
+
+def _tool_bitacora(limite):
+    """Últimas acciones ejecutadas por el Asistente (para 'qué cambios hiciste',
+    'deshaz lo último'). Devuelve id, qué se hizo, si se verificó y si es reversible."""
+    try:
+        n = min(max(int(limite), 1), 30)
+    except Exception:
+        n = 10
+    filas = (AccionAsistente.query
+             .order_by(AccionAsistente.creado_en.desc())
+             .limit(n).all())
+    return {
+        'encontrado': bool(filas),
+        'acciones': [{
+            'id_accion': a.id_accion, 'tipo': a.tipo, 'descripcion': a.descripcion,
+            'verificado': a.verificado, 'reversible': a.reversible,
+            'resultado': a.resultado, 'usuario': a.usuario,
+            'fecha': a.creado_en.isoformat() if a.creado_en else None,
+        } for a in filas],
+    }
 
 
 def _extraer_json_marcador(texto, marcador):
@@ -813,6 +849,11 @@ def preguntar():
             "propónlo y en la ÚLTIMA línea agrega EXACTAMENTE (el costo aplica a todas las "
             "tallas de esa prenda en ese colegio):\n"
             "ACCION_JSON: {\"tipo\":\"fijar_costo\",\"colegio\":\"<colegio>\",\"prenda\":\"<nombre prenda>\",\"costo\":<numero>}\n"
+            "Si el usuario pide DESHACER/REVERTIR un cambio ('deshaz lo último', 'devuelve el "
+            "stock/costo/precio de antes'), primero mira la bitácora (BUSCAR bitacora) para "
+            "hallar el id_accion correcto, propón la reversión y en la ÚLTIMA línea agrega:\n"
+            "ACCION_JSON: {\"tipo\":\"revertir\",\"id_accion\":<id de la bitácora>}\n"
+            "Solo se puede revertir una acción reversible que no haya sido revertida.\n"
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
         )
 
@@ -829,6 +870,7 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
         "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
         "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
+        "BUSCAR: {\"tipo\":\"bitacora\",\"limite\":<n>}  → últimas acciones que ejecutaste (id, qué se hizo, si se verificó, si es reversible). Úsalo para '¿qué cambios hiciste?' o cuando el Jefe pida DESHACER algo: primero mira la bitácora para encontrar el id_accion a revertir\n"
         "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
         "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
@@ -884,6 +926,126 @@ def preguntar():
     return jsonify(respuesta), 200
 
 
+# ─────────────────────────────────────────────────────────────────────────
+#  Bitácora de acciones · Verificación robusta · Rollback
+# ─────────────────────────────────────────────────────────────────────────
+def _verificar_accion(tipo, despues):
+    """Relee la FUENTE DE VERDAD y confirma que el cambio quedó aplicado.
+    Nunca asumas que un WRITE funcionó: se comprueba contra la BD."""
+    d = despues or {}
+    try:
+        if tipo == 'ajustar_stock':
+            st = Stock.query.get(d.get('id_stock'))
+            return bool(st) and st.cantidad == d.get('cantidad')
+        if tipo == 'fijar_costo':
+            ids = d.get('ids_precio') or []
+            costo = d.get('costo')
+            rows = (PrecioColegio.query.filter(PrecioColegio.id_precio.in_(ids)).all()
+                    if ids else [])
+            return bool(rows) and all(r.costo_unitario == costo for r in rows)
+        if tipo == 'cambiar_estado_pedido':
+            f = Factura.query.get(d.get('id_factura'))
+            return bool(f) and f.estado_entrega == d.get('estado_entrega')
+        if tipo == 'crear_tarea':
+            return Tarea.query.get(d.get('id_tarea')) is not None
+    except Exception as e:
+        logger.warning("asistente: verificación falló: %s", e)
+    return False
+
+
+def _registrar_accion(tipo, descripcion, antes, despues, reversible,
+                      verificado, usuario, reversion_de=None, resultado=None):
+    """Anota una acción en la bitácora. Best-effort: si falla, no rompe la
+    acción (que ya se ejecutó), pero se pierde la posibilidad de rollback."""
+    try:
+        acc = AccionAsistente(
+            tipo=tipo,
+            descripcion=(descripcion or '')[:400] or None,
+            reversible=bool(reversible),
+            verificado=bool(verificado),
+            resultado=resultado or ('VERIFICADA' if verificado else 'FALLO_VERIFICACION'),
+            reversion_de=reversion_de,
+            usuario=usuario,
+        )
+        acc.set_antes(antes)
+        acc.set_despues(despues)
+        db.session.add(acc)
+        db.session.commit()
+        return acc
+    except Exception as e:
+        db.session.rollback()
+        logger.warning("asistente: no se pudo registrar en bitácora: %s", e)
+        return None
+
+
+def _revertir_accion(acc, usuario):
+    """Aplica la INVERSA de una acción usando su estado_antes, y verifica el
+    resultado contra la BD. Devuelve (ok, mensaje, verificado)."""
+    antes = acc.antes or {}
+    tipo = acc.tipo
+    if tipo == 'ajustar_stock':
+        cid, pid = antes.get('id_colegio'), antes.get('id_producto')
+        talla = antes.get('talla')
+        objetivo = antes.get('cantidad')
+        if cid is None or pid is None or talla is None or objetivo is None:
+            return False, 'No tengo el estado anterior para revertir.', False
+        st, _m = registrar_movimiento(cid, pid, talla, 'AJUSTE', objetivo,
+                                      usuario=usuario, motivo='[Asistente] reversión')
+        db.session.commit()
+        return True, f'Stock restaurado a {objetivo} unidades.', st.cantidad == objetivo
+
+    if tipo == 'fijar_costo':
+        filas = antes.get('filas') or []
+        if not filas:
+            return False, 'No tengo los costos anteriores para revertir.', False
+        for f in filas:
+            r = PrecioColegio.query.get(f.get('id_precio'))
+            if r is not None:
+                r.costo_unitario = f.get('costo')
+        db.session.commit()
+        ok = True
+        for f in filas:
+            r = PrecioColegio.query.get(f.get('id_precio'))
+            if r is None or r.costo_unitario != f.get('costo'):
+                ok = False
+                break
+        return True, 'Costos anteriores restaurados.', ok
+
+    if tipo == 'cambiar_estado_pedido':
+        f = Factura.query.get(antes.get('id_factura'))
+        if not f:
+            return False, 'Ya no existe esa factura.', False
+        f.estado_entrega = antes.get('estado_entrega')
+        db.session.commit()
+        return True, f'Estado de entrega revertido a "{antes.get("estado_entrega")}".', \
+            f.estado_entrega == antes.get('estado_entrega')
+
+    if tipo == 'crear_tarea':
+        d = acc.despues or {}
+        t = Tarea.query.get(d.get('id_tarea'))
+        if t is not None:
+            db.session.delete(t)
+            db.session.commit()
+        return True, 'Recordatorio eliminado.', Tarea.query.get(d.get('id_tarea')) is None
+
+    return False, 'Esta acción no se puede revertir.', False
+
+
+@asistente_bp.route('/bitacora', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador')
+def bitacora():
+    """Últimas acciones ejecutadas por el Asistente (Action Journal)."""
+    try:
+        limite = min(max(int(request.args.get('limite', 20)), 1), 100)
+    except Exception:
+        limite = 20
+    filas = (AccionAsistente.query
+             .order_by(AccionAsistente.creado_en.desc())
+             .limit(limite).all())
+    return jsonify({'acciones': [a.to_dict() for a in filas]}), 200
+
+
 @asistente_bp.route('/ejecutar', methods=['POST'])
 @jwt_required()
 @rol_requerido('administrador')
@@ -924,11 +1086,19 @@ def ejecutar():
                                 f'[Asistente] Recordatorio creado por {ident.get("usuario")}')
         except Exception as e:
             logger.warning("asistente: no se pudo auditar tarea: %s", e)
+        despues = {'id_tarea': t.id_tarea}
+        verificado = _verificar_accion('crear_tarea', despues)
+        acc = _registrar_accion('crear_tarea', f'Recordatorio: {titulo}', {}, despues,
+                                reversible=True, verificado=verificado,
+                                usuario=ident.get('usuario'))
         return jsonify({
             'ok': True,
             'mensaje': f'✅ Recordatorio creado: “{titulo}”'
                        + (f' para el {fecha.isoformat()}' if fecha else '')
                        + '. Lo ves en el menú *Tareas*.',
+            'verificado': verificado,
+            'id_accion': acc.id_accion if acc else None,
+            'reversible': bool(acc),
         }), 200
 
     # ── Ajustar stock (sumar / restar / fijar) ──
@@ -949,6 +1119,9 @@ def ejecutar():
             return jsonify({'error': 'Datos del ajuste inválidos.'}), 400
         ident = get_current_identity()
         tipo_mov = {'sumar': 'ENTRADA', 'restar': 'SALIDA', 'fijar': 'AJUSTE'}[modo]
+        st_prev = Stock.query.filter_by(id_colegio=cid, id_producto=pid,
+                                        talla_individual=talla).first()
+        cantidad_antes = st_prev.cantidad if st_prev else 0
         try:
             stock, _mov = registrar_movimiento(cid, pid, talla, tipo_mov, cantidad,
                                                usuario=ident['usuario'], motivo='[Asistente]')
@@ -963,10 +1136,23 @@ def ejecutar():
                                 f'-> {stock.cantidad} por {ident.get("usuario")}')
         except Exception:
             pass
+        antes = {'id_stock': stock.id_stock, 'id_colegio': cid, 'id_producto': pid,
+                 'talla': talla, 'cantidad': cantidad_antes}
+        despues = {'id_stock': stock.id_stock, 'cantidad': stock.cantidad}
+        verificado = _verificar_accion('ajustar_stock', despues)
+        acc = _registrar_accion(
+            'ajustar_stock',
+            f'{pnombre} T{talla}: {cantidad_antes} → {stock.cantidad}',
+            antes, despues, reversible=True, verificado=verificado,
+            usuario=ident.get('usuario'))
         return jsonify({
             'ok': True,
             'mensaje': f'✅ Stock actualizado: {pnombre} talla {talla} → '
-                       f'{stock.cantidad} unidades.',
+                       f'{stock.cantidad} unidades.'
+                       + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
+            'verificado': verificado,
+            'id_accion': acc.id_accion if acc else None,
+            'reversible': bool(acc),
         }), 200
 
     # ── Fijar el costo de una prenda (para margen/rentabilidad) ──
@@ -988,6 +1174,7 @@ def ejecutar():
             return jsonify({'error': f'“{pnombre}” no tiene precios en ese colegio; '
                                      'primero configura el precio.'}), 404
         ident = get_current_identity()
+        filas_antes = [{'id_precio': r.id_precio, 'costo': r.costo_unitario} for r in rows]
         for r in rows:
             r.costo_unitario = costo
         db.session.commit()
@@ -997,11 +1184,61 @@ def ejecutar():
                                 f'({len(rows)} talla/s) por {ident.get("usuario")}')
         except Exception:
             pass
+        despues = {'ids_precio': [r.id_precio for r in rows], 'costo': costo}
+        verificado = _verificar_accion('fijar_costo', despues)
+        acc = _registrar_accion(
+            'fijar_costo', f'Costo de {pnombre} = ${int(costo)} ({len(rows)} talla/s)',
+            {'filas': filas_antes}, despues, reversible=True, verificado=verificado,
+            usuario=ident.get('usuario'))
         costo_fmt = f'${int(costo):,}'.replace(',', '.')
         return jsonify({
             'ok': True,
             'mensaje': f'✅ Costo de {pnombre} fijado en {costo_fmt} '
-                       f'(aplica a {len(rows)} talla/s). Ya puedo calcular su margen.',
+                       f'(aplica a {len(rows)} talla/s). Ya puedo calcular su margen.'
+                       + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
+            'verificado': verificado,
+            'id_accion': acc.id_accion if acc else None,
+            'reversible': bool(acc),
+        }), 200
+
+    # ── Revertir (rollback) una acción anterior de la bitácora ──
+    if tipo == 'revertir':
+        try:
+            id_accion = int(data.get('id_accion'))
+        except Exception:
+            return jsonify({'error': 'Falta el id de la acción a revertir.'}), 400
+        acc = AccionAsistente.query.get(id_accion)
+        if not acc:
+            return jsonify({'error': 'No encontré esa acción en la bitácora.'}), 404
+        if not acc.reversible:
+            return jsonify({'error': 'Esa acción no se puede revertir.'}), 400
+        if acc.resultado == 'REVERTIDA':
+            return jsonify({'error': 'Esa acción ya había sido revertida.'}), 400
+        ident = get_current_identity()
+        try:
+            ok, msg, verificado = _revertir_accion(acc, ident['usuario'])
+        except Exception as e:
+            db.session.rollback()
+            logger.warning("asistente: revertir falló: %s", e)
+            return jsonify({'error': 'No pude revertir la acción.'}), 500
+        if not ok:
+            return jsonify({'error': msg}), 400
+        acc.resultado = 'REVERTIDA'
+        db.session.commit()
+        try:
+            registrar_auditoria('acciones_asistente', acc.id_accion, 'REVERTIDA',
+                                f'[Asistente] {msg} por {ident.get("usuario")}')
+        except Exception:
+            pass
+        _registrar_accion('revertir', f'Reversión de #{id_accion}: {acc.descripcion}',
+                          acc.despues, acc.antes, reversible=False, verificado=verificado,
+                          usuario=ident.get('usuario'), reversion_de=id_accion,
+                          resultado=('VERIFICADA' if verificado else 'FALLO_VERIFICACION'))
+        return jsonify({
+            'ok': True,
+            'mensaje': '↩️ ' + msg
+                       + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
+            'verificado': verificado,
         }), 200
 
     if tipo != 'cambiar_estado_pedido':
@@ -1031,8 +1268,20 @@ def ejecutar():
     except Exception as e:
         logger.warning("asistente: no se pudo auditar: %s", e)
 
+    despues = {'id_factura': factura.id_factura, 'estado_entrega': estado}
+    verificado = _verificar_accion('cambiar_estado_pedido', despues)
+    acc = _registrar_accion(
+        'cambiar_estado_pedido',
+        f'Factura {factura.numero_factura}: {anterior} → {estado}',
+        {'id_factura': factura.id_factura, 'estado_entrega': anterior}, despues,
+        reversible=True, verificado=verificado, usuario=identity.get('usuario'))
+
     return jsonify({
         'ok': True,
         'mensaje': f'✅ Factura {factura.numero_factura} marcada como '
-                   f'"{_ESTADOS_ENTREGA[estado]}".',
+                   f'"{_ESTADOS_ENTREGA[estado]}".'
+                   + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
+        'verificado': verificado,
+        'id_accion': acc.id_accion if acc else None,
+        'reversible': bool(acc),
     }), 200

@@ -75,6 +75,9 @@ function TarjetaConfirmar({ accion, estado, onConfirmar, onCancelar }) {
       ['Colegio', accion.colegio],
       ['Costo', '$' + Math.round(accion.costo || 0).toLocaleString('es-CO')],
     ]
+  } else if (accion.tipo === 'revertir') {
+    titulo = 'Deshacer cambio'
+    filas = [['Se revertirá', (accion.descripcion || '').replace(/^Deshacer:\s*/, '')]]
   } else {
     filas = [['Acción', accion.descripcion]]
   }
@@ -358,6 +361,36 @@ function TarjetasDatos({ datos }) {
           <p className="text-[11px] text-amber-600 mt-2">⚠️ {r.sin_costo} referencia{r.sin_costo === 1 ? '' : 's'} sin costo cargado — no se pueden simular.</p>
         )}
         {r.nota && <p className="text-[11px] text-[#718096] mt-1.5">{r.nota}</p>}
+      </div>
+    )
+  }
+  if (datos?.tipo === 'bitacora' && r.encontrado && Array.isArray(r.acciones)) {
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-lg" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+        <p className="text-[13px] font-semibold text-[#10213F] mb-2">Últimos cambios</p>
+        <div className="space-y-2">
+          {r.acciones.map((a, i) => (
+            <div key={i} className="flex items-start justify-between gap-3 text-[12.5px]">
+              <div className="min-w-0">
+                <p className="text-[#10213F] truncate">{a.descripcion || a.tipo}</p>
+                <p className="text-[11px] text-[#718096]">
+                  #{a.id_accion} · {a.usuario || '—'}
+                  {a.fecha ? ' · ' + new Date(a.fecha + (a.fecha.endsWith('Z') ? '' : 'Z')).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {a.resultado === 'REVERTIDA'
+                  ? <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-[#EDEFF4] text-[#6A778F]">revertida</span>
+                  : a.verificado
+                  ? <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">✓ verificado</span>
+                  : <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">sin verificar</span>}
+                {a.reversible && a.resultado !== 'REVERTIDA' && (
+                  <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full border border-[#E7EBF1] text-[#718096]">reversible</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

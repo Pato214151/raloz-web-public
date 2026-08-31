@@ -424,6 +424,28 @@ MIGRACIONES = [
             "ALTER TABLE precios_colegio ADD COLUMN IF NOT EXISTS costo_unitario DOUBLE PRECISION",
         ],
     },
+    {
+        'version': '0028',
+        'descripcion': 'Bitácora de acciones del Asistente (journal + rollback + verificación)',
+        'sql': [
+            """
+            CREATE TABLE IF NOT EXISTS acciones_asistente (
+                id_accion       SERIAL PRIMARY KEY,
+                tipo            VARCHAR(40) NOT NULL,
+                descripcion     VARCHAR(400),
+                estado_antes    TEXT,
+                estado_despues  TEXT,
+                reversible      BOOLEAN NOT NULL DEFAULT FALSE,
+                verificado      BOOLEAN NOT NULL DEFAULT FALSE,
+                resultado       VARCHAR(30) NOT NULL DEFAULT 'EJECUTADA',
+                reversion_de    INTEGER REFERENCES acciones_asistente(id_accion),
+                usuario         VARCHAR(120),
+                creado_en       TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_acciones_asistente_creado ON acciones_asistente(creado_en DESC)",
+        ],
+    },
 ]
 
 
