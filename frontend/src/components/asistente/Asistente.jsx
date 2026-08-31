@@ -68,6 +68,13 @@ function TarjetaConfirmar({ accion, estado, onConfirmar, onCancelar }) {
   } else if (accion.tipo === 'crear_tarea') {
     titulo = 'Crear recordatorio'
     filas = [['Recordar', accion.titulo], ...(accion.fecha ? [['Fecha', accion.fecha]] : [])]
+  } else if (accion.tipo === 'fijar_costo') {
+    titulo = 'Fijar costo'
+    filas = [
+      ['Producto', accion.prenda],
+      ['Colegio', accion.colegio],
+      ['Costo', '$' + Math.round(accion.costo || 0).toLocaleString('es-CO')],
+    ]
   } else {
     filas = [['Acción', accion.descripcion]]
   }

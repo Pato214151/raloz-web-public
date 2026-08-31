@@ -240,6 +240,18 @@ def _extraer_accion(texto):
                 'modo': modo, 'cantidad': cantidad,
                 'descripcion': f'{verbo} {cantidad} unidad(es) de “{prenda}” talla {talla} — {colegio}',
             }
+    elif tipo == 'fijar_costo':
+        colegio = str(obj.get('colegio', '')).strip()
+        prenda = str(obj.get('prenda') or obj.get('texto', '')).strip()
+        try:
+            costo = float(obj.get('costo'))
+        except Exception:
+            costo = None
+        if colegio and prenda and costo is not None and costo >= 0:
+            accion = {
+                'tipo': tipo, 'colegio': colegio, 'prenda': prenda[:100], 'costo': costo,
+                'descripcion': f'Fijar el costo de “{prenda}” en ${int(costo):,} — {colegio}'.replace(',', '.'),
+            }
     if not accion:
         return texto, None
     texto_limpio = texto[:m.start()].rstrip() or 'Te propongo esta acción:'
@@ -671,6 +683,10 @@ def preguntar():
             "Si el usuario pide AJUSTAR EL STOCK de una prenda (sumar, restar o fijar "
             "unidades de una talla), propónlo y en la ÚLTIMA línea agrega EXACTAMENTE:\n"
             "ACCION_JSON: {\"tipo\":\"ajustar_stock\",\"colegio\":\"<colegio>\",\"prenda\":\"<nombre prenda>\",\"talla\":\"<talla>\",\"modo\":\"<sumar|restar|fijar>\",\"cantidad\":<numero>}\n"
+            "Si el usuario pide FIJAR/PONER EL COSTO de una prenda (para calcular margen), "
+            "propónlo y en la ÚLTIMA línea agrega EXACTAMENTE (el costo aplica a todas las "
+            "tallas de esa prenda en ese colegio):\n"
+            "ACCION_JSON: {\"tipo\":\"fijar_costo\",\"colegio\":\"<colegio>\",\"prenda\":\"<nombre prenda>\",\"costo\":<numero>}\n"
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
         )
 
@@ -820,6 +836,41 @@ def ejecutar():
             'ok': True,
             'mensaje': f'✅ Stock actualizado: {pnombre} talla {talla} → '
                        f'{stock.cantidad} unidades.',
+        }), 200
+
+    # ── Fijar el costo de una prenda (para margen/rentabilidad) ──
+    if tipo == 'fijar_costo':
+        cid = _resolver_colegio_id(str(data.get('colegio', '')))
+        pid, pnombre = _resolver_producto_id(str(data.get('prenda', '')))
+        try:
+            costo = float(data.get('costo'))
+        except Exception:
+            costo = None
+        if not cid:
+            return jsonify({'error': 'No identifiqué el colegio.'}), 400
+        if not pid:
+            return jsonify({'error': 'No identifiqué la prenda.'}), 404
+        if costo is None or costo < 0:
+            return jsonify({'error': 'Costo inválido.'}), 400
+        rows = PrecioColegio.query.filter_by(id_colegio=cid, id_producto=pid).all()
+        if not rows:
+            return jsonify({'error': f'“{pnombre}” no tiene precios en ese colegio; '
+                                     'primero configura el precio.'}), 404
+        ident = get_current_identity()
+        for r in rows:
+            r.costo_unitario = costo
+        db.session.commit()
+        try:
+            registrar_auditoria('precios_colegio', rows[0].id_precio, 'ACTUALIZAR',
+                                f'[Asistente] costo de {pnombre} = ${costo} '
+                                f'({len(rows)} talla/s) por {ident.get("usuario")}')
+        except Exception:
+            pass
+        costo_fmt = f'${int(costo):,}'.replace(',', '.')
+        return jsonify({
+            'ok': True,
+            'mensaje': f'✅ Costo de {pnombre} fijado en {costo_fmt} '
+                       f'(aplica a {len(rows)} talla/s). Ya puedo calcular su margen.',
         }), 200
 
     if tipo != 'cambiar_estado_pedido':
