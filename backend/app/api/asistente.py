@@ -735,6 +735,18 @@ def preguntar():
         "si…?' pide una SIMULACIÓN (no un cambio); una ORDEN clara ('sube 5%') se PREPARA y se "
         "confirma antes de ejecutar; solo ejecutas tras un 'sí' explícito.\n"
         "\n"
+        "PLANIFICA Y ENCADENA: una sola pregunta puede necesitar varios datos. Pársala en un "
+        "plan mental y pide cada dato con su propia BÚSQUEDA, uno por turno, hasta tenerlo "
+        "todo. NO te detengas en el primer resultado si el objetivo pide más (ej. 'qué me deja "
+        "lo más vendido' = top_productos → luego el precio y costo de esa prenda → utilidad; "
+        "'¿me conviene subir Manyanet?' = precios+costos → simular → comparar). Responde solo "
+        "cuando el plan esté completo o cuando falte un dato real (ahí di EXACTAMENTE cuál "
+        "falta y qué sí puedes dar). Muestra el resultado, no el paso a paso.\n"
+        "\n"
+        "OBJETIVOS ABIERTOS: ante metas amplias ('quiero vender más', 'cómo mejoro') NO "
+        "preguntes '¿qué hago?': investiga tú (más vendidas, rotación, stock, márgenes) y "
+        "vuelve con 2-3 oportunidades concretas.\n"
+        "\n"
         "SIMULACIONES: ante '¿qué pasa si…?', '¿me conviene…?', '¿y si subo/bajo…?' NO ejecutes; "
         "muestra ACTUAL vs PROPUESTO vs DIFERENCIA (precio, costo, margen, utilidad). Nunca "
         "asumas que subir el precio mantiene las ventas: preséntalos como ESCENARIOS (la demanda "
@@ -817,7 +829,8 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
         "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
         "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
-        "Solo UNA búsqueda por vez. Si la respuesta ya está en el resumen, NO uses BUSCAR."
+        "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
+        "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
 
     base = (
@@ -833,7 +846,7 @@ def preguntar():
 
     # Bucle de búsqueda: si la IA pide un dato con BUSCAR, lo consultamos y se lo damos.
     ultima_busqueda = None   # para devolver datos estructurados a la UI (tarjetas)
-    for _ in range(2):
+    for _ in range(5):       # varias rondas → el agente encadena un plan multi-paso
         consulta = _extraer_json_marcador(texto, 'BUSCAR')
         if not consulta:
             break
@@ -846,8 +859,10 @@ def preguntar():
         seguimiento = (
             f"{base}\n\n=== RESULTADO DE LA BÚSQUEDA ({consulta.get('tipo')}) ===\n"
             f"{json.dumps(resultado, ensure_ascii=False, default=str)}\n\n"
-            "Con ese resultado responde al usuario en español, claro y breve. No inventes; "
-            "si no se encontró, dilo. No vuelvas a escribir BUSCAR salvo que necesites otro dato distinto."
+            "Con ese resultado sigue tu plan. Si AÚN te falta un dato para cumplir el objetivo "
+            "del usuario, pide otra BÚSQUEDA (una línea, nada más). Si ya tienes todo lo "
+            "necesario, responde en español, claro y breve, y NO vuelvas a buscar. No inventes; "
+            "si algo no se encontró, dilo y explica qué sí puedes dar."
         )
         texto, detalle = _llamar_gemini(seguimiento)
         if texto is None:
