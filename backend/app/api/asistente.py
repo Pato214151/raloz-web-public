@@ -297,10 +297,11 @@ def _tool_buscar_prenda(colegio, texto):
     for p in prods:
         item = {'prenda': p.nombre}
         if cid:
-            item['precios_por_grupo_talla'] = {
-                pc.talla_grupo: pc.precio_unitario
-                for pc in PrecioColegio.query.filter_by(id_colegio=cid, id_producto=p.id_producto).all()
-            }
+            _pcs = PrecioColegio.query.filter_by(id_colegio=cid, id_producto=p.id_producto).all()
+            item['precios_por_grupo_talla'] = {pc.talla_grupo: pc.precio_unitario for pc in _pcs}
+            # Costos: SOLO los que estén registrados (None = sin costo; el asistente no inventa)
+            _costos = {pc.talla_grupo: pc.costo_unitario for pc in _pcs if pc.costo_unitario is not None}
+            item['costos_por_grupo_talla'] = _costos or 'sin costo registrado'
             stock = {s.talla_individual: (s.cantidad or 0)
                      for s in Stock.query.filter_by(id_colegio=cid, id_producto=p.id_producto).all()}
             item['stock_por_talla'] = stock
@@ -623,6 +624,17 @@ def preguntar():
         "estado, crear recordatorio) SIEMPRE requiere confirmación (usa el formato ACCION_JSON "
         "de abajo; nunca afirmes que ya lo hiciste antes de confirmar). Nunca digas que una "
         "tarea quedó creada si la herramienta no lo confirmó.\n"
+        "\n"
+        "COSTOS Y RENTABILIDAD: NUNCA inventes un costo. Si una prenda NO tiene costo "
+        "registrado, dilo ('esa referencia todavía no tiene costo registrado; puedo darte "
+        "ventas y precio, pero no la utilidad real') y ofrece registrarlo. Con precio Y costo: "
+        "utilidad bruta/unidad = precio − costo; margen % = (precio − costo)/precio × 100; "
+        "utilidad total = utilidad/unidad × unidades vendidas (acláralo como BRUTA, sin gastos). "
+        "'Producto más rentable' NO es solo el de mayor margen %: distingue mayor utilidad por "
+        "unidad, mayor margen % y mayor utilidad TOTAL (por volumen). En inventario, valor al "
+        "costo = unidades × costo y valor potencial = unidades × precio → utilidad POTENCIAL "
+        "(no ganada aún, dilo). Utilidad ≠ efectivo (una venta puede estar por cobrar). Si "
+        "costo > precio, avísalo como pérdida. Cambiar un costo es una modificación → confirma.\n"
         "\n"
         "JERARQUÍA DE CONFIANZA (ante conflicto manda, en orden): 1) la base de datos, "
         "2) las herramientas, 3) lo que diga el usuario, 4) tu conocimiento general, "

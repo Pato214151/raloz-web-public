@@ -95,6 +95,7 @@ def listar_precios():
             'producto_nombre': p.producto.nombre if p.producto else None,
             'talla_grupo': p.talla_grupo,
             'precio_unitario': p.precio_unitario,
+            'costo_unitario': p.costo_unitario,
         } for p in paginated.items],
         'total': paginated.total,
         'pages': paginated.pages,
@@ -147,6 +148,7 @@ def obtener_precios_producto(colegio_id, producto_id):
         'precios': [{
             'talla_grupo': p.talla_grupo,
             'precio_unitario': p.precio_unitario,
+            'costo_unitario': p.costo_unitario,
         } for p in precios],
     }), 200
 
@@ -206,6 +208,17 @@ def crear_precio():
         (PrecioColegio.talla_grupo == talla_grupo)
     ).first()
 
+    # Costo unitario (opcional). Vacío/None = sin costo; el asistente NO lo inventa.
+    costo_raw = data.get('costo_unitario', '__falta__')
+    costo_val = None
+    if costo_raw not in ('__falta__', None, ''):
+        try:
+            costo_val = float(costo_raw)
+            if costo_val < 0:
+                return jsonify({'error': 'El costo no puede ser negativo'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Costo inválido'}), 400
+
     es_nuevo = precio is None
     if es_nuevo:
         precio = PrecioColegio(
@@ -213,11 +226,15 @@ def crear_precio():
             id_producto=producto_id,
             talla_grupo=talla_grupo,
             precio_unitario=float(precio_unitario),
+            costo_unitario=costo_val,
         )
         db.session.add(precio)
         accion = 'CREAR'
     else:
         precio.precio_unitario = float(precio_unitario)
+        # Solo tocamos el costo si vino en la petición (así no se borra sin querer)
+        if costo_raw != '__falta__':
+            precio.costo_unitario = costo_val
         accion = 'ACTUALIZAR'
 
     db.session.commit()
@@ -237,6 +254,7 @@ def crear_precio():
             'id_producto': precio.id_producto,
             'talla_grupo': precio.talla_grupo,
             'precio_unitario': precio.precio_unitario,
+            'costo_unitario': precio.costo_unitario,
         },
     }), 201 if es_nuevo else 200
 
@@ -352,6 +370,40 @@ def actualizar_precios_bulk():
         'errores': errores,
         'precios': precios_result,
     }), 200
+
+
+@precios_bp.route('/<int:id_precio>', methods=['PUT'])
+@jwt_required()
+@rol_requerido('administrador')
+def actualizar_precio(id_precio):
+    """Actualiza el precio y/o el costo de un registro existente."""
+    precio = PrecioColegio.query.get_or_404(id_precio)
+    identity = get_current_identity()
+    data = request.get_json(silent=True) or {}
+
+    if 'precio_unitario' in data:
+        if not validate_positive_number(data.get('precio_unitario')):
+            return jsonify({'error': 'Precio unitario debe ser un número positivo'}), 400
+        precio.precio_unitario = float(data['precio_unitario'])
+
+    if 'costo_unitario' in data:
+        cr = data.get('costo_unitario')
+        if cr in (None, ''):
+            precio.costo_unitario = None
+        else:
+            try:
+                cv = float(cr)
+                if cv < 0:
+                    return jsonify({'error': 'El costo no puede ser negativo'}), 400
+                precio.costo_unitario = cv
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Costo inválido'}), 400
+
+    db.session.commit()
+    registrar_auditoria('precios_colegio', precio.id_precio, 'ACTUALIZAR',
+                        f'Precio/costo actualizado por {identity["usuario"]}: '
+                        f'precio=${precio.precio_unitario}, costo=${precio.costo_unitario}')
+    return jsonify({'message': 'Precio actualizado', 'precio': precio.to_dict()}), 200
 
 
 @precios_bp.route('/<int:id_precio>', methods=['DELETE'])

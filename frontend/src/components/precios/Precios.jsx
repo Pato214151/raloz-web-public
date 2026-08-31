@@ -14,6 +14,8 @@ export default function Precios() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
   const [editPrecio, setEditPrecio] = useState('')
+  const [editingCostoId, setEditingCostoId] = useState(null)
+  const [editCosto, setEditCosto] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [newPrecio, setNewPrecio] = useState({
     colegio_id: '',
@@ -67,6 +69,19 @@ export default function Precios() {
       await api.put(`/precios/${id}`, { precio_unitario: parseFloat(editPrecio) })
       toast.success('Precio actualizado')
       setEditingId(null)
+      loadPrecios(colegioId, productoId)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error')
+    }
+  }
+
+  const updateCosto = async (id) => {
+    const val = editCosto === '' ? null : parseFloat(editCosto)
+    if (val !== null && (isNaN(val) || val < 0)) { toast.error('Costo inválido'); return }
+    try {
+      await api.put(`/precios/${id}`, { costo_unitario: val })
+      toast.success('Costo actualizado')
+      setEditingCostoId(null)
       loadPrecios(colegioId, productoId)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error')
@@ -190,6 +205,8 @@ export default function Precios() {
                   <tr className="border-b border-gray-200 bg-gray-50">
                     <th className="px-4 py-3 text-left text-gray-600 font-medium">Talla/Grupo</th>
                     <th className="px-4 py-3 text-right text-gray-600 font-medium">Precio Unitario</th>
+                    <th className="px-4 py-3 text-right text-gray-600 font-medium">Costo</th>
+                    <th className="px-4 py-3 text-right text-gray-600 font-medium">Margen</th>
                     <th className="px-4 py-3 text-center text-gray-600 font-medium">Acciones</th>
                   </tr>
                 </thead>
@@ -228,6 +245,47 @@ export default function Precios() {
                             {formatMoney(p.precio_unitario)}
                           </span>
                         )}
+                      </td>
+                      {/* Costo (editable) */}
+                      <td className="px-4 py-3 text-right">
+                        {editingCostoId === p.id_precio ? (
+                          <input
+                            type="number"
+                            value={editCosto}
+                            onChange={(e) => setEditCosto(e.target.value)}
+                            className="input-field w-32 text-right"
+                            autoFocus
+                            placeholder="sin costo"
+                            onBlur={() => updateCosto(p.id_precio)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') updateCosto(p.id_precio)
+                              if (e.key === 'Escape') setEditingCostoId(null)
+                            }}
+                          />
+                        ) : (
+                          <span
+                            onClick={() => {
+                              setEditingCostoId(p.id_precio)
+                              setEditCosto(p.costo_unitario != null ? p.costo_unitario.toString() : '')
+                            }}
+                            className={`cursor-pointer font-medium ${p.costo_unitario != null ? 'text-gray-700 hover:text-gray-900' : 'text-gray-300 hover:text-gray-500 italic'}`}
+                          >
+                            {p.costo_unitario != null ? formatMoney(p.costo_unitario) : 'sin costo'}
+                          </span>
+                        )}
+                      </td>
+                      {/* Margen */}
+                      <td className="px-4 py-3 text-right">
+                        {p.costo_unitario != null && p.precio_unitario > 0 ? (() => {
+                          const util = p.precio_unitario - p.costo_unitario
+                          const pct = Math.round((util / p.precio_unitario) * 100)
+                          const neg = util < 0
+                          return (
+                            <span className={`font-semibold ${neg ? 'text-red-600' : 'text-emerald-600'}`}>
+                              {formatMoney(util)} <span className="text-xs font-normal">({pct}%)</span>
+                            </span>
+                          )
+                        })() : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button

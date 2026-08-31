@@ -9,6 +9,9 @@ class PrecioColegio(db.Model):
     id_producto = db.Column(db.Integer, db.ForeignKey('productos.id_producto'), nullable=False)
     talla_grupo = db.Column(db.String(50), nullable=False)
     precio_unitario = db.Column(db.Float, nullable=False)
+    # Costo unitario para calcular margen/utilidad. NULL = sin costo registrado
+    # (el asistente NUNCA inventa costos; si falta, lo dice).
+    costo_unitario = db.Column(db.Float, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint('id_colegio', 'id_producto', 'talla_grupo', name='uq_precio_colegio_producto_talla'),
@@ -22,4 +25,5 @@ class PrecioColegio(db.Model):
             'id_producto': self.id_producto,
             'talla_grupo': self.talla_grupo,
             'precio_unitario': self.precio_unitario,
+            'costo_unitario': self.costo_unitario,
         }

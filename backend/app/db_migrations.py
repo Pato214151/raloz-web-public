@@ -417,6 +417,13 @@ MIGRACIONES = [
             "ALTER TABLE wa_conversaciones ADD COLUMN IF NOT EXISTS notas TEXT",
         ],
     },
+    {
+        'version': '0027',
+        'descripcion': 'Costo unitario por precio (para margen y rentabilidad)',
+        'sql': [
+            "ALTER TABLE precios_colegio ADD COLUMN IF NOT EXISTS costo_unitario DOUBLE PRECISION",
+        ],
+    },
 ]
 
 
