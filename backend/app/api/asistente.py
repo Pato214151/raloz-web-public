@@ -406,8 +406,43 @@ def _tool_ventas_periodo(desde=None, hasta=None, mes=None, anio=None):
             'facturas': int(row[0] or 0), 'total': float(row[1] or 0)}
 
 
+def _tool_movimientos_prenda(colegio, texto, talla=None):
+    """Kardex de una prenda: entradas/salidas/ajustes recientes, con el stock
+    antes y después de cada movimiento, su factura/motivo y quién lo hizo."""
+    cid = _resolver_colegio_id(colegio)
+    pid, pnombre = _resolver_producto_id(str(texto or ''))
+    if not pid:
+        return {'encontrado': False, 'mensaje': 'No hallé esa prenda.'}
+    q = MovimientoInventario.query.filter_by(id_producto=pid)
+    if cid:
+        q = q.filter_by(id_colegio=cid)
+    if talla:
+        q = q.filter_by(talla_individual=str(talla).strip().upper())
+    movs = q.order_by(MovimientoInventario.fecha.desc()).limit(10).all()
+    if not movs:
+        return {'encontrado': False, 'prenda': pnombre, 'mensaje': 'Sin movimientos registrados.'}
+    out = []
+    for m in movs:
+        antes = None
+        if m.tipo == 'ENTRADA':
+            antes = (m.stock_resultante or 0) - (m.cantidad or 0)
+        elif m.tipo == 'SALIDA':
+            antes = (m.stock_resultante or 0) + (m.cantidad or 0)
+        out.append({
+            'fecha': m.fecha.isoformat() if m.fecha else None,
+            'tipo': m.tipo, 'cantidad': m.cantidad,
+            'stock_antes': antes, 'stock_despues': m.stock_resultante,
+            'talla': m.talla_individual, 'motivo': m.motivo,
+            'referencia': m.referencia, 'usuario': m.usuario,
+        })
+    return {'encontrado': True, 'prenda': pnombre, 'talla': talla, 'movimientos': out}
+
+
 def _ejecutar_busqueda(obj):
     tipo = obj.get('tipo')
+    if tipo == 'movimientos':
+        return _tool_movimientos_prenda(obj.get('colegio', ''),
+                                        obj.get('texto') or obj.get('prenda', ''), obj.get('talla'))
     if tipo == 'buscar_prenda':
         return _tool_buscar_prenda(obj.get('colegio', ''), obj.get('texto') or obj.get('prenda', ''))
     if tipo == 'buscar_factura':
@@ -552,6 +587,7 @@ def preguntar():
         "pedidos de un cliente por su teléfono), responde ÚNICAMENTE con una línea así y "
         "nada más:\n"
         "BUSCAR: {\"tipo\":\"buscar_prenda\",\"colegio\":\"<colegio>\",\"texto\":\"<nombre prenda>\"}\n"
+        "BUSCAR: {\"tipo\":\"movimientos\",\"colegio\":\"<colegio>\",\"texto\":\"<prenda>\",\"talla\":\"<talla o vacío>\"}  → kardex de la prenda: entradas/salidas/ajustes con el stock antes y después, la factura y quién lo movió (úsalo para '¿cuánto había antes?', '¿quién ajustó el stock?', '¿qué movimientos tuvo?')\n"
         "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero o RALOZ-...>\"}\n"
         "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
         "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"

@@ -184,6 +184,29 @@ function TarjetasDatos({ datos }) {
       </div>
     )
   }
+  if (datos?.tipo === 'movimientos' && r.encontrado && Array.isArray(r.movimientos)) {
+    const signo = { SALIDA: '−', ENTRADA: '+', AJUSTE: '=' }
+    const col = { SALIDA: 'text-red-600', ENTRADA: 'text-emerald-600', AJUSTE: 'text-amber-600' }
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-md" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+        <p className="text-[14px] font-semibold text-[#10213F] mb-2">{r.prenda}{r.talla ? ` · Talla ${r.talla}` : ''} — Movimientos</p>
+        <div className="space-y-2">
+          {r.movimientos.map((m, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 text-[12.5px]">
+              <div className="min-w-0">
+                <span className={`font-semibold ${col[m.tipo] || 'text-[#10213F]'}`}>{signo[m.tipo] || ''}{m.cantidad}</span>
+                <span className="text-[#718096]"> · T{m.talla}{m.stock_antes != null ? ` · ${m.stock_antes}→${m.stock_despues}` : ` → ${m.stock_despues}`}</span>
+                {(m.referencia || m.motivo) && <span className="text-[#718096]"> · {m.referencia || m.motivo}</span>}
+              </div>
+              <span className="text-[11px] text-[#718096] shrink-0">
+                {m.usuario}{m.fecha ? ' · ' + new Date(m.fecha + (m.fecha.endsWith('Z') ? '' : 'Z')).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
   if (datos?.tipo === 'buscar_factura' && r.encontrado) {
     const badge = r.estado === 'PAGADA' ? 'bg-emerald-50 text-emerald-700'
       : r.estado === 'ANULADA' ? 'bg-gray-100 text-gray-600' : 'bg-amber-50 text-amber-700'
