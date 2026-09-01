@@ -1131,27 +1131,33 @@ def _llamar_grok(prompt_text):
     return None, ultimo
 
 
+def _orden_ia():
+    """Orden de proveedores a intentar. Principal configurable con IA_PRINCIPAL
+    (gemini | grok | deepseek); por defecto GEMINI, que tiene capa gratis y es
+    el más estable. Los demás quedan de respaldo automático."""
+    principal = os.getenv('IA_PRINCIPAL', 'gemini').strip().lower()
+    resto = [p for p in ('gemini', 'grok', 'deepseek') if p != principal]
+    return [principal] + resto
+
+
 def _llamar_ia(prompt_text):
-    """Orquesta los motores: Grok (principal si hay llave) → Gemini → DeepSeek.
-    El cambio de motor es invisible para el Jefe."""
+    """Orquesta los motores en el orden configurado. El cambio de motor es
+    invisible para el Jefe (si el principal falla/satura, cae al siguiente)."""
+    motores = {
+        'grok': (GROK_API_KEY, _llamar_grok),
+        'gemini': (GEMINI_API_KEY, _llamar_gemini),
+        'deepseek': (DEEPSEEK_API_KEY, _llamar_deepseek),
+    }
     detalle = 'sin_modelo'
-    if GROK_API_KEY:
-        g, gd = _llamar_grok(prompt_text)
-        if g is not None:
-            return g, None
-        detalle = gd or detalle
-    if GEMINI_API_KEY:
-        t, d = _llamar_gemini(prompt_text)
+    for nombre in _orden_ia():
+        key, fn = motores.get(nombre, (None, None))
+        if not key:
+            continue
+        t, d = fn(prompt_text)
         if t is not None:
             return t, None
         detalle = d or detalle
-    if DEEPSEEK_API_KEY:
-        ds, dsd = _llamar_deepseek(prompt_text)
-        if ds is not None:
-            return ds, None
-        detalle = dsd or detalle
-    # Sin respaldo configurado: devolvemos el error REAL del motor principal
-    # (no lo enmascaramos con 'sin_deepseek').
+    # Devolvemos el error REAL del último motor (no lo enmascaramos).
     return None, detalle
 
 
