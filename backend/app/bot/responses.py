@@ -973,6 +973,16 @@ _HORARIOS  = ["horario", "atendiendo", "atienden", "atiende", "atencion",
              "atienden hoy", "atendiendo hoy", "estan atendiendo",
              "ir al local", "se puede ir", "puedo ir al local", "estan en el local",
              "estan hoy", "el local", "al local hoy"]
+# Subconjunto "¿atienden HOY / AHORA?" → merece respuesta directa según el día,
+# no el bloque genérico de horarios.
+_HOY_ATIENDE = ["puedo pasar hoy", "puedo ir hoy", "atienden hoy", "atendiendo hoy",
+                "estan hoy", "hoy estan", "hoy atienden", "hoy abren", "abren hoy",
+                "hoy abierto", "abierto hoy", "estan abiertos hoy", "hoy estan abiertos",
+                "hoy hay atencion", "atencion hoy", "hoy se puede pasar", "se puede pasar hoy",
+                "estan en el local", "en el local hoy", "al local hoy", "puedo pasar ahora",
+                "puedo ir ahora", "estan atendiendo hoy", "estan atendiendo ahora",
+                "atienden ahora", "estan abiertos ahora", "hoy trabajan", "trabajan hoy",
+                "puedo pasar", "estan atendiendo", "estan abiertos"]
 _GARANTIA  = ["garantia", "descosi", "descoc", "costura", "bordado", "daño", "dano",
              "roto", "rota", "rasg", "falla", "fallo", "mala postura", "deshil",
              "arreglo", "arreglar", "se daño", "defect"]
@@ -1259,6 +1269,31 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
     return resp
 
 
+_DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def _resp_abierto_hoy() -> str:
+    """Responde directo si HOY hay atención sin cita (lunes/sábado 10-5),
+    según el día en Colombia (UTC-5). Complementa el horario genérico."""
+    from datetime import datetime, timedelta, timezone
+    hoy = datetime.now(timezone.utc) - timedelta(hours=5)
+    wd = hoy.weekday()            # 0=lunes … 6=domingo
+    dia = _DIAS_ES[wd]
+    if wd in (0, 5):              # lunes o sábado → sin cita
+        return (f"✅ ¡Sí! Hoy *{dia}* atendemos *sin cita* de *10:00 a.m. a 5:00 p.m.* "
+                "en el Local *M14*, San Andresito de la 68. 🏪\n"
+                "👦 Trae al niñ@ para tomar bien la talla.\n"
+                "🗺️ Cómo llegar: https://maps.app.goo.gl/NPvai43RV9VGNpqj8\n\n"
+                "_(Si es festivo, no atendemos.)_")
+    if wd == 6:                   # domingo
+        return ("🙏 Hoy *domingo* no atendemos. Sin cita atendemos *lunes y sábado* de "
+                "10:00 a.m. a 5:00 p.m.\n"
+                "📅 Otros días con *cita previa*: escribe *cita* y te agendamos.")
+    return (f"Hoy *{dia}* atendemos *solo con cita previa* (no festivos). 📅\n"
+            "Sin cita: *lunes y sábado* de 10:00 a.m. a 5:00 p.m.\n"
+            "¿Quieres agendar? Escribe *cita* y te reservamos un espacio. 🙂")
+
+
 def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
     """
     Decide la respuesta según el mensaje y el estado de la conversación.
@@ -1320,6 +1355,13 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
     if _tiene(t, _EMPRESA):
         _guardar_lead(chat_id, texto)
         return Respuesta(RESP_EMPRESA, handoff=True)
+
+    # "¿Atienden HOY? / ¿puedo pasar hoy?" → respuesta directa según el día
+    # (alta intención: quieren ir YA). Va antes del horario genérico.
+    if _tiene(t, _HOY_ATIENDE) or (
+            _tiene(t, ["hoy", "ahora", "ahorita"]) and
+            _tiene(t, ["atend", "atien", "abiert", "pasar", "paso", "abren", "local"])):
+        return Respuesta(_resp_abierto_hoy() + VOLVER)
 
     # ── 4) Estás dentro del flujo de GARANTÍA (esperando fotos) ───
     if estado == "garantia_fotos":
