@@ -15,6 +15,7 @@ const STORAGE_KEY = 'raloz_asistente_chat'
 
 // Chips del estado vacío (mandan un comando de arranque al asistente)
 const ATAJOS = [
+  { id: 'home',       label: 'Buenos días', icon: Sparkles,    prompt: 'Dame el resumen del día (buenos días).' },
   { id: 'revision',   label: 'Revisión',   icon: Activity,     prompt: '¿Cómo está el negocio? Revisa todo y dime lo importante.' },
   { id: 'ventas',     label: 'Ventas',     icon: ShoppingCart, prompt: '¿Cuánto hemos vendido hoy?' },
   { id: 'inventario', label: 'Inventario', icon: Boxes,        prompt: '¿Qué prendas tienen stock bajo?' },
@@ -362,6 +363,61 @@ function TarjetasDatos({ datos }) {
           <p className="text-[11px] text-amber-600 mt-2">⚠️ {r.sin_costo} referencia{r.sin_costo === 1 ? '' : 's'} sin costo cargado — no se pueden simular.</p>
         )}
         {r.nota && <p className="text-[11px] text-[#718096] mt-1.5">{r.nota}</p>}
+      </div>
+    )
+  }
+  if (datos?.tipo === 'home' && r.encontrado) {
+    const res = r.alertas || {}
+    const metas = r.metas || []
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] overflow-hidden max-w-lg" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.05)' }}>
+        <div className="px-4 py-3" style={{ background: NAVY }}>
+          <p className="text-[13px] font-semibold text-white flex items-center gap-2">
+            <Sparkles size={15} color={YELLOW} /> Buenos días, Jefe
+          </p>
+        </div>
+        <div className="bg-white p-4 space-y-3.5">
+          {/* Alertas */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {['CRITICO', 'IMPORTANTE', 'PRECAUCION'].map(s => (res[s] || 0) > 0 && (
+              <span key={s} className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[#F7F8FA] border border-[#E7EBF1] text-[#10213F]">
+                {{ CRITICO: '🔴', IMPORTANTE: '🟠', PRECAUCION: '🟡' }[s]} {res[s]}
+              </span>
+            ))}
+            {(r.total_alertas || 0) === 0 && <span className="text-[12.5px] text-emerald-600 font-medium">Sin alertas ✓</span>}
+          </div>
+          {/* Metas */}
+          {metas.map((m, i) => (
+            <div key={i}>
+              <div className="flex items-center justify-between text-[12.5px]">
+                <span className="text-[#718096]">📈 {m.descripcion || 'Meta'}</span>
+                <span className="font-semibold text-[#10213F] tabular-nums">{cop(m.actual)} / {cop(m.meta)} · {m.pct}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[#F7F8FA] mt-1 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.min(100, m.pct)}%`, background: m.proyecta_ok === false ? '#E7B85A' : NAVY }} />
+              </div>
+              {m.proyecta_ok === false && <p className="text-[11px] text-amber-600 mt-0.5">Al ritmo actual no alcanza la meta.</p>}
+            </div>
+          ))}
+          {/* Cartera */}
+          {r.cartera_pendiente > 0 && (
+            <div className="flex items-center justify-between text-[12.5px]">
+              <span className="text-[#718096]">💰 Cartera pendiente</span>
+              <span className="font-semibold text-[#10213F]">{cop(r.cartera_pendiente)}</span>
+            </div>
+          )}
+          {/* Recomendaciones */}
+          {Array.isArray(r.recomendaciones) && r.recomendaciones.length > 0 && (
+            <div className="pt-2 border-t border-[#E7EBF1]">
+              <p className="text-[12px] font-semibold text-[#10213F] mb-1.5">🎯 Hoy recomiendo</p>
+              <ol className="space-y-1">
+                {r.recomendaciones.map((rec, i) => (
+                  <li key={i} className="text-[12px] text-[#5B6A88] flex gap-1.5"><span className="text-[#718096]">{i + 1}.</span> {rec}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
       </div>
     )
   }

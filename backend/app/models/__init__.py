@@ -36,6 +36,9 @@ from app.models.suscriptor import Suscriptor
 from app.models.push_subscription import PushSubscription
 from app.models.accion_asistente import AccionAsistente
 from app.models.evento import Evento
+from app.models.regla_negocio import ReglaNegocio
+from app.models.memoria_negocio import MemoriaNegocio
+from app.models.objetivo import Objetivo
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -48,4 +51,5 @@ __all__ = [
     'WaConversacion', 'WaMensaje', 'Cita', 'Lead', 'ConfigSitio', 'Aviso',
     'ReglaAuto', 'Promocion', 'Suscriptor', 'PushSubscription',
     'AccionAsistente', 'Evento',
+    'ReglaNegocio', 'MemoriaNegocio', 'Objetivo',
 ]

@@ -347,7 +347,31 @@ MODO_SUGERIR, MODO_PREPARAR, MODO_AUTONOMO = 'SUGERIR', 'PREPARAR', 'AUTONOMO'
 _MODOS = (MODO_SUGERIR, MODO_PREPARAR, MODO_AUTONOMO)
 # Únicas acciones que el modo AUTÓNOMO puede ejecutar solo (bajo riesgo, reversible):
 _AUTO_WHITELIST = {'crear_tarea'}
-_SCORE_AUTO = 80   # solo eventos realmente prioritarios
+_SCORE_AUTO = 80   # confianza mínima
+
+
+def puede_auto(ev, accion):
+    """Autonomous Action Guard. Para que RALOZ actúe SOLO deben cumplirse TODAS:
+      riesgo bajo + acción reversible + permitida (whitelist) + confianza alta
+      + reglas del negocio satisfechas + sin conflicto de reglas.
+    No basta con un score alto: algo puede puntuar 95 y aun así ser peligroso."""
+    if modo_observador() != MODO_AUTONOMO:
+        return False, 'modo no autónomo'
+    if not accion or accion.get('tipo') not in _AUTO_WHITELIST:
+        return False, 'acción no permitida en automático'
+    if (ev.score or 0) < _SCORE_AUTO:
+        return False, 'confianza insuficiente'
+    # Regla del negocio: si la acción implica una compra sobre el presupuesto, se frena.
+    costo = (ev.datos_dict or {}).get('costo_estimado')
+    if costo:
+        try:
+            from app.services.business_memory import verificar_presupuesto_compras
+            ok, _lim, _msg = verificar_presupuesto_compras(costo)
+            if not ok:
+                return False, 'choca con el presupuesto de compras'
+        except Exception:
+            pass
+    return True, 'ok'
 
 
 def modo_observador():
@@ -368,7 +392,7 @@ def set_modo_observador(modo):
 
 def _auto_accion(nuevos):
     """Autonomía CONTROLADA: en modo AUTÓNOMO, ejecuta las acciones de bajo
-    riesgo (crear recordatorio) de los eventos nuevos de alta prioridad, y las
+    riesgo (crear recordatorio) de los eventos nuevos que pasen el Guard, y las
     deja en la bitácora (auditable + reversible). Nada más se ejecuta solo."""
     if modo_observador() != MODO_AUTONOMO or not nuevos:
         return
@@ -377,10 +401,9 @@ def _auto_accion(nuevos):
     if not admin:
         return  # sin un dueño a quien atribuirlo, no actuamos
     for ev in nuevos:
-        if (ev.score or 0) < _SCORE_AUTO:
-            continue
         accion = (ev.datos_dict or {}).get('accion_sugerida') or {}
-        if accion.get('tipo') not in _AUTO_WHITELIST:
+        permitido, _motivo = puede_auto(ev, accion)
+        if not permitido:
             continue
         titulo = str(accion.get('titulo', ''))[:200]
         if not titulo:

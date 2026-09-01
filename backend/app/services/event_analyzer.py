@@ -13,7 +13,17 @@ from datetime import date, timedelta
 from sqlalchemy import func
 
 from app import db
-from app.models import Factura, FacturaDetalle, Evento
+from app.models import Factura, FacturaDetalle, Evento, PrecioColegio
+
+
+def _costo_estimado(cid, pid, unidades):
+    """Costo aproximado de reponer `unidades` (usa el costo registrado, si hay)."""
+    if not (cid and pid and unidades):
+        return None
+    row = (PrecioColegio.query
+           .filter_by(id_colegio=cid, id_producto=pid)
+           .filter(PrecioColegio.costo_unitario.isnot(None)).first())
+    return round(row.costo_unitario * unidades) if row and row.costo_unitario else None
 
 # El proveedor tarda ~7 días en reponer (regla de negocio; ajustable).
 LEAD_TIME_DIAS = 7
@@ -86,9 +96,13 @@ def _analizar_stock(cand, velmap):
                     f'(~{diario:.1f}/día). Cobertura {cov_txt}; el proveedor tarda '
                     f'~{LEAD_TIME_DIAS} días → riesgo de quiebre antes de reponer.')
         if repo > 0:
+            costo_est = _costo_estimado(cid, pid, repo)
             recomendacion = f'Preparar reposición de ~{repo} unidades de {prenda} T{talla} ({cole}).'
+            if costo_est:
+                recomendacion += f' Costo estimado ~${int(costo_est):,}.'.replace(',', '.')
             accion = {'tipo': 'crear_tarea',
                       'titulo': f'Reponer {prenda} T{talla} {cole} (~{repo} u)'[:200]}
+            cand.setdefault('datos', {})['costo_estimado'] = costo_est
         else:
             recomendacion = f'Vigilar {prenda} T{talla}; la cobertura aún alcanza.'
             accion = None

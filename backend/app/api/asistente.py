@@ -265,6 +265,39 @@ def _extraer_accion(texto):
                     'tipo': tipo, 'id_accion': id_accion,
                     'descripcion': f'Deshacer: {acc.descripcion or ("acción #" + str(id_accion))}',
                 }
+    elif tipo == 'crear_regla':
+        texto_regla = str(obj.get('texto', '')).strip()
+        categoria = str(obj.get('categoria', 'OTRA')).upper().strip()[:20] or 'OTRA'
+        if texto_regla:
+            params = obj.get('parametros') if isinstance(obj.get('parametros'), dict) else None
+            accion = {
+                'tipo': tipo, 'categoria': categoria, 'texto': texto_regla[:400],
+                'parametros': params,
+                'descripcion': f'Guardar regla [{categoria}]: “{texto_regla[:120]}”',
+            }
+    elif tipo == 'crear_objetivo':
+        try:
+            meta = float(obj.get('meta'))
+            anio = int(obj.get('anio'))
+        except Exception:
+            meta = anio = None
+        mes = obj.get('mes')
+        mes = int(mes) if mes not in (None, '', 0) else None
+        if meta and meta > 0 and anio:
+            desc = str(obj.get('descripcion', '')).strip()[:200] or f'Meta {anio}'
+            accion = {
+                'tipo': tipo, 'meta': meta, 'anio': anio, 'mes': mes,
+                'descripcion_obj': desc,
+                'descripcion': f'Guardar meta: {desc} = ${int(meta):,}'.replace(',', '.'),
+            }
+    elif tipo == 'crear_memoria':
+        texto_mem = str(obj.get('texto', '')).strip()
+        tipo_mem = str(obj.get('tipo_memoria', 'NOTA')).upper().strip()[:20] or 'NOTA'
+        if texto_mem:
+            accion = {
+                'tipo': tipo, 'tipo_memoria': tipo_mem, 'texto': texto_mem[:500],
+                'descripcion': f'Recordar [{tipo_mem}]: “{texto_mem[:120]}”',
+            }
     if not accion:
         return texto, None
     texto_limpio = texto[:m.start()].rstrip() or 'Te propongo esta acción:'
@@ -585,7 +618,64 @@ def _ejecutar_busqueda(obj):
         return _tool_bitacora(obj.get('limite') or 10)
     if tipo == 'observar':
         return _tool_observar()
+    if tipo == 'home':
+        return _tool_home()
     return {'error': 'búsqueda no soportada'}
+
+
+def _bloque_politica():
+    """Reglas del negocio + decisiones + objetivos, para que RALOZ respete la
+    política y conozca las metas. Va en el prompt de cada consulta."""
+    try:
+        from app.services.business_memory import (
+            reglas_texto, memoria_texto, progreso_objetivos)
+    except Exception:
+        return ''
+    partes = []
+    try:
+        rt = reglas_texto()
+        if rt:
+            partes.append("REGLAS DEL NEGOCIO (respétalas SIEMPRE; si una acción "
+                          "las contradice, avísalo y NO la ejecutes sin autorización "
+                          "explícita):\n" + rt)
+    except Exception:
+        pass
+    try:
+        mt = memoria_texto()
+        if mt:
+            partes.append("DECISIONES / PREFERENCIAS del Jefe (tenlas en cuenta):\n" + mt)
+    except Exception:
+        pass
+    try:
+        metas = progreso_objetivos()
+        if metas:
+            lineas = []
+            for m in metas:
+                per = f"{m['anio']}" + (f"-{m['mes']:02d}" if m.get('mes') else '')
+                proy = ''
+                if m.get('proyecta_ok') is False:
+                    proy = ' — al ritmo actual NO alcanza, sugiere acciones'
+                lineas.append(f"- {m.get('descripcion') or m['tipo']} ({per}): "
+                              f"${int(m['actual']):,} de ${int(m['meta']):,} "
+                              f"({m['pct']}%)".replace(',', '.') + proy)
+            partes.append("OBJETIVOS (progreso en vivo):\n" + '\n'.join(lineas))
+    except Exception:
+        pass
+    if not partes:
+        return ''
+    return "=== POLÍTICA Y METAS DEL NEGOCIO ===\n" + '\n\n'.join(partes) + "\n\n"
+
+
+def _tool_home():
+    """Daily Briefing: alertas + metas + cartera + recomendaciones del día."""
+    from app.services.business_memory import resumen_home
+    try:
+        r = resumen_home()
+    except Exception as e:
+        logger.warning("asistente: _tool_home falló: %s", e)
+        return {'encontrado': False, 'error': 'no pude armar el resumen'}
+    r['encontrado'] = True
+    return r
 
 
 def _tool_observar():
@@ -868,6 +958,19 @@ def preguntar():
             "hallar el id_accion correcto, propón la reversión y en la ÚLTIMA línea agrega:\n"
             "ACCION_JSON: {\"tipo\":\"revertir\",\"id_accion\":<id de la bitácora>}\n"
             "Solo se puede revertir una acción reversible que no haya sido revertida.\n"
+            "Si el usuario fija una REGLA/POLÍTICA del negocio ('no comprar más de "
+            "$10M al mes', 'no vender por debajo de $45.000', 'no publicar después de "
+            "las 8pm'), NO la trates como charla: propón guardarla y en la ÚLTIMA línea "
+            "agrega (categoria = PRECIO|INVENTARIO|COMPRAS|PROVEEDORES|HORARIOS|PAGOS|"
+            "PROMOCIONES|WHATSAPP|PUBLICIDAD|AUTONOMIA; incluye parametros si hay un "
+            "número, ej. presupuesto de compras):\n"
+            "ACCION_JSON: {\"tipo\":\"crear_regla\",\"categoria\":\"COMPRAS\",\"texto\":\"No comprar más de $10.000.000 al mes sin aprobación\",\"parametros\":{\"limite\":10000000,\"periodo\":\"mensual\"}}\n"
+            "Si el usuario fija una META de ventas ('quiero vender $30M en septiembre'), "
+            "propón guardarla y agrega:\n"
+            "ACCION_JSON: {\"tipo\":\"crear_objetivo\",\"descripcion\":\"Ventas septiembre\",\"meta\":30000000,\"anio\":2026,\"mes\":9}\n"
+            "Si el usuario expresa una DECISIÓN/PREFERENCIA ('prefiero el proveedor X'), "
+            "propón recordarla y agrega:\n"
+            "ACCION_JSON: {\"tipo\":\"crear_memoria\",\"tipo_memoria\":\"PREFERENCIA\",\"texto\":\"Prefiere el proveedor X\"}\n"
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
         )
 
@@ -885,14 +988,17 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
         "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
         "BUSCAR: {\"tipo\":\"bitacora\",\"limite\":<n>}  → últimas acciones que ejecutaste (id, qué se hizo, si se verificó, si es reversible). Úsalo para '¿qué cambios hiciste?' o cuando el Jefe pida DESHACER algo: primero mira la bitácora para encontrar el id_accion a revertir\n"
+        "BUSCAR: {\"tipo\":\"home\"}  → el Daily Briefing ('Buenos días, Jefe'): alertas priorizadas + progreso de metas + cartera pendiente + las 3 acciones que recomiendas hoy. Úsalo para 'resumen del día', 'buenos días', 'cómo vamos'\n"
         "BUSCAR: {\"tipo\":\"observar\"}  → el Observador revisa el negocio y devuelve alertas ANALIZADAS y priorizadas por 'score' (0-100), agrupadas por prenda, con el POR QUÉ (campo datos.analisis), la RECOMENDACIÓN y a veces una acción sugerida (datos.accion_sugerida). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'revisa todo'. Preséntalo priorizado (🔴🟠🟡), con el porqué y qué recomiendas; si hay una acción sugerida, OFRÉCELA ('¿quieres que prepare …?') pero NO la ejecutes: solo si el Jefe dice que sí, propón el ACCION_JSON correspondiente. Si no hay nada, dilo en una línea\n"
         "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
         "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
 
+    politica = _bloque_politica()
     base = (
         f"{sistema}{busqueda}{acciones}\n\n=== DATOS REALES DEL SISTEMA (hoy {datos.get('fecha_hoy')}) ===\n"
         f"{json.dumps(datos, ensure_ascii=False, default=str)}\n\n"
+        f"{politica}"
         f"=== MANUAL DEL SISTEMA ===\n{MANUAL}\n\n"
         f"=== PREGUNTA DEL USUARIO ===\n{pregunta}"
     )
@@ -1113,6 +1219,112 @@ def evento_estado(id_evento):
     return jsonify({'ok': True, 'evento': ev.to_dict()}), 200
 
 
+@asistente_bp.route('/home', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador')
+def home_endpoint():
+    """Daily Briefing: alertas + metas + cartera + recomendaciones del día."""
+    from app.services.business_memory import resumen_home
+    try:
+        return jsonify(resumen_home()), 200
+    except Exception as e:
+        logger.warning("asistente: home falló: %s", e)
+        return jsonify({'error': 'No pude armar el resumen del día.'}), 500
+
+
+@asistente_bp.route('/reglas', methods=['GET', 'POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def reglas_endpoint():
+    from app.models import ReglaNegocio
+    if request.method == 'GET':
+        rs = ReglaNegocio.query.filter_by(activa=True).order_by(ReglaNegocio.categoria).all()
+        return jsonify({'reglas': [r.to_dict() for r in rs]}), 200
+    d = request.get_json(silent=True) or {}
+    texto = str(d.get('texto', '')).strip()[:400]
+    if not texto:
+        return jsonify({'error': 'Falta el texto de la regla.'}), 400
+    r = ReglaNegocio(categoria=str(d.get('categoria', 'OTRA')).upper()[:20] or 'OTRA',
+                     texto=texto, creado_por=(get_current_identity() or {}).get('usuario'))
+    if isinstance(d.get('parametros'), dict):
+        r.set_parametros(d['parametros'])
+    db.session.add(r)
+    db.session.commit()
+    return jsonify({'ok': True, 'regla': r.to_dict()}), 200
+
+
+@asistente_bp.route('/reglas/<int:id_regla>', methods=['DELETE'])
+@jwt_required()
+@rol_requerido('administrador')
+def borrar_regla(id_regla):
+    from app.models import ReglaNegocio
+    r = ReglaNegocio.query.get(id_regla)
+    if not r:
+        return jsonify({'error': 'No existe esa regla.'}), 404
+    r.activa = False
+    db.session.commit()
+    return jsonify({'ok': True}), 200
+
+
+@asistente_bp.route('/objetivos', methods=['GET', 'POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def objetivos_endpoint():
+    from app.services.business_memory import progreso_objetivos
+    from app.models import Objetivo
+    if request.method == 'GET':
+        return jsonify({'objetivos': progreso_objetivos()}), 200
+    d = request.get_json(silent=True) or {}
+    try:
+        meta = float(d.get('meta'))
+        anio = int(d.get('anio'))
+    except Exception:
+        return jsonify({'error': 'Meta o año inválidos.'}), 400
+    mes = d.get('mes')
+    try:
+        mes = int(mes) if mes not in (None, '', 0) else None
+    except Exception:
+        mes = None
+    o = Objetivo(tipo='VENTAS', descripcion=str(d.get('descripcion', ''))[:200] or None,
+                 meta=meta, anio=anio, mes=mes,
+                 creado_por=(get_current_identity() or {}).get('usuario'))
+    db.session.add(o)
+    db.session.commit()
+    return jsonify({'ok': True, 'objetivo': o.to_dict()}), 200
+
+
+@asistente_bp.route('/objetivos/<int:id_objetivo>', methods=['DELETE'])
+@jwt_required()
+@rol_requerido('administrador')
+def borrar_objetivo(id_objetivo):
+    from app.models import Objetivo
+    o = Objetivo.query.get(id_objetivo)
+    if not o:
+        return jsonify({'error': 'No existe ese objetivo.'}), 404
+    o.activa = False
+    db.session.commit()
+    return jsonify({'ok': True}), 200
+
+
+@asistente_bp.route('/memoria', methods=['GET', 'POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def memoria_endpoint():
+    from app.models import MemoriaNegocio
+    if request.method == 'GET':
+        ms = MemoriaNegocio.query.filter_by(activa=True).order_by(MemoriaNegocio.id_memoria).all()
+        return jsonify({'memoria': [m.to_dict() for m in ms]}), 200
+    d = request.get_json(silent=True) or {}
+    texto = str(d.get('texto', '')).strip()[:500]
+    if not texto:
+        return jsonify({'error': 'Falta el texto.'}), 400
+    m = MemoriaNegocio(tipo=str(d.get('tipo', 'NOTA')).upper()[:20] or 'NOTA', texto=texto,
+                       creado_por=(get_current_identity() or {}).get('usuario'))
+    db.session.add(m)
+    db.session.commit()
+    return jsonify({'ok': True, 'memoria': m.to_dict()}), 200
+
+
 @asistente_bp.route('/modo', methods=['GET', 'POST'])
 @jwt_required()
 @rol_requerido('administrador')
@@ -1184,6 +1396,67 @@ def ejecutar():
             'id_accion': acc.id_accion if acc else None,
             'reversible': bool(acc),
         }), 200
+
+    # ── Guardar una REGLA del negocio (política persistente) ──
+    if tipo == 'crear_regla':
+        from app.models import ReglaNegocio
+        texto_regla = str(data.get('texto', '')).strip()[:400]
+        categoria = str(data.get('categoria', 'OTRA')).upper().strip()[:20] or 'OTRA'
+        if not texto_regla:
+            return jsonify({'error': 'Falta el texto de la regla.'}), 400
+        ident = get_current_identity()
+        r = ReglaNegocio(categoria=categoria, texto=texto_regla,
+                         creado_por=ident.get('usuario'))
+        params = data.get('parametros')
+        if isinstance(params, dict):
+            r.set_parametros(params)
+        db.session.add(r)
+        db.session.commit()
+        try:
+            registrar_auditoria('reglas_negocio', r.id_regla, 'CREADA',
+                                f'[Asistente] regla [{categoria}] por {ident.get("usuario")}')
+        except Exception:
+            pass
+        return jsonify({'ok': True,
+                        'mensaje': f'✅ Regla guardada [{categoria}]. La tendré en cuenta '
+                                   'siempre y te avisaré si algo la contradice.'}), 200
+
+    # ── Guardar un OBJETIVO / meta ──
+    if tipo == 'crear_objetivo':
+        from app.models import Objetivo
+        try:
+            meta = float(data.get('meta'))
+            anio = int(data.get('anio'))
+        except Exception:
+            return jsonify({'error': 'Meta o año inválidos.'}), 400
+        mes = data.get('mes')
+        try:
+            mes = int(mes) if mes not in (None, '', 0) else None
+        except Exception:
+            mes = None
+        if meta <= 0:
+            return jsonify({'error': 'La meta debe ser mayor a 0.'}), 400
+        ident = get_current_identity()
+        o = Objetivo(tipo='VENTAS', descripcion=str(data.get('descripcion_obj', ''))[:200] or None,
+                     meta=meta, anio=anio, mes=mes, creado_por=ident.get('usuario'))
+        db.session.add(o)
+        db.session.commit()
+        return jsonify({'ok': True,
+                        'mensaje': f'✅ Meta guardada: ${int(meta):,}. Iré midiendo el avance '
+                                   'y te aviso si al ritmo actual no alcanza.'.replace(',', '.')}), 200
+
+    # ── Guardar una DECISIÓN / preferencia ──
+    if tipo == 'crear_memoria':
+        from app.models import MemoriaNegocio
+        texto_mem = str(data.get('texto', '')).strip()[:500]
+        tipo_mem = str(data.get('tipo_memoria', 'NOTA')).upper().strip()[:20] or 'NOTA'
+        if not texto_mem:
+            return jsonify({'error': 'Falta el texto.'}), 400
+        ident = get_current_identity()
+        m = MemoriaNegocio(tipo=tipo_mem, texto=texto_mem, creado_por=ident.get('usuario'))
+        db.session.add(m)
+        db.session.commit()
+        return jsonify({'ok': True, 'mensaje': f'✅ Anotado [{tipo_mem}]. Lo tendré en cuenta.'}), 200
 
     # ── Ajustar stock (sumar / restar / fijar) ──
     if tipo == 'ajustar_stock':

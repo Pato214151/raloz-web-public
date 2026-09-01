@@ -478,6 +478,46 @@ MIGRACIONES = [
             "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS recomendacion VARCHAR(500)",
         ],
     },
+    {
+        'version': '0031',
+        'descripcion': 'Business Memory: reglas del negocio, decisiones y objetivos',
+        'sql': [
+            """
+            CREATE TABLE IF NOT EXISTS reglas_negocio (
+                id_regla    SERIAL PRIMARY KEY,
+                categoria   VARCHAR(20) NOT NULL DEFAULT 'OTRA',
+                texto       VARCHAR(400) NOT NULL,
+                parametros  TEXT,
+                activa      BOOLEAN NOT NULL DEFAULT TRUE,
+                creado_por  VARCHAR(120),
+                creado_en   TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS memoria_negocio (
+                id_memoria  SERIAL PRIMARY KEY,
+                tipo        VARCHAR(20) NOT NULL DEFAULT 'NOTA',
+                texto       VARCHAR(500) NOT NULL,
+                activa      BOOLEAN NOT NULL DEFAULT TRUE,
+                creado_por  VARCHAR(120),
+                creado_en   TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS objetivos (
+                id_objetivo SERIAL PRIMARY KEY,
+                tipo        VARCHAR(20) NOT NULL DEFAULT 'VENTAS',
+                descripcion VARCHAR(200),
+                meta        DOUBLE PRECISION NOT NULL,
+                anio        INTEGER NOT NULL,
+                mes         INTEGER,
+                activa      BOOLEAN NOT NULL DEFAULT TRUE,
+                creado_por  VARCHAR(120),
+                creado_en   TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+            """,
+        ],
+    },
 ]
 
 
