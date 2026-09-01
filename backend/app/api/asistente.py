@@ -627,7 +627,59 @@ def _ejecutar_busqueda(obj):
         return _tool_observar()
     if tipo == 'home':
         return _tool_home()
+    if tipo == 'calendario':
+        return _tool_calendario(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
     return {'error': 'búsqueda no soportada'}
+
+
+_DIAS_SEMANA = {
+    'lunes': 0, 'martes': 1, 'miercoles': 2, 'miércoles': 2, 'jueves': 3,
+    'viernes': 4, 'sabado': 5, 'sábado': 5, 'domingo': 6,
+}
+_NOMBRE_DIA = {0: 'lunes', 1: 'martes', 2: 'miércoles', 3: 'jueves',
+               4: 'viernes', 5: 'sábado', 6: 'domingo'}
+
+
+def _tool_calendario(desde, hasta, dias):
+    """Capacidad universal de calendario: cuenta cuántos días de la semana caen
+    en un rango (determinista, sin gastar IA). Sin desde/hasta = mes actual."""
+    from calendar import monthrange
+    hoy = date.today()
+
+    def _parse(s, default):
+        try:
+            return datetime.strptime(str(s)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return default
+
+    d0 = _parse(desde, date(hoy.year, hoy.month, 1))
+    d1 = _parse(hasta, date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1]))
+    if d1 < d0:
+        d0, d1 = d1, d0
+    objetivo = set()
+    for nom in (dias or []):
+        k = _DIAS_SEMANA.get(str(nom).strip().lower())
+        if k is not None:
+            objetivo.add(k)
+    conteo, fechas = {}, []
+    total_dias = min((d1 - d0).days + 1, 420)   # tope de seguridad (~14 meses)
+    cur = d0
+    for _ in range(total_dias):
+        wd = cur.weekday()
+        if not objetivo or wd in objetivo:
+            nombre = _NOMBRE_DIA[wd]
+            conteo[nombre] = conteo.get(nombre, 0) + 1
+            if len(fechas) < 60:
+                fechas.append(cur.isoformat())
+        cur += timedelta(days=1)
+    return {
+        'encontrado': True, 'tipo_cal': 'calendario',
+        'desde': d0.isoformat(), 'hasta': d1.isoformat(),
+        'dias_pedidos': [_NOMBRE_DIA[k] for k in sorted(objetivo)] or 'todos',
+        'conteo': conteo,
+        'total': sum(conteo.values()),
+        'fechas': fechas,
+    }
 
 
 def _bloque_politica():
@@ -947,6 +999,30 @@ def preguntar():
         "preguntes '¿qué hago?': investiga tú (más vendidas, rotación, stock, márgenes) y "
         "vuelve con 2-3 oportunidades concretas.\n"
         "\n"
+        "CAPACIDADES UNIVERSALES: resuelve preguntas nuevas combinando los DATOS reales con "
+        "matemáticas, porcentajes, fechas/calendario, rangos, proyecciones, comparaciones y "
+        "escenarios — NO asumas que falta una herramienta específica. Para contar días de la "
+        "semana en un rango usa la BÚSQUEDA 'calendario' (NUNCA cuentes fechas a mano). Ej: "
+        "pago de un ayudante por lunes y sábados = contar esos días × tarifa.\n"
+        "\n"
+        "CERO ≠ SIN DATOS: si un indicador viene en 0 o vacío (ej. gastos_mes=0) NO asumas "
+        "que el valor real es 0 — puede que no esté registrado. Investiga otras fuentes "
+        "(compras, costos, inventario, cartera) antes de pedirle el dato al Jefe; pídelo solo "
+        "si el sistema de verdad no lo tiene, y dilo con claridad ('no llevo un registro de "
+        "gastos operativos; sí puedo analizar compras/costos/inventario').\n"
+        "\n"
+        "DECISIONES EMPRESARIALES (ej. '¿me conviene contratar?'): no respondas solo con el "
+        "costo. Separa DATO (el cálculo) · CONTEXTO (ventas, margen, flujo, cartera, carga "
+        "operativa) · ANÁLISIS · ESCENARIOS (no hacerlo / parcial / todo) · RECOMENDACIÓN. "
+        "Para comparar un costo contra ventas usa MARGEN/utilidad o flujo, NO la facturación "
+        "bruta. Si puedes consultar las ventas de esos días, hazlo tú; no lo preguntes.\n"
+        "\n"
+        "OBSERVADOR CON MESURA: las alertas del Observador NO van en toda respuesta. Úsalas "
+        "SOLO si el Jefe pide una revisión general, o si una alerta afecta DIRECTAMENTE lo que "
+        "preguntó. Si aportas contexto relevante, resúmelo en 1 línea (ej. 'además tienes "
+        "$965.000 en cartera'); nunca pegues la lista de inventario en una respuesta que no es "
+        "de revisión.\n"
+        "\n"
         "SIMULACIONES: ante '¿qué pasa si…?', '¿me conviene…?', '¿y si subo/bajo…?' NO ejecutes; "
         "muestra ACTUAL vs PROPUESTO vs DIFERENCIA (precio, costo, margen, utilidad). Nunca "
         "asumas que subir el precio mantiene las ventas: preséntalos como ESCENARIOS (la demanda "
@@ -1053,7 +1129,8 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
         "BUSCAR: {\"tipo\":\"bitacora\",\"limite\":<n>}  → últimas acciones que ejecutaste (id, qué se hizo, si se verificó, si es reversible). Úsalo para '¿qué cambios hiciste?' o cuando el Jefe pida DESHACER algo: primero mira la bitácora para encontrar el id_accion a revertir\n"
         "BUSCAR: {\"tipo\":\"home\"}  → el Daily Briefing ('Buenos días, Jefe'): alertas priorizadas + progreso de metas + cartera pendiente + las 3 acciones que recomiendas hoy. Úsalo para 'resumen del día', 'buenos días', 'cómo vamos'\n"
-        "BUSCAR: {\"tipo\":\"observar\"}  → el Observador revisa el negocio y devuelve alertas ANALIZADAS y priorizadas por 'score' (0-100), agrupadas por prenda, con el POR QUÉ (campo datos.analisis), la RECOMENDACIÓN y a veces una acción sugerida (datos.accion_sugerida). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'revisa todo'. Preséntalo priorizado (🔴🟠🟡), con el porqué y qué recomiendas; si hay una acción sugerida, OFRÉCELA ('¿quieres que prepare …?') pero NO la ejecutes: solo si el Jefe dice que sí, propón el ACCION_JSON correspondiente. Si no hay nada, dilo en una línea\n"
+        "BUSCAR: {\"tipo\":\"calendario\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\",\"dias\":[\"lunes\",\"sabado\"]}  → cuenta cuántos días de la semana caen en un rango (sin desde/hasta = mes actual). Úsalo SIEMPRE para cálculos de calendario/turnos/pagos por día (ej. cuántos lunes y sábados hay); NO cuentes fechas a mano. Luego multiplica el total por la tarifa\n"
+        "BUSCAR: {\"tipo\":\"observar\"}  → SOLO para una revisión general ('¿cómo está el negocio?', 'revisa todo'). NO lo uses en preguntas puntuales ni para adornar respuestas. El Observador revisa el negocio y devuelve alertas ANALIZADAS y priorizadas por 'score' (0-100), agrupadas por prenda, con el POR QUÉ (campo datos.analisis), la RECOMENDACIÓN y a veces una acción sugerida (datos.accion_sugerida). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'revisa todo'. Preséntalo priorizado (🔴🟠🟡), con el porqué y qué recomiendas; si hay una acción sugerida, OFRÉCELA ('¿quieres que prepare …?') pero NO la ejecutes: solo si el Jefe dice que sí, propón el ACCION_JSON correspondiente. Si no hay nada, dilo en una línea\n"
         "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
         "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
