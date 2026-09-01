@@ -629,7 +629,72 @@ def _ejecutar_busqueda(obj):
         return _tool_home()
     if tipo == 'calendario':
         return _tool_calendario(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
+    if tipo == 'ventas_por_dia':
+        return _tool_ventas_por_dia(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
     return {'error': 'búsqueda no soportada'}
+
+
+def _tool_ventas_por_dia(desde, hasta, dias):
+    """Ventas agrupadas por DÍA DE LA SEMANA en un rango (por defecto, últimos
+    90 días). Para decisiones tipo '¿me conviene contratar para lunes/sábado?':
+    dice cuánto se factura en promedio cada uno de esos días."""
+    hoy = date.today()
+
+    def _parse(s, default):
+        try:
+            return datetime.strptime(str(s)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return default
+
+    d1 = _parse(hasta, hoy)
+    d0 = _parse(desde, hoy - timedelta(days=90))
+    if d1 < d0:
+        d0, d1 = d1, d0
+    filtro = set()
+    for nom in (dias or []):
+        k = _DIAS_SEMANA.get(str(nom).strip().lower())
+        if k is not None:
+            filtro.add(k)
+
+    # Cuántas veces cae cada día de la semana en el rango (para el promedio/día)
+    ocur = {i: 0 for i in range(7)}
+    total_dias = min((d1 - d0).days + 1, 800)
+    cur = d0
+    for _ in range(total_dias):
+        ocur[cur.weekday()] += 1
+        cur += timedelta(days=1)
+
+    agg = {i: {'total': 0.0, 'facturas': 0} for i in range(7)}
+    rows = (Factura.query
+            .filter(Factura.estado != 'ANULADA',
+                    Factura.fecha_factura >= d0, Factura.fecha_factura <= d1)
+            .all())
+    for f in rows:
+        if not f.fecha_factura:
+            continue
+        wd = f.fecha_factura.weekday()
+        agg[wd]['total'] += (f.total or 0)
+        agg[wd]['facturas'] += 1
+
+    salida = []
+    for i in range(7):
+        if filtro and i not in filtro:
+            continue
+        oc = ocur[i]
+        salida.append({
+            'dia': _NOMBRE_DIA[i],
+            'total': round(agg[i]['total']),
+            'facturas': agg[i]['facturas'],
+            'ocurrencias': oc,
+            'promedio_por_dia': round(agg[i]['total'] / oc) if oc else 0,
+        })
+    return {
+        'encontrado': True, 'tipo_vd': 'ventas_por_dia',
+        'desde': d0.isoformat(), 'hasta': d1.isoformat(),
+        'dias': salida,
+        'nota': 'Es FACTURACIÓN (no utilidad). Para punto de equilibrio compara con '
+                'el margen si hay costos; si no, dilo.',
+    }
 
 
 _DIAS_SEMANA = {
@@ -1015,7 +1080,9 @@ def preguntar():
         "costo. Separa DATO (el cálculo) · CONTEXTO (ventas, margen, flujo, cartera, carga "
         "operativa) · ANÁLISIS · ESCENARIOS (no hacerlo / parcial / todo) · RECOMENDACIÓN. "
         "Para comparar un costo contra ventas usa MARGEN/utilidad o flujo, NO la facturación "
-        "bruta. Si puedes consultar las ventas de esos días, hazlo tú; no lo preguntes.\n"
+        "bruta. Si puedes consultar las ventas de esos días, hazlo tú (BÚSQUEDA "
+        "'ventas_por_dia'); no lo preguntes. Ej. contratar para lunes+sábado: calendario × "
+        "tarifa = costo; ventas_por_dia de esos días = lo que está en juego → compara.\n"
         "\n"
         "OBSERVADOR CON MESURA: las alertas del Observador NO van en toda respuesta. Úsalas "
         "SOLO si el Jefe pide una revisión general, o si una alerta afecta DIRECTAMENTE lo que "
@@ -1130,6 +1197,7 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"bitacora\",\"limite\":<n>}  → últimas acciones que ejecutaste (id, qué se hizo, si se verificó, si es reversible). Úsalo para '¿qué cambios hiciste?' o cuando el Jefe pida DESHACER algo: primero mira la bitácora para encontrar el id_accion a revertir\n"
         "BUSCAR: {\"tipo\":\"home\"}  → el Daily Briefing ('Buenos días, Jefe'): alertas priorizadas + progreso de metas + cartera pendiente + las 3 acciones que recomiendas hoy. Úsalo para 'resumen del día', 'buenos días', 'cómo vamos'\n"
         "BUSCAR: {\"tipo\":\"calendario\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\",\"dias\":[\"lunes\",\"sabado\"]}  → cuenta cuántos días de la semana caen en un rango (sin desde/hasta = mes actual). Úsalo SIEMPRE para cálculos de calendario/turnos/pagos por día (ej. cuántos lunes y sábados hay); NO cuentes fechas a mano. Luego multiplica el total por la tarifa\n"
+        "BUSCAR: {\"tipo\":\"ventas_por_dia\",\"dias\":[\"lunes\",\"sabado\"]}  → cuánto se factura en promedio por día de la semana (por defecto últimos 90 días). Úsalo para decidir '¿me conviene abrir/contratar para esos días?': compara el pago del ayudante contra lo que se factura esos días\n"
         "BUSCAR: {\"tipo\":\"observar\"}  → SOLO para una revisión general ('¿cómo está el negocio?', 'revisa todo'). NO lo uses en preguntas puntuales ni para adornar respuestas. El Observador revisa el negocio y devuelve alertas ANALIZADAS y priorizadas por 'score' (0-100), agrupadas por prenda, con el POR QUÉ (campo datos.analisis), la RECOMENDACIÓN y a veces una acción sugerida (datos.accion_sugerida). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'revisa todo'. Preséntalo priorizado (🔴🟠🟡), con el porqué y qué recomiendas; si hay una acción sugerida, OFRÉCELA ('¿quieres que prepare …?') pero NO la ejecutes: solo si el Jefe dice que sí, propón el ACCION_JSON correspondiente. Si no hay nada, dilo en una línea\n"
         "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
         "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
