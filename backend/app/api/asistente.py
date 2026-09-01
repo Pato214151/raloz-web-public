@@ -1144,25 +1144,38 @@ def _llamar_deepseek(prompt_text):
         return '', 'deepseek_vacio'
 
 
-def _error_gemini(detalle):
-    """Devuelve la respuesta de error adecuada (saturación vs. problema real).
-    El detalle técnico se REGISTRA en logs, nunca se envía al usuario."""
-    logger.warning('asistente: fallo de IA -> %s', detalle)
-    # El detalle técnico solo se expone si ASISTENTE_DEBUG=1 (para diagnosticar);
-    # por defecto va a los logs y al usuario solo un mensaje limpio.
-    extra = {'detalle': detalle} if os.getenv('ASISTENTE_DEBUG', '').strip() == '1' else {}
+def _motivo_ia(detalle):
+    """Traduce el error técnico del proveedor a un motivo claro para el admin,
+    SIN exponer texto crudo. Es sobre la config del motor (no datos de clientes)."""
     d = (detalle or '').upper()
-    if 'UNAVAILABLE' in d or (detalle or '').startswith('503') or '429' in d:
-        return jsonify({
-            'error': '⏳ El asistente está saturado ahora mismo. Espera unos segundos '
-                     'y vuelve a intentar.',
-            'code': 'ocupado', **extra,
-        }), 503
-    return jsonify({
-        'error': 'El asistente no respondió en este momento. Inténtalo de nuevo en '
-                 'unos segundos; si sigue, avísale al administrador.',
-        'code': 'ia_error', **extra,
-    }), 502
+    if '401' in d or '403' in d or 'API_KEY' in d or 'UNAUTHOR' in d:
+        return ('llave', 'La llave de IA fue rechazada. Revisa GROK_API_KEY en Render '
+                         '(que sea de console.x.ai y esté bien pegada).')
+    if '402' in d or 'INSUFFICIENT' in d or 'CREDIT' in d or 'BILLING' in d or 'QUOTA' in d:
+        return ('saldo', 'La cuenta de IA no tiene crédito/cupo. Recarga en xAI (o revisa '
+                         'el límite de facturación).')
+    if '429' in d or 'RATE' in d:
+        return ('limite', 'Grok alcanzó su límite de peticiones (rate limit). Espera un '
+                          'momento; si es constante, tu plan de xAI tiene un tope muy bajo.')
+    if '404' in d or 'MODEL' in d or 'NOT FOUND' in d:
+        return ('modelo', 'El modelo configurado no existe para tu cuenta. Prueba '
+                          'GROK_MODEL=grok-2-latest (o déjalo vacío) en Render.')
+    if 'CONEXIÓN' in d or 'CONEXION' in d or 'TIMEOUT' in d or 'TIMED OUT' in d:
+        return ('conexion', 'Grok tardó demasiado o no respondió. Reintenta en unos segundos.')
+    if 'UNAVAILABLE' in d or '503' in d:
+        return ('saturado', 'El servicio de IA está saturado ahora mismo. Reintenta en unos segundos.')
+    return ('desconocido', 'No pude analizarlo en este momento. Reintenta; si sigue, revisa '
+                           'GROK_API_KEY / GROK_MODEL en Render.')
+
+
+def _error_gemini(detalle):
+    """Respuesta de error con un MOTIVO claro para el admin. El texto técnico
+    crudo se REGISTRA en logs; el detalle completo solo si ASISTENTE_DEBUG=1."""
+    logger.warning('asistente: fallo de IA -> %s', detalle)
+    clave, motivo = _motivo_ia(detalle)
+    extra = {'detalle': detalle} if os.getenv('ASISTENTE_DEBUG', '').strip() == '1' else {}
+    http = 503 if clave in ('limite', 'saturado', 'conexion') else 502
+    return jsonify({'error': motivo, 'motivo': clave, 'code': 'ia_error', **extra}), http
 
 
 @asistente_bp.route('/preguntar', methods=['POST'])
