@@ -28,6 +28,9 @@ logger = logging.getLogger("raloz.eventos")
 
 UMBRAL_STOCK_BAJO = 3     # "hard low": bajo aunque no tenga ventas
 UMBRAL_WATCH = 10         # banda de vigilancia: el analyzer decide si es riesgo real
+# Colegios sin contrato activo: no se repone su stock, así que NO alertamos de
+# agotado/bajo (sería ruido). Adventista (id 2): contrato terminado.
+COLEGIOS_INACTIVOS = {2}
 
 _ORDEN_SEV = {'CRITICO': 0, 'IMPORTANTE': 1, 'PRECAUCION': 2, 'INFORMATIVO': 3}
 _SCORE_CARTERA = 85
@@ -54,6 +57,8 @@ def detectar_stock(umbral=UMBRAL_WATCH, limite=60):
     prod, col = _mapas()
     out = []
     for s in Stock.query.filter(Stock.cantidad <= umbral).all():
+        if s.id_colegio in COLEGIOS_INACTIVOS:
+            continue   # colegio sin contrato → no se repone, no alertamos
         if (s.id_colegio, s.id_producto) not in vendidos:
             continue
         nombre = prod.get(s.id_producto, f'Prod#{s.id_producto}')
