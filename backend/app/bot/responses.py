@@ -1238,16 +1238,21 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         n = 0
     if getattr(resp, "confuso", False):
         n += 1
-        if n >= 2:
+        # Con la IA encendida, que ENTRE de una (al primer mensaje que el bot no
+        # entienda) en vez de repetir el menú y esperar a la 2ª vez. Sin IA,
+        # damos un empujón al menú antes de pasar a un asesor.
+        umbral = 1 if BOT_IA_FALLBACK else 2
+        if n >= umbral:
             set_dato(chat_id, "confusion", "0")
-            _ia = _respuesta_ia(chat_id, texto)   # 1º la IA (si está activada)
+            _ia = _respuesta_ia(chat_id, texto)   # la IA intenta resolverlo
             if _ia:
                 return _ia
-            _guardar_lead(chat_id, f"Cliente confundido (2x): {texto[:200]}")
-            reset_estado(chat_id)
-            return Respuesta(
-                "Perdona, no logro ayudarte bien por aquí 🙈. Te paso con un "
-                "*asesor* que te atiende enseguida. 🙌", handoff=True)
+            if n >= 2:
+                _guardar_lead(chat_id, f"Cliente confundido (2x): {texto[:200]}")
+                reset_estado(chat_id)
+                return Respuesta(
+                    "Perdona, no logro ayudarte bien por aquí 🙈. Te paso con un "
+                    "*asesor* que te atiende enseguida. 🙌", handoff=True)
         set_dato(chat_id, "confusion", str(n))
     elif n:
         set_dato(chat_id, "confusion", "0")   # respondió bien → reinicia el contador
