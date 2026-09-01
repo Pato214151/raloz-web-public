@@ -297,6 +297,18 @@ def _extraer_accion(texto):
                 'descripcion_obj': desc,
                 'descripcion': f'Guardar meta: {desc} = ${int(meta):,}'.replace(',', '.'),
             }
+    elif tipo == 'estimar_costos':
+        try:
+            factor = float(obj.get('factor', 0.6))
+        except Exception:
+            factor = 0.6
+        factor = min(max(factor, 0.05), 1.0)
+        accion = {
+            'tipo': tipo, 'factor': factor,
+            'solo_faltantes': bool(obj.get('solo_faltantes', True)),
+            'descripcion': f'Poner costos ESTIMADOS (precio × {factor:.0%}, '
+                           f'margen ~{round((1-factor)*100)}%) en las prendas sin costo',
+        }
     elif tipo == 'crear_memoria':
         texto_mem = str(obj.get('texto', '')).strip()
         tipo_mem = str(obj.get('tipo_memoria', 'NOTA')).upper().strip()[:20] or 'NOTA'
@@ -757,6 +769,21 @@ def _bloque_politica():
         return ''
     partes = []
     try:
+        from app.models import ConfigSitio
+        if ConfigSitio.get('costos_estimados') == '1':
+            factor = ConfigSitio.get('costos_factor', '0.6')
+            try:
+                margen = round((1 - float(factor)) * 100)
+            except Exception:
+                margen = 40
+            partes.append(
+                f"⚠️ COSTOS ESTIMADOS: los costos actuales son APROXIMADOS "
+                f"(precio × {factor}, margen ~{margen}%), NO son costos reales de "
+                f"producción. Cuando hables de margen/utilidad acláralo SIEMPRE "
+                f"('margen estimado, aún sin costos reales') y sugiere cargar los reales.")
+    except Exception:
+        pass
+    try:
         rt = reglas_texto()
         if rt:
             partes.append("REGLAS DEL NEGOCIO (respétalas SIEMPRE; si una acción "
@@ -1174,6 +1201,10 @@ def preguntar():
             "Si el usuario expresa una DECISIÓN/PREFERENCIA ('prefiero el proveedor X'), "
             "propón recordarla y agrega:\n"
             "ACCION_JSON: {\"tipo\":\"crear_memoria\",\"tipo_memoria\":\"PREFERENCIA\",\"texto\":\"Prefiere el proveedor X\"}\n"
+            "Si el usuario pide ESTIMAR/rellenar costos mientras consigue los reales "
+            "('pon costos al 60%', 'estima los costos'), propónlo y agrega (factor = fracción "
+            "del precio; 0.6 = margen ~40%):\n"
+            "ACCION_JSON: {\"tipo\":\"estimar_costos\",\"factor\":0.6}\n"
             "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON.\n"
             "AUTO-CHEQUEO antes de proponer cualquier acción: ¿entendí el objetivo?, "
             "¿usé datos reales (no inventados)?, ¿hay una regla que lo prohíba?, ¿el "
@@ -1409,6 +1440,43 @@ def evento_estado(id_evento):
     ev.visto_en = _dt.utcnow() if nuevo != 'NUEVO' else None
     db.session.commit()
     return jsonify({'ok': True, 'evento': ev.to_dict()}), 200
+
+
+def _aplicar_costos_estimados(factor, solo_faltantes=True):
+    """Rellena costo_unitario = precio × factor (costos ESTIMADOS, no reales).
+    Por defecto solo toca las que NO tienen costo (no pisa costos reales ya
+    cargados). Guarda el flag para que el asistente siempre lo aclare."""
+    from app.models import ConfigSitio
+    try:
+        factor = float(factor)
+    except Exception:
+        factor = 0.6
+    factor = min(max(factor, 0.05), 1.0)
+    q = PrecioColegio.query
+    if solo_faltantes:
+        q = q.filter(PrecioColegio.costo_unitario.is_(None))
+    n = 0
+    for r in q.all():
+        if r.precio_unitario:
+            r.costo_unitario = round(r.precio_unitario * factor)
+            n += 1
+    ConfigSitio.set('costos_estimados', '1')
+    ConfigSitio.set('costos_factor', str(factor))
+    db.session.commit()
+    return n, factor
+
+
+@asistente_bp.route('/estimar-costos', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def estimar_costos_endpoint():
+    """Rellena costos estimados (precio × factor) mientras se consiguen los
+    reales. body: {factor: 0.6, solo_faltantes: true}."""
+    d = request.get_json(silent=True) or {}
+    solo = d.get('solo_faltantes', True)
+    n, factor = _aplicar_costos_estimados(d.get('factor', 0.6), bool(solo))
+    return jsonify({'ok': True, 'actualizadas': n, 'factor': factor,
+                    'margen_estimado_pct': round((1 - factor) * 100)}), 200
 
 
 @asistente_bp.route('/home', methods=['GET'])
@@ -1651,6 +1719,21 @@ def ejecutar():
         return jsonify({'ok': True,
                         'mensaje': f'✅ Meta guardada: ${int(meta):,}. Iré midiendo el avance '
                                    'y te aviso si al ritmo actual no alcanza.'.replace(',', '.')}), 200
+
+    # ── Rellenar costos estimados (precio × factor) ──
+    if tipo == 'estimar_costos':
+        try:
+            factor = float(data.get('factor', 0.6))
+        except Exception:
+            factor = 0.6
+        n, factor = _aplicar_costos_estimados(factor, bool(data.get('solo_faltantes', True)))
+        margen = round((1 - factor) * 100)
+        return jsonify({
+            'ok': True,
+            'mensaje': f'✅ Puse costos ESTIMADOS en {n} referencia(s) (precio × {factor:.0%}, '
+                       f'margen ~{margen}%). Son aproximados: cuando tengas los costos reales '
+                       f'de producción, cámbialos y el margen será exacto.',
+        }), 200
 
     # ── Guardar una DECISIÓN / preferencia ──
     if tipo == 'crear_memoria':
