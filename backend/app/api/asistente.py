@@ -49,6 +49,13 @@ _MODELOS_RETIRADOS = {'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro',
                       'gemini-1.0-pro', 'gemini-pro', 'gemini-2.0-flash-001'}
 # Respaldo cuando Gemini falla/satura (routing invisible al Jefe). Opcional: DEEPSEEK_API_KEY en Render.
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '').strip()
+# Grok (xAI), API compatible con OpenAI. Si está configurada, es el motor PRINCIPAL.
+GROK_API_KEY = os.getenv('GROK_API_KEY', '').strip()
+GROK_MODEL = os.getenv('GROK_MODEL', 'grok-3').strip()
+
+# ¿Hay AL MENOS un motor de IA configurado?
+def _hay_ia():
+    return bool(GROK_API_KEY or GEMINI_API_KEY or DEEPSEEK_API_KEY)
 
 # ── Fase 2 (acciones) — APAGADO por defecto. Enciéndelo con ASISTENTE_ACCIONES=1.
 #    Aun encendido, NADA se ejecuta sin confirmación explícita del admin en la UI.
@@ -768,11 +775,63 @@ def _llamar_gemini(prompt_text):
         if not hubo_503:
             break
         time.sleep(1.5)  # espera y reintenta la lista completa
-    # Respaldo: si Gemini no respondió, intenta DeepSeek (cambio de motor invisible al Jefe).
-    ds, ds_det = _llamar_deepseek(prompt_text)
+    return None, ultimo_detalle
+
+
+def _llamar_grok(prompt_text):
+    """Grok (xAI), API compatible con OpenAI. Prueba varios ids de modelo por si
+    el configurado no existe (así no depende del nombre exacto)."""
+    if not GROK_API_KEY:
+        return None, 'sin_grok'
+    candidatos = [GROK_MODEL] if GROK_MODEL else []
+    for m in ('grok-4', 'grok-3', 'grok-2-latest', 'grok-beta'):
+        if m not in candidatos:
+            candidatos.append(m)
+    ultimo = ''
+    for modelo in candidatos:
+        try:
+            r = requests.post(
+                'https://api.x.ai/v1/chat/completions',
+                headers={'Authorization': f'Bearer {GROK_API_KEY}',
+                         'Content-Type': 'application/json'},
+                json={'model': modelo,
+                      'messages': [{'role': 'user', 'content': prompt_text}],
+                      'temperature': 0.2, 'max_tokens': 1500, 'stream': False},
+                timeout=30,
+            )
+        except Exception as e:
+            ultimo = f'grok conexión: {e}'
+            continue
+        if r.status_code == 200:
+            try:
+                return (r.json()['choices'][0]['message']['content'] or '').strip(), None
+            except Exception:
+                return '', 'grok_vacio'
+        ultimo = f'grok {r.status_code}: {r.text[:150]}'
+        logger.warning('asistente: Grok %s -> %s: %s', modelo, r.status_code, r.text[:150])
+        if r.status_code in (401, 403):
+            return None, ultimo   # llave inválida → no seguir probando modelos
+    return None, ultimo
+
+
+def _llamar_ia(prompt_text):
+    """Orquesta los motores: Grok (principal si hay llave) → Gemini → DeepSeek.
+    El cambio de motor es invisible para el Jefe."""
+    detalle = 'sin_modelo'
+    if GROK_API_KEY:
+        g, gd = _llamar_grok(prompt_text)
+        if g is not None:
+            return g, None
+        detalle = gd or detalle
+    if GEMINI_API_KEY:
+        t, d = _llamar_gemini(prompt_text)
+        if t is not None:
+            return t, None
+        detalle = d or detalle
+    ds, dsd = _llamar_deepseek(prompt_text)
     if ds is not None:
         return ds, None
-    return None, ds_det or ultimo_detalle
+    return None, dsd or detalle
 
 
 def _llamar_deepseek(prompt_text):
@@ -809,8 +868,9 @@ def _error_gemini(detalle):
             'detalle': detalle, 'code': 'ocupado',
         }), 503
     return jsonify({
-        'error': 'El asistente no respondió. Revisa la GEMINI_API_KEY o el modelo.',
-        'detalle': detalle, 'code': 'gemini_error',
+        'error': 'El asistente no respondió. Revisa la llave/modelo de IA '
+                 '(GROK_API_KEY / GROK_MODEL, o el respaldo).',
+        'detalle': detalle, 'code': 'ia_error',
     }), 502
 
 
@@ -819,11 +879,11 @@ def _error_gemini(detalle):
 @rol_requerido('administrador', 'vendedor', 'cajero')
 @limiter.limit("20 per minute")
 def preguntar():
-    """Recibe {pregunta} y responde con datos reales vía Gemini (solo lectura)."""
-    if not GEMINI_API_KEY:
+    """Recibe {pregunta} y responde con datos reales vía IA (solo lectura)."""
+    if not _hay_ia():
         return jsonify({
-            'error': 'El asistente aún no está configurado. Falta la variable '
-                     'GEMINI_API_KEY en el servidor.',
+            'error': 'El asistente aún no está configurado. Falta una llave de IA '
+                     '(GROK_API_KEY, GEMINI_API_KEY o DEEPSEEK_API_KEY) en el servidor.',
             'code': 'sin_config',
         }), 503
 
@@ -1007,7 +1067,7 @@ def preguntar():
         f"=== PREGUNTA DEL USUARIO ===\n{pregunta}"
     )
 
-    texto, detalle = _llamar_gemini(base)
+    texto, detalle = _llamar_ia(base)
     if texto is None:
         return _error_gemini(detalle)
 
@@ -1031,7 +1091,7 @@ def preguntar():
             "necesario, responde en español, claro y breve, y NO vuelvas a buscar. No inventes; "
             "si algo no se encontró, dilo y explica qué sí puedes dar."
         )
-        texto, detalle = _llamar_gemini(seguimiento)
+        texto, detalle = _llamar_ia(seguimiento)
         if texto is None:
             return _error_gemini(detalle)
 
