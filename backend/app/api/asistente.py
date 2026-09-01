@@ -612,6 +612,23 @@ def _tool_movimientos_prenda(colegio, texto, talla=None):
     return {'encontrado': True, 'prenda': pnombre, 'talla': talla, 'movimientos': out}
 
 
+# Campos con datos personales que NO deben salir del backend hacia el modelo de
+# IA externo ni pintarse en tarjetas (minimización de PII — Ley 1581).
+_PII_KEYS = {'telefono', 'cliente_telefono', 'telefono_cliente', 'email',
+             'cliente_email', 'correo', 'direccion', 'cliente_direccion',
+             'nit', 'cliente_nit'}
+
+
+def _sin_pii(obj):
+    """Devuelve una copia del resultado sin campos personales (teléfono, correo,
+    dirección, NIT). Recursivo sobre dicts y listas."""
+    if isinstance(obj, dict):
+        return {k: _sin_pii(v) for k, v in obj.items() if k not in _PII_KEYS}
+    if isinstance(obj, list):
+        return [_sin_pii(x) for x in obj]
+    return obj
+
+
 def _ejecutar_busqueda(obj):
     tipo = obj.get('tipo')
     if tipo == 'movimientos':
@@ -1012,18 +1029,23 @@ def _llamar_deepseek(prompt_text):
 
 
 def _error_gemini(detalle):
-    """Devuelve la respuesta de error adecuada (saturación vs. problema real)."""
+    """Devuelve la respuesta de error adecuada (saturación vs. problema real).
+    El detalle técnico se REGISTRA en logs, nunca se envía al usuario."""
+    logger.warning('asistente: fallo de IA -> %s', detalle)
+    # El detalle técnico solo se expone si ASISTENTE_DEBUG=1 (para diagnosticar);
+    # por defecto va a los logs y al usuario solo un mensaje limpio.
+    extra = {'detalle': detalle} if os.getenv('ASISTENTE_DEBUG', '').strip() == '1' else {}
     d = (detalle or '').upper()
-    if 'UNAVAILABLE' in d or (detalle or '').startswith('503'):
+    if 'UNAVAILABLE' in d or (detalle or '').startswith('503') or '429' in d:
         return jsonify({
-            'error': '⏳ Los modelos de IA gratis de Google están saturados ahora mismo '
-                     '(mucha demanda). Espera unos segundos y vuelve a intentar.',
-            'detalle': detalle, 'code': 'ocupado',
+            'error': '⏳ El asistente está saturado ahora mismo. Espera unos segundos '
+                     'y vuelve a intentar.',
+            'code': 'ocupado', **extra,
         }), 503
     return jsonify({
-        'error': 'El asistente no respondió. Revisa la llave/modelo de IA '
-                 '(GROK_API_KEY / GROK_MODEL, o el respaldo).',
-        'detalle': detalle, 'code': 'ia_error',
+        'error': 'El asistente no respondió en este momento. Inténtalo de nuevo en '
+                 'unos segundos; si sigue, avísale al administrador.',
+        'code': 'ia_error', **extra,
     }), 502
 
 
@@ -1263,7 +1285,7 @@ def preguntar():
         if not consulta:
             break
         try:
-            resultado = _ejecutar_busqueda(consulta)
+            resultado = _sin_pii(_ejecutar_busqueda(consulta))
         except Exception as e:
             logger.warning("asistente: búsqueda falló: %s", e)
             resultado = {'error': 'la búsqueda falló'}

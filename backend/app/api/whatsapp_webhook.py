@@ -34,9 +34,15 @@ logger = logging.getLogger("raloz-wa-webhook")
 wa_webhook_bp = Blueprint('wa_webhook', __name__)
 
 GRAPH_VERSION = os.getenv('GRAPH_VERSION', 'v21.0').strip()
-VERIFY_TOKEN = os.getenv('VERIFY_TOKEN', 'raloz-verify').strip()
+_VERIFY_DEFAULT = 'raloz-verify'
+VERIFY_TOKEN = os.getenv('VERIFY_TOKEN', _VERIFY_DEFAULT).strip()
 APP_SECRET = os.getenv('APP_SECRET', '').strip()
 ADMIN_WHATSAPP = os.getenv('ADMIN_WHATSAPP', '').strip()
+# Producción: Render define la env RENDER; también se puede forzar con PRODUCTION=1.
+_ES_PROD = bool(os.getenv('RENDER') or os.getenv('PRODUCTION'))
+# Exigir firma HMAC de Meta (fail-closed). Actívalo con WA_REQUIRE_SIGNATURE=1
+# DESPUÉS de configurar APP_SECRET, para no dejar el bot sin señal por sorpresa.
+_REQUIERE_FIRMA = os.getenv('WA_REQUIRE_SIGNATURE', '0').strip() == '1'
 
 
 def _cfg():
@@ -104,6 +110,11 @@ def verificar():
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
+    # Fail-closed: en producción no aceptamos el token por defecto ni vacío.
+    if _ES_PROD and (not VERIFY_TOKEN or VERIFY_TOKEN == _VERIFY_DEFAULT):
+        logger.error('VERIFY_TOKEN sin configurar (o es el default) en producción — '
+                     'verificación rechazada. Define un VERIFY_TOKEN propio en Render.')
+        return 'forbidden', 403
     if mode == 'subscribe' and token == VERIFY_TOKEN:
         logger.info('Webhook verificado por Meta ✔')
         return challenge or '', 200
@@ -113,7 +124,14 @@ def verificar():
 
 def _firma_valida() -> bool:
     if not APP_SECRET:
-        return True   # sin APP_SECRET no podemos validar (dev)
+        # Sin APP_SECRET no se puede validar la firma.
+        if _ES_PROD and _REQUIERE_FIRMA:
+            logger.error('APP_SECRET ausente pero WA_REQUIRE_SIGNATURE=1 — webhook rechazado.')
+            return False
+        if _ES_PROD:
+            logger.warning('APP_SECRET no configurado en producción: webhook SIN validar firma. '
+                           'Configura APP_SECRET y WA_REQUIRE_SIGNATURE=1 para cerrar esto.')
+        return True   # dev, o prod sin exigir firma (para no romper el bot)
     header_sig = request.headers.get('X-Hub-Signature-256', '')
     if not header_sig.startswith('sha256='):
         logger.warning('Webhook sin firma válida (rechazado)')
