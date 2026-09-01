@@ -731,7 +731,7 @@ def _llamar_gemini(prompt_text):
     """Llama a Gemini probando modelos vigentes. Devuelve (texto|None, detalle)."""
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 600},
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1500},
     }
     candidatos = []
     if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
@@ -785,7 +785,7 @@ def _llamar_deepseek(prompt_text):
             headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
             json={'model': 'deepseek-chat',
                   'messages': [{'role': 'user', 'content': prompt_text}],
-                  'temperature': 0.2, 'max_tokens': 700, 'stream': False},
+                  'temperature': 0.2, 'max_tokens': 1500, 'stream': False},
             timeout=20,
         )
     except Exception as e:

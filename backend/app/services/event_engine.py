@@ -30,6 +30,7 @@ UMBRAL_STOCK_BAJO = 3     # "hard low": bajo aunque no tenga ventas
 UMBRAL_WATCH = 10         # banda de vigilancia: el analyzer decide si es riesgo real
 
 _ORDEN_SEV = {'CRITICO': 0, 'IMPORTANTE': 1, 'PRECAUCION': 2, 'INFORMATIVO': 3}
+_SCORE_CARTERA = 85
 EMOJI_SEV = {'CRITICO': '🔴', 'IMPORTANTE': '🟠', 'PRECAUCION': '🟡', 'INFORMATIVO': '🔵'}
 
 
@@ -84,18 +85,31 @@ def detectar_stock(umbral=UMBRAL_WATCH, limite=60):
     return out[:limite]
 
 
-def detectar_cartera(dias_importante=15, dias_critico=30):
-    """Facturas con saldo pendiente que ya llevan días sin cobrarse."""
+# Cartera: la severidad la define el MONTO (no solo la antigüedad). Deudas
+# menores a este piso son ruido (redondeos, centavos) y no generan alerta.
+CARTERA_PISO = 20_000          # ignora saldos por debajo de esto
+CARTERA_CRITICO = 150_000      # a partir de aquí (o muy viejo) es 🔴
+CARTERA_IMPORTANTE = 40_000    # a partir de aquí es 🟠; por debajo, 🟡
+
+
+def detectar_cartera(dias_min=15, dias_muy_viejo=90):
+    """Facturas con saldo pendiente relevante. La severidad pondera MONTO y
+    antigüedad, para no ahogar el tablero con deudas insignificantes."""
     hoy = date.today()
     out = []
     facs = Factura.query.filter(Factura.estado == 'PENDIENTE',
-                                Factura.saldo_pendiente > 0).all()
+                                Factura.saldo_pendiente >= CARTERA_PISO).all()
     for f in facs:
         dias = (hoy - (f.fecha_factura or hoy)).days
-        if dias < dias_importante:
+        if dias < dias_min:
             continue
-        sev = Evento.CRITICO if dias >= dias_critico else Evento.IMPORTANTE
         saldo = int(f.saldo_pendiente or 0)
+        if saldo >= CARTERA_CRITICO or dias >= dias_muy_viejo:
+            sev = Evento.CRITICO
+        elif saldo >= CARTERA_IMPORTANTE:
+            sev = Evento.IMPORTANTE
+        else:
+            sev = Evento.PRECAUCION
         out.append({
             'tipo': 'factura_por_cobrar', 'severidad': sev,
             'titulo': f'Saldo por cobrar: {f.numero_factura}',
@@ -266,16 +280,36 @@ def reconciliar(candidatos):
 
 
 def _agrupar(eventos):
-    """Agrupa varios eventos de stock de la misma prenda+colegio en una sola
-    alerta ('riesgo de reposición en 4 tallas'). El resto pasa tal cual."""
-    grupos, sueltos = {}, []
+    """Agrupa para no ahogar el tablero: las tallas de una misma prenda en una
+    alerta, y TODA la cartera por cobrar en un solo resumen. El resto pasa igual."""
+    grupos, cartera, sueltos = {}, [], []
     for e in eventos:
         d = e.datos_dict or {}
         if e.tipo in ('stock_bajo', 'stock_agotado') and d.get('id_producto'):
             grupos.setdefault((d.get('id_colegio'), d['id_producto']), []).append(e)
+        elif e.tipo == 'factura_por_cobrar':
+            cartera.append(e)
         else:
             sueltos.append(e)
     items = []
+    # Cartera → un único resumen (total + cuántas + las mayores)
+    if cartera:
+        cartera.sort(key=lambda e: -((e.datos_dict or {}).get('saldo') or 0))
+        total = sum((e.datos_dict or {}).get('saldo') or 0 for e in cartera)
+        top = cartera[:3]
+        detalle = 'Mayores: ' + '; '.join(
+            f"{(e.datos_dict or {}).get('cliente') or 'Cliente'} {_cop((e.datos_dict or {}).get('saldo'))}"
+            for e in top) + '.'
+        sev = cartera[0].severidad  # la más grave (ya vienen ordenadas por monto)
+        items.append({
+            'agrupado': True, 'severidad': sev,
+            'score': _SCORE_CARTERA if (sev == Evento.CRITICO) else 55,
+            'titulo': f'Cartera por cobrar: {len(cartera)} facturas · {_cop(total)}',
+            'detalle': detalle,
+            'recomendacion': 'Priorizar el cobro de las de mayor monto y las más antiguas.',
+            'ids': [e.id_evento for e in cartera],
+            'tipo': 'grupo_cartera',
+        })
     for _, evs in grupos.items():
         if len(evs) == 1:
             sueltos.append(evs[0])

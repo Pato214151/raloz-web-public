@@ -41,23 +41,27 @@ def test_stock_no_vendible_se_ignora(app):
         assert ee.detectar_stock() == []
 
 
-def test_detecta_cartera_por_dias(app):
+def test_detecta_cartera_pondera_monto_y_antiguedad(app):
     _base(app)
     with app.app_context():
-        vieja = date.today() - timedelta(days=40)
-        media = date.today() - timedelta(days=20)
-        nueva = date.today() - timedelta(days=2)
-        for i, (f, saldo) in enumerate([(vieja, 5000), (media, 3000), (nueva, 9000)], start=1):
-            db.session.add(Factura(numero_factura=f'F{i}', id_colegio=1, fecha_factura=f,
-                                   total=10000, saldo_pendiente=saldo, estado='PENDIENTE',
+        casos = [
+            ('F1', date.today() - timedelta(days=40), 200_000),  # monto alto → CRITICO
+            ('F2', date.today() - timedelta(days=20), 50_000),   # medio, reciente → IMPORTANTE
+            ('F3', date.today() - timedelta(days=100), 30_000),  # muy viejo → CRITICO
+            ('F4', date.today() - timedelta(days=2), 500_000),   # nueva (<15 días) → fuera
+            ('F5', date.today() - timedelta(days=25), 5_000),    # bajo el piso → fuera (ruido)
+        ]
+        for num, f, saldo in casos:
+            db.session.add(Factura(numero_factura=num, id_colegio=1, fecha_factura=f,
+                                   total=saldo, saldo_pendiente=saldo, estado='PENDIENTE',
                                    usuario_creacion='t'))
         db.session.commit()
         cands = ee.detectar_cartera()
-        # la de 2 días no entra; la de 40 es CRITICO; la de 20 es IMPORTANTE
-        assert len(cands) == 2
         sev = {c['datos']['numero']: c['severidad'] for c in cands}
+        assert set(sev) == {'F1', 'F2', 'F3'}          # F4 y F5 quedan fuera
         assert sev['F1'] == Evento.CRITICO
         assert sev['F2'] == Evento.IMPORTANTE
+        assert sev['F3'] == Evento.CRITICO             # >90 días
 
 
 def test_venta_presencial_sin_descuento_se_marca(app):
@@ -95,12 +99,14 @@ def test_observar_prioriza_y_resume(app):
         db.session.add(Stock(id_colegio=1, id_producto=1, talla_individual='M', cantidad=0))
         db.session.add(Factura(numero_factura='F1', id_colegio=1,
                                fecha_factura=date.today() - timedelta(days=40),
-                               total=10000, saldo_pendiente=5000, estado='PENDIENTE',
+                               total=200000, saldo_pendiente=200000, estado='PENDIENTE',
                                usuario_creacion='t'))
         db.session.commit()
         r = ee.observar(persistir=True)
         assert r['hay_algo'] is True
-        assert r['resumen']['CRITICO'] >= 1        # la cartera vieja
+        assert r['resumen']['CRITICO'] >= 1        # la cartera de monto alto
         assert r['resumen']['IMPORTANTE'] >= 1     # el stock agotado
         # el primero de la lista es el de mayor severidad (CRITICO antes que IMPORTANTE)
         assert r['eventos'][0]['severidad'] == 'CRITICO'
+        # la cartera se muestra AGRUPADA en un solo resumen
+        assert any(it.get('tipo') == 'grupo_cartera' for it in r['items'])
