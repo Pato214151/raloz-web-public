@@ -55,8 +55,14 @@ WA_LOG_TOKEN = os.getenv("WA_LOG_TOKEN", "").strip()
 #    SOLO se usa cuando el bot de reglas NO entiende. Ve únicamente info PÚBLICA
 #    (colegios, horarios, pagos, domicilio, garantía); NUNCA datos internos ni el sistema.
 BOT_IA_FALLBACK = os.getenv("BOT_IA_FALLBACK", "").strip() == "1"
-_IA_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-_IA_MODELOS = ("gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash")
+# El bot puede usar su PROPIA llave (BOT_GEMINI_API_KEY) para no competir por el
+# cupo con el panel; si no está, comparte la GEMINI_API_KEY general.
+_IA_API_KEY = os.getenv("BOT_GEMINI_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
+# Modelos con MÁS cupo gratis primero (lite/2.0 dan mucho más que 2.5-flash).
+_IA_MODELOS = tuple(dict.fromkeys(m for m in (
+    os.getenv("BOT_GEMINI_MODEL", "").strip(),
+    "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash",
+    "gemini-flash-latest", "gemini-2.5-flash") if m))
 # Respaldo cuando Gemini falla o está saturado. Opcional: pon DEEPSEEK_API_KEY en Render.
 _DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 _IA_SISTEMA = (
