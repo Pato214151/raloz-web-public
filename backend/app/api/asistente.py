@@ -1064,8 +1064,9 @@ def _llamar_grok(prompt_text):
         if m not in candidatos:
             candidatos.append(m)
     ultimo = ''
+    _espera = (2, 5, 8)   # backoff ante saturación (Grok es el único motor)
     for modelo in candidatos:
-        for intento in range(2):   # 1 reintento ante saturación (429/503)
+        for intento in range(3):   # hasta 3 intentos ante 429/503
             try:
                 r = requests.post(
                     'https://api.x.ai/v1/chat/completions',
@@ -1088,9 +1089,9 @@ def _llamar_grok(prompt_text):
             logger.warning('asistente: Grok %s -> %s: %s', modelo, r.status_code, r.text[:150])
             if r.status_code in (401, 403):
                 return None, ultimo   # llave inválida → no seguir probando
-            if r.status_code in (429, 503) and intento == 0:
-                time.sleep(2)
-                continue              # saturado → reintenta el mismo modelo
+            if r.status_code in (429, 503) and intento < 2:
+                time.sleep(_espera[intento])   # saturado → espera y reintenta
+                continue
             break                     # 400/404/422… → probar el siguiente modelo
     return None, ultimo
 
@@ -1328,7 +1329,7 @@ def preguntar():
 
     # Bucle de búsqueda: si la IA pide un dato con BUSCAR, lo consultamos y se lo damos.
     ultima_busqueda = None   # para devolver datos estructurados a la UI (tarjetas)
-    for _ in range(5):       # varias rondas → el agente encadena un plan multi-paso
+    for _ in range(3):       # rondas de plan multi-paso (menos llamadas al modelo)
         consulta = _extraer_json_marcador(texto, 'BUSCAR')
         if not consulta:
             break
