@@ -501,10 +501,19 @@ export default function Asistente() {
   })
   const [input, setInput] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [modo, setModo] = useState(null)   // modo del Observador
   const finRef = useRef(null)
   const taRef = useRef(null)
 
   useEffect(() => { finRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [mensajes, cargando])
+  useEffect(() => {
+    api.get('/asistente/modo').then(r => setModo(r.data.modo)).catch(() => {})
+  }, [])
+  const cambiarModo = async (m) => {
+    const prev = modo
+    setModo(m)
+    try { await api.post('/asistente/modo', { modo: m }) } catch { setModo(prev) }
+  }
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mensajes.slice(-40))) } catch { /* lleno */ }
   }, [mensajes])
@@ -721,6 +730,34 @@ export default function Asistente() {
             Ver métricas del día <ChevronRight size={13} />
           </button>
         </Panel>
+
+        {/* Observador — modo de autonomía */}
+        {modo && (
+          <Panel titulo="Observador" icon={Activity}>
+            <p className="text-[12px] text-[#718096] mb-2.5">Qué hace RALOZ cuando detecta algo:</p>
+            <div className="flex flex-col gap-1.5">
+              {[
+                ['SUGERIR', 'Sugerir', 'Detecta y recomienda. Tú decides.'],
+                ['PREPARAR', 'Preparar', 'Deja la acción lista para confirmar.'],
+                ['AUTONOMO', 'Autónomo', 'Crea recordatorios solo (nunca cambios ni compras).'],
+              ].map(([val, label, desc]) => {
+                const activo = modo === val
+                return (
+                  <button key={val} onClick={() => cambiarModo(val)}
+                    className={`text-left px-3 py-2 rounded-lg border transition-colors ${
+                      activo ? 'border-[#071E49] bg-[#F7F8FA]' : 'border-[#E7EBF1] hover:bg-[#F7F8FA]'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${activo ? '' : 'opacity-30'}`}
+                        style={{ background: activo ? YELLOW : '#718096' }} />
+                      <span className="text-[12.5px] font-semibold text-[#10213F]">{label}</span>
+                    </div>
+                    <p className="text-[11px] text-[#718096] mt-0.5 ml-3.5">{desc}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </Panel>
+        )}
 
         {/* Sugerencias */}
         <Panel titulo="Sugerencias" icon={Sparkles}>

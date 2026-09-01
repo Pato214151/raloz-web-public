@@ -14,7 +14,8 @@ Diseño:
     priorizado.
 """
 import logging
-from datetime import date
+import threading
+from datetime import date, datetime
 
 from app import db
 from app.models import (
@@ -310,18 +311,163 @@ def observar(persistir=True):
     if persistir:
         cerrados = reconciliar(candidatos)
         nuevos = registrar_eventos(candidatos)
+        try:
+            _auto_accion(nuevos)     # autonomía controlada (solo si el modo lo permite)
+        except Exception as e:
+            logger.warning("event_engine: auto-acción falló: %s", e)
     abiertos = Evento.query.filter(Evento.estado.in_(('NUEVO', 'VISTO'))).all()
     abiertos.sort(key=lambda e: (_ORDEN_SEV.get(e.severidad, 9), -(e.score or 0)))
     resumen = {'CRITICO': 0, 'IMPORTANTE': 0, 'PRECAUCION': 0, 'INFORMATIVO': 0}
     for e in abiertos:
         resumen[e.severidad] = resumen.get(e.severidad, 0) + 1
+    nuevos_relev = [e for e in nuevos if e.severidad in ('CRITICO', 'IMPORTANTE')]
     return {
         'generado_en': date.today().isoformat(),
         'nuevos': len(nuevos),
+        'nuevos_relevantes': len(nuevos_relev),
+        'nuevo_top': (nuevos_relev[0].titulo if nuevos_relev else None),
         'resueltos': cerrados,
         'total_abierto': len(abiertos),
         'resumen': resumen,
         'hay_algo': len(abiertos) > 0,
+        'modo': modo_observador(),
         'items': _agrupar(abiertos),                    # agrupado + priorizado (para mostrar)
         'eventos': [e.to_dict() for e in abiertos],     # crudo (compat)
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Modos de autonomía · Auto-acción controlada · Push · Tiempo real
+# ─────────────────────────────────────────────────────────────────────────
+# SUGERIR  = detecta → analiza → recomienda (por defecto).
+# PREPARAR = igual, pero deja la acción lista para confirmar en 1 clic.
+# AUTONOMO = ejecuta SOLO acciones de bajo riesgo previamente autorizadas
+#            (crear recordatorio). Nunca cambios de stock/costo/estado ni compras.
+MODO_SUGERIR, MODO_PREPARAR, MODO_AUTONOMO = 'SUGERIR', 'PREPARAR', 'AUTONOMO'
+_MODOS = (MODO_SUGERIR, MODO_PREPARAR, MODO_AUTONOMO)
+# Únicas acciones que el modo AUTÓNOMO puede ejecutar solo (bajo riesgo, reversible):
+_AUTO_WHITELIST = {'crear_tarea'}
+_SCORE_AUTO = 80   # solo eventos realmente prioritarios
+
+
+def modo_observador():
+    from app.models import ConfigSitio
+    m = (ConfigSitio.get('observador_modo', MODO_SUGERIR) or MODO_SUGERIR).upper()
+    return m if m in _MODOS else MODO_SUGERIR
+
+
+def set_modo_observador(modo):
+    from app.models import ConfigSitio
+    modo = str(modo or '').upper()
+    if modo not in _MODOS:
+        return None
+    ConfigSitio.set('observador_modo', modo)
+    db.session.commit()
+    return modo
+
+
+def _auto_accion(nuevos):
+    """Autonomía CONTROLADA: en modo AUTÓNOMO, ejecuta las acciones de bajo
+    riesgo (crear recordatorio) de los eventos nuevos de alta prioridad, y las
+    deja en la bitácora (auditable + reversible). Nada más se ejecuta solo."""
+    if modo_observador() != MODO_AUTONOMO or not nuevos:
+        return
+    from app.models import Tarea, Usuario, AccionAsistente
+    admin = Usuario.query.filter_by(rol='administrador').first()
+    if not admin:
+        return  # sin un dueño a quien atribuirlo, no actuamos
+    for ev in nuevos:
+        if (ev.score or 0) < _SCORE_AUTO:
+            continue
+        accion = (ev.datos_dict or {}).get('accion_sugerida') or {}
+        if accion.get('tipo') not in _AUTO_WHITELIST:
+            continue
+        titulo = str(accion.get('titulo', ''))[:200]
+        if not titulo:
+            continue
+        t = Tarea(titulo=titulo, descripcion=f'[Observador] {ev.recomendacion or ""}'[:500],
+                  creada_por=admin.id_usuario)
+        db.session.add(t)
+        db.session.flush()
+        acc = AccionAsistente(
+            tipo='crear_tarea', descripcion=f'[Observador·auto] {titulo}',
+            reversible=True, verificado=(Tarea.query.get(t.id_tarea) is not None),
+            resultado='VERIFICADA', usuario='[Observador]')
+        acc.set_antes({})
+        acc.set_despues({'id_tarea': t.id_tarea})
+        db.session.add(acc)
+        ev.estado = 'VISTO'
+        ev.visto_en = datetime.utcnow()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def _texto_resumen(r):
+    partes = []
+    for sev, et in (('CRITICO', '🔴'), ('IMPORTANTE', '🟠'), ('PRECAUCION', '🟡')):
+        n = r['resumen'].get(sev, 0)
+        if n:
+            partes.append(f'{et} {n}')
+    return ' · '.join(partes) if partes else 'Todo en orden'
+
+
+def _push(titulo, cuerpo):
+    try:
+        from app.api.push import enviar_push_a_todos
+        return enviar_push_a_todos(titulo, cuerpo, url='/asistente', tag='observador')
+    except Exception as e:
+        logger.warning("event_engine: push falló: %s", e)
+        return 0
+
+
+# Coalescing (la "cola"): varios disparos seguidos colapsan en UN solo escaneo,
+# así 5 eventos simultáneos no producen 5 respuestas.
+_timer_lock = threading.Lock()
+_timer = {'t': None}
+
+
+def disparar(app, motivo='evento', delay=20):
+    """Tiempo real: agenda un escaneo del Observador tras `delay` s. Si ya hay
+    uno agendado, no agenda otro (coalesce). Best-effort; nunca lanza al caller."""
+    def _run():
+        with _timer_lock:
+            _timer['t'] = None
+        try:
+            with app.app_context():
+                r = observar(persistir=True)
+                if r.get('nuevos_relevantes'):
+                    top = r.get('nuevo_top') or 'Hay algo que revisar'
+                    _push('RALOZ · Alerta', f'{top} — {_texto_resumen(r)}')
+        except Exception as e:
+            logger.warning("event_engine: disparo (%s) falló: %s", motivo, e)
+
+    try:
+        with _timer_lock:
+            if _timer['t'] is not None:
+                return  # ya hay un escaneo en camino → coalesce
+            t = threading.Timer(delay, _run)
+            t.daemon = True
+            _timer['t'] = t
+            t.start()
+    except Exception as e:
+        logger.warning("event_engine: no se pudo agendar disparo: %s", e)
+
+
+def push_resumen(r, titulo='RALOZ · Buenos días, Jefe'):
+    """Manda un push con el resumen del Observador SOLO si hay algo relevante
+    (🔴/🟠). Devuelve cuántos push se enviaron."""
+    relev = r['resumen'].get('CRITICO', 0) + r['resumen'].get('IMPORTANTE', 0)
+    if not relev:
+        return 0
+    return _push(titulo, f'Revisé el negocio: {_texto_resumen(r)}. Toca mirarlo.')
+
+
+def resumen_matutino(app):
+    """'Buenos días, Jefe': corre el Observador y, si hay algo relevante, manda
+    un push con el resumen. Pensado para el cron de la mañana."""
+    with app.app_context():
+        r = observar(persistir=True)
+        push_resumen(r)
+        return r

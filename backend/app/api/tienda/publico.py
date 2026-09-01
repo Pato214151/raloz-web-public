@@ -14,7 +14,7 @@ import logging
 import requests
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 
 from app import db, limiter
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO, expandir_grupo_para_producto
@@ -968,6 +968,14 @@ def mp_webhook():
             except Exception as e:
                 logger.error('[WEBHOOK] Error fabricacion: %s', str(e), exc_info=True)
                 db.session.rollback()
+
+            # Tiempo real: el Observador evalúa YA (no espera al cron de 3 h).
+            # Best-effort y con coalescing: nunca afecta el procesamiento del pago.
+            try:
+                from app.services.event_engine import disparar
+                disparar(current_app._get_current_object(), motivo='pago')
+            except Exception:
+                pass
 
         elif estado_mp in ('refunded', 'charged_back') and pedido.id_factura:
             # Reembolso / contracargo de un pedido YA facturado (venta completada).

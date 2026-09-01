@@ -165,6 +165,38 @@ def _job_observador():
 threading.Thread(target=_job_observador, daemon=True, name='observador').start()
 
 
+# ─── Job: resumen matutino del Observador (push ~8:00 Colombia) ───
+def _job_resumen_matutino():
+    """'Buenos días, Jefe': una vez al día (~8:00 Colombia = 13:00 UTC) manda
+    un push al celular con el resumen del negocio, si hay algo relevante.
+    Un advisory lock evita que varios workers manden el push repetido."""
+    from datetime import timedelta as _td
+    from sqlalchemy import text
+    import app.services.event_engine as ee
+    while True:
+        ahora = datetime.utcnow()
+        objetivo = ahora.replace(hour=13, minute=0, second=0, microsecond=0)
+        if objetivo <= ahora:
+            objetivo += _td(days=1)
+        time.sleep(max(60, (objetivo - ahora).total_seconds()))
+        try:
+            with app.app_context():
+                tengo_lock = db.session.execute(
+                    text("SELECT pg_try_advisory_xact_lock(1006)")
+                ).scalar()
+                if tengo_lock:
+                    r = ee.observar(persistir=True)
+                    enviados = ee.push_resumen(r)
+                    if enviados:
+                        logger.info('[OBSERVADOR-AM] Resumen matutino enviado a %d dispositivo(s)', enviados)
+                db.session.commit()
+        except Exception as e:
+            logger.error('[OBSERVADOR-AM] Error: %s', str(e))
+
+
+threading.Thread(target=_job_resumen_matutino, daemon=True, name='observador-matutino').start()
+
+
 # ─── Ducklab: latido de telemetría al portal (cada 3 min) ────────
 # Reporta "online" + versión al portal Ducklab para el monitoreo en vivo y el
 # dead-man switch. Se ACTIVA SOLO si DUCKLAB_API_KEY y DUCKLAB_TELEMETRY_URL

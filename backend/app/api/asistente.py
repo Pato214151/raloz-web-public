@@ -1113,6 +1113,23 @@ def evento_estado(id_evento):
     return jsonify({'ok': True, 'evento': ev.to_dict()}), 200
 
 
+@asistente_bp.route('/modo', methods=['GET', 'POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def modo_observador_endpoint():
+    """Ver o cambiar el modo de autonomía del Observador.
+    SUGERIR (recomienda) · PREPARAR (deja la acción lista) · AUTONOMO
+    (ejecuta solo acciones de bajo riesgo: crear recordatorios)."""
+    from app.services.event_engine import modo_observador, set_modo_observador, _MODOS
+    if request.method == 'GET':
+        return jsonify({'modo': modo_observador(), 'opciones': list(_MODOS)}), 200
+    nuevo = (request.get_json(silent=True) or {}).get('modo')
+    r = set_modo_observador(nuevo)
+    if not r:
+        return jsonify({'error': 'Modo inválido. Usa SUGERIR, PREPARAR o AUTONOMO.'}), 400
+    return jsonify({'ok': True, 'modo': r}), 200
+
+
 @asistente_bp.route('/ejecutar', methods=['POST'])
 @jwt_required()
 @rol_requerido('administrador')
