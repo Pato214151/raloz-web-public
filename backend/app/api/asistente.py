@@ -28,6 +28,12 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy import func, and_
 
 from app import db, limiter
+from app.agent.tool_registry import (
+    get_action,
+    get_tool,
+    render_actions_prompt,
+    render_tools_prompt,
+)
 from app.utils.decorators import rol_requerido, get_current_identity, registrar_auditoria
 from app.models import (
     Factura, FacturaDetalle, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
@@ -212,6 +218,12 @@ def _extraer_accion(texto):
     if not isinstance(obj, dict):
         return texto, None
     tipo = obj.get('tipo')
+    # El registro central valida la forma mínima antes de entrar en las
+    # validaciones semánticas específicas de cada acción. Esto evita que el
+    # prompt y el parser se desincronicen al agregar una acción nueva.
+    spec = get_action(tipo)
+    if not spec or not spec.validate(obj):
+        return texto, None
     accion = None
     if tipo == 'cambiar_estado_pedido':
         estado = str(obj.get('estado', '')).upper().strip()
@@ -631,42 +643,39 @@ def _sin_pii(obj):
 
 def _ejecutar_busqueda(obj):
     tipo = obj.get('tipo')
-    if tipo == 'movimientos':
-        return _tool_movimientos_prenda(obj.get('colegio', ''),
-                                        obj.get('texto') or obj.get('prenda', ''), obj.get('talla'))
-    if tipo == 'buscar_prenda':
-        return _tool_buscar_prenda(obj.get('colegio', ''), obj.get('texto') or obj.get('prenda', ''))
-    if tipo == 'buscar_factura':
-        return _tool_buscar_factura(obj.get('referencia') or obj.get('factura', ''))
-    if tipo == 'pedidos_cliente':
-        return _tool_pedidos_telefono(obj.get('telefono', ''))
-    if tipo == 'ventas_periodo':
-        return _tool_ventas_periodo(obj.get('desde'), obj.get('hasta'),
-                                    obj.get('mes'), obj.get('anio') or obj.get('año'))
-    if tipo == 'top_productos':
-        return _tool_top_productos(obj.get('desde'), obj.get('hasta'),
-                                   obj.get('mes'), obj.get('anio') or obj.get('año'),
-                                   obj.get('limite') or 8)
-    if tipo == 'simular_precio':
-        return _tool_simular_precio(obj.get('colegio'), obj.get('prenda') or obj.get('texto'),
-                                    obj.get('porcentaje'))
-    if tipo == 'bitacora':
-        return _tool_bitacora(obj.get('limite') or 10)
-    if tipo == 'observar':
-        return _tool_observar()
-    if tipo == 'home':
-        return _tool_home()
-    if tipo == 'calendario':
-        return _tool_calendario(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
-    if tipo == 'ventas_por_dia':
-        return _tool_ventas_por_dia(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
-    if tipo == 'gastos':
-        return _tool_gastos(obj.get('desde'), obj.get('hasta'))
-    if tipo == 'flujo_caja':
-        return _tool_flujo_caja(obj.get('desde'), obj.get('hasta'))
-    if tipo == 'simular_devolucion':
-        return _tool_simular_devolucion(obj.get('referencia') or obj.get('factura', ''))
-    return {'error': 'búsqueda no soportada'}
+    if not get_tool(tipo):
+        return {'error': 'búsqueda no soportada'}
+    # El registro controla qué nombres existen; este adaptador solo traduce
+    # el payload JSON al contrato de cada función legacy durante la migración.
+    handlers = {
+        'movimientos': lambda: _tool_movimientos_prenda(
+            obj.get('colegio', ''), obj.get('texto') or obj.get('prenda', ''), obj.get('talla')),
+        'buscar_prenda': lambda: _tool_buscar_prenda(
+            obj.get('colegio', ''), obj.get('texto') or obj.get('prenda', '')),
+        'buscar_factura': lambda: _tool_buscar_factura(
+            obj.get('referencia') or obj.get('factura', '')),
+        'pedidos_cliente': lambda: _tool_pedidos_telefono(obj.get('telefono', '')),
+        'ventas_periodo': lambda: _tool_ventas_periodo(
+            obj.get('desde'), obj.get('hasta'), obj.get('mes'), obj.get('anio') or obj.get('año')),
+        'top_productos': lambda: _tool_top_productos(
+            obj.get('desde'), obj.get('hasta'), obj.get('mes'), obj.get('anio') or obj.get('año'),
+            obj.get('limite') or 8),
+        'simular_precio': lambda: _tool_simular_precio(
+            obj.get('colegio'), obj.get('prenda') or obj.get('texto'), obj.get('porcentaje')),
+        'bitacora': lambda: _tool_bitacora(obj.get('limite') or 10),
+        'observar': _tool_observar,
+        'home': _tool_home,
+        'calendario': lambda: _tool_calendario(
+            obj.get('desde'), obj.get('hasta'), obj.get('dias')),
+        'ventas_por_dia': lambda: _tool_ventas_por_dia(
+            obj.get('desde'), obj.get('hasta'), obj.get('dias')),
+        'gastos': lambda: _tool_gastos(obj.get('desde'), obj.get('hasta')),
+        'flujo_caja': lambda: _tool_flujo_caja(obj.get('desde'), obj.get('hasta')),
+        'simular_devolucion': lambda: _tool_simular_devolucion(
+            obj.get('referencia') or obj.get('factura', '')),
+    }
+    handler = handlers.get(tipo)
+    return handler() if handler else {'error': 'búsqueda no soportada'}
 
 
 def _tool_ventas_por_dia(desde, hasta, dias):
@@ -1300,79 +1309,9 @@ def preguntar():
         "apliquen). El dinero va en pesos colombianos (ej: $1.234.000). Nunca menciones qué "
         "motor de IA te procesa."
     )
-    acciones = ""
-    if puede_accionar:
-        acciones = (
-            "\n\n=== ACCIONES (con confirmación) ===\n"
-            "Si el usuario pide CAMBIAR EL ESTADO DE ENTREGA de un pedido o factura, "
-            "NO afirmes que ya lo hiciste. Escribe una frase proponiéndolo y, en la "
-            "ÚLTIMA línea, agrega EXACTAMENTE:\n"
-            "ACCION_JSON: {\"tipo\":\"cambiar_estado_pedido\",\"factura\":\"<numero de factura o referencia RALOZ-...>\",\"estado\":\"<EMPACADO|LISTO_LLAMAR|ENTREGADA>\"}\n"
-            "Mapea: 'empacado'->EMPACADO; 'listo'/'llamar'->LISTO_LLAMAR; "
-            "'entregado'/'entregué'/'ya lo recogió'->ENTREGADA.\n"
-            "Si el usuario pide CREAR UN RECORDATORIO / TAREA / agendar algo para un día, "
-            "propónlo y en la ÚLTIMA línea agrega EXACTAMENTE:\n"
-            "ACCION_JSON: {\"tipo\":\"crear_tarea\",\"titulo\":\"<qué recordar>\",\"fecha\":\"<YYYY-MM-DD o vacío>\",\"descripcion\":\"<detalle opcional>\"}\n"
-            "Si el usuario pide AJUSTAR EL STOCK de una prenda (sumar, restar o fijar "
-            "unidades de una talla), propónlo y en la ÚLTIMA línea agrega EXACTAMENTE:\n"
-            "ACCION_JSON: {\"tipo\":\"ajustar_stock\",\"colegio\":\"<colegio>\",\"prenda\":\"<nombre prenda>\",\"talla\":\"<talla>\",\"modo\":\"<sumar|restar|fijar>\",\"cantidad\":<numero>}\n"
-            "Si el usuario pide FIJAR/PONER EL COSTO de una prenda (para calcular margen), "
-            "propónlo y en la ÚLTIMA línea agrega EXACTAMENTE (el costo aplica a todas las "
-            "tallas de esa prenda en ese colegio):\n"
-            "ACCION_JSON: {\"tipo\":\"fijar_costo\",\"colegio\":\"<colegio>\",\"prenda\":\"<nombre prenda>\",\"costo\":<numero>}\n"
-            "Si el usuario pide DESHACER/REVERTIR un cambio ('deshaz lo último', 'devuelve el "
-            "stock/costo/precio de antes'), primero mira la bitácora (BUSCAR bitacora) para "
-            "hallar el id_accion correcto, propón la reversión y en la ÚLTIMA línea agrega:\n"
-            "ACCION_JSON: {\"tipo\":\"revertir\",\"id_accion\":<id de la bitácora>}\n"
-            "Solo se puede revertir una acción reversible que no haya sido revertida.\n"
-            "Si el usuario fija una REGLA/POLÍTICA del negocio ('no comprar más de "
-            "$10M al mes', 'no vender por debajo de $45.000', 'no publicar después de "
-            "las 8pm'), NO la trates como charla: propón guardarla y en la ÚLTIMA línea "
-            "agrega (categoria = PRECIO|INVENTARIO|COMPRAS|PROVEEDORES|HORARIOS|PAGOS|"
-            "PROMOCIONES|WHATSAPP|PUBLICIDAD|AUTONOMIA; incluye parametros si hay un "
-            "número, ej. presupuesto de compras):\n"
-            "ACCION_JSON: {\"tipo\":\"crear_regla\",\"categoria\":\"COMPRAS\",\"texto\":\"No comprar más de $10.000.000 al mes sin aprobación\",\"parametros\":{\"limite\":10000000,\"periodo\":\"mensual\"}}\n"
-            "Si el usuario fija una META de ventas ('quiero vender $30M en septiembre'), "
-            "propón guardarla y agrega:\n"
-            "ACCION_JSON: {\"tipo\":\"crear_objetivo\",\"descripcion\":\"Ventas septiembre\",\"meta\":30000000,\"anio\":2026,\"mes\":9}\n"
-            "Si el usuario expresa una DECISIÓN/PREFERENCIA ('prefiero el proveedor X'), "
-            "propón recordarla y agrega:\n"
-            "ACCION_JSON: {\"tipo\":\"crear_memoria\",\"tipo_memoria\":\"PREFERENCIA\",\"texto\":\"Prefiere el proveedor X\"}\n"
-            "Si el usuario pide ESTIMAR/rellenar costos mientras consigue los reales "
-            "('pon costos al 60%', 'estima los costos'), propónlo y agrega (factor = fracción "
-            "del precio; 0.6 = margen ~40%):\n"
-            "ACCION_JSON: {\"tipo\":\"estimar_costos\",\"factor\":0.6}\n"
-            "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON.\n"
-            "AUTO-CHEQUEO antes de proponer cualquier acción: ¿entendí el objetivo?, "
-            "¿usé datos reales (no inventados)?, ¿hay una regla que lo prohíba?, ¿el "
-            "alcance es correcto?, ¿no lo estoy duplicando?, ¿sé cómo verificarlo? Si algo "
-            "no cuadra, primero aclara o consulta; no propongas a ciegas."
-        )
-
-    busqueda = (
-        "\n\n=== BÚSQUEDA (para datos puntuales) ===\n"
-        "Si el usuario pregunta por algo específico que NO está en el resumen (el precio "
-        "o el stock de UNA prenda concreta, una factura por su número/referencia, o los "
-        "pedidos de un cliente por su teléfono), responde ÚNICAMENTE con una línea así y "
-        "nada más:\n"
-        "BUSCAR: {\"tipo\":\"buscar_prenda\",\"colegio\":\"<colegio>\",\"texto\":\"<nombre prenda>\"}\n"
-        "BUSCAR: {\"tipo\":\"movimientos\",\"colegio\":\"<colegio>\",\"texto\":\"<prenda>\",\"talla\":\"<talla o vacío>\"}  → kardex de la prenda: entradas/salidas/ajustes con el stock antes y después, la factura y quién lo movió (úsalo para '¿cuánto había antes?', '¿quién ajustó el stock?', '¿qué movimientos tuvo?')\n"
-        "BUSCAR: {\"tipo\":\"buscar_factura\",\"referencia\":\"<numero, RALOZ-..., o 'ultima' para la más reciente>\"}  → devuelve la factura con sus prendas, cuánto descontó del inventario (antes→después) y si descontó todo bien\n"
-        "BUSCAR: {\"tipo\":\"pedidos_cliente\",\"telefono\":\"<numero>\"}\n"
-        "BUSCAR: {\"tipo\":\"ventas_periodo\",\"mes\":<1-12>,\"anio\":<año>}  (o usa \"desde\"/\"hasta\" en formato YYYY-MM-DD para ventas de un mes/rango anterior)\n"
-        "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
-        "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
-        "BUSCAR: {\"tipo\":\"bitacora\",\"limite\":<n>}  → últimas acciones que ejecutaste (id, qué se hizo, si se verificó, si es reversible). Úsalo para '¿qué cambios hiciste?' o cuando el Jefe pida DESHACER algo: primero mira la bitácora para encontrar el id_accion a revertir\n"
-        "BUSCAR: {\"tipo\":\"home\"}  → el Daily Briefing ('Buenos días, Jefe'): alertas priorizadas + progreso de metas + cartera pendiente + las 3 acciones que recomiendas hoy. Úsalo para 'resumen del día', 'buenos días', 'cómo vamos'\n"
-        "BUSCAR: {\"tipo\":\"calendario\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\",\"dias\":[\"lunes\",\"sabado\"]}  → cuenta cuántos días de la semana caen en un rango (sin desde/hasta = mes actual). Úsalo SIEMPRE para cálculos de calendario/turnos/pagos por día (ej. cuántos lunes y sábados hay); NO cuentes fechas a mano. Luego multiplica el total por la tarifa\n"
-        "BUSCAR: {\"tipo\":\"ventas_por_dia\",\"dias\":[\"lunes\",\"sabado\"]}  → cuánto se factura en promedio por día de la semana (por defecto últimos 90 días). Úsalo para decidir '¿me conviene abrir/contratar para esos días?': compara el pago del ayudante contra lo que se factura esos días\n"
-        "BUSCAR: {\"tipo\":\"gastos\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\"}  → gastos por categoría en un rango (def mes actual). Úsalo para 'reducir gastos', 'en qué gasto más'. Si viene vacío, di que quizá no están registrados (no que no existan)\n"
-        "BUSCAR: {\"tipo\":\"flujo_caja\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\"}  → caja: cobros reales − gastos (def mes actual). Úsalo para '¿cómo está la caja?', flujo, liquidez\n"
-        "BUSCAR: {\"tipo\":\"simular_devolucion\",\"referencia\":\"<numero o RALOZ-...>\"}  → SIMULA devolverle el dinero de una factura: cuánto sale de caja, qué stock vuelve y la utilidad que se pierde. Úsalo para '¿qué pasa si me devuelven plata?'. NO ejecutes nada\n"
-        "BUSCAR: {\"tipo\":\"observar\"}  → SOLO para una revisión general ('¿cómo está el negocio?', 'revisa todo'). NO lo uses en preguntas puntuales ni para adornar respuestas. El Observador revisa el negocio y devuelve alertas ANALIZADAS y priorizadas por 'score' (0-100), agrupadas por prenda, con el POR QUÉ (campo datos.analisis), la RECOMENDACIÓN y a veces una acción sugerida (datos.accion_sugerida). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'revisa todo'. Preséntalo priorizado (🔴🟠🟡), con el porqué y qué recomiendas; si hay una acción sugerida, OFRÉCELA ('¿quieres que prepare …?') pero NO la ejecutes: solo si el Jefe dice que sí, propón el ACCION_JSON correspondiente. Si no hay nada, dilo en una línea\n"
-        "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
-        "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
-    )
+    # Fase 1: el contrato del agente se genera desde el Tool Registry.
+    acciones = render_actions_prompt() if puede_accionar else ""
+    busqueda = render_tools_prompt()
 
     politica = _bloque_politica()
     base = (
@@ -1440,6 +1379,29 @@ def preguntar():
             respuesta['respuesta'] = texto_limpio
             respuesta['accion'] = accion
     return jsonify(respuesta), 200
+
+
+@asistente_bp.route('/preguntar2', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor', 'cajero')
+@limiter.limit("20 per minute")
+def preguntar2():
+    """Endpoint experimental con PydanticAI; permanece apagado por defecto."""
+    if os.getenv('ASISTENTE_PYDANTIC', '') != '1':
+        return jsonify({'error': 'El asistente experimental está desactivado.',
+                        'code': 'pydantic_off'}), 404
+    pregunta = ((request.get_json(silent=True) or {}).get('pregunta') or '').strip()
+    if not pregunta:
+        return jsonify({'error': 'Escribe una pregunta.'}), 400
+    if len(pregunta) > 800:
+        pregunta = pregunta[:800]
+    try:
+        from app.agent.pydantic_v2 import run_readonly
+        return jsonify({'respuesta': run_readonly(pregunta)}), 200
+    except Exception:
+        logger.exception('asistente v2: fallo en ejecución')
+        return jsonify({'error': 'No pude analizar la pregunta en este momento.',
+                        'code': 'ia_error'}), 502
 
 
 # ─────────────────────────────────────────────────────────────────────────
