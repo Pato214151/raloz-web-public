@@ -25,7 +25,9 @@ class Evento(db.Model):
     detalle = db.Column(db.String(500), nullable=True)
     entidad_tipo = db.Column(db.String(30), nullable=True)   # stock · factura · pedido_fabricacion
     entidad_id = db.Column(db.Integer, nullable=True)
-    datos = db.Column(db.Text, nullable=True)                # JSON con contexto
+    datos = db.Column(db.Text, nullable=True)                # JSON con contexto (análisis, acción sugerida)
+    score = db.Column(db.Integer, nullable=True)             # 0-100: impacto+urgencia+probabilidad
+    recomendacion = db.Column(db.String(500), nullable=True) # qué recomienda hacer RALOZ
     clave_dedup = db.Column(db.String(160), index=True, nullable=False)
     estado = db.Column(db.String(15), nullable=False, default='NUEVO')  # NUEVO · VISTO · RESUELTO
     creado_en = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -55,6 +57,8 @@ class Evento(db.Model):
             'entidad_tipo': self.entidad_tipo,
             'entidad_id': self.entidad_id,
             'datos': self.datos_dict,
+            'score': self.score,
+            'recomendacion': self.recomendacion,
             'estado': self.estado,
             'creado_en': self.creado_en.isoformat() if self.creado_en else None,
             'visto_en': self.visto_en.isoformat() if self.visto_en else None,

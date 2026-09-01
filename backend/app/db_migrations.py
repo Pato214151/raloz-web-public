@@ -470,6 +470,14 @@ MIGRACIONES = [
             "CREATE INDEX IF NOT EXISTS idx_eventos_estado_sev ON eventos(estado, severidad)",
         ],
     },
+    {
+        'version': '0030',
+        'descripcion': 'Análisis de eventos: score de prioridad y recomendación',
+        'sql': [
+            "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS score INTEGER",
+            "ALTER TABLE eventos ADD COLUMN IF NOT EXISTS recomendacion VARCHAR(500)",
+        ],
+    },
 ]
 
 

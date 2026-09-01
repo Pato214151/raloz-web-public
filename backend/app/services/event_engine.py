@@ -25,7 +25,8 @@ from app.utils.inventario import stock_descontado_neto
 
 logger = logging.getLogger("raloz.eventos")
 
-UMBRAL_STOCK_BAJO = 3
+UMBRAL_STOCK_BAJO = 3     # "hard low": bajo aunque no tenga ventas
+UMBRAL_WATCH = 10         # banda de vigilancia: el analyzer decide si es riesgo real
 
 _ORDEN_SEV = {'CRITICO': 0, 'IMPORTANTE': 1, 'PRECAUCION': 2, 'INFORMATIVO': 3}
 EMOJI_SEV = {'CRITICO': '🔴', 'IMPORTANTE': '🟠', 'PRECAUCION': '🟡', 'INFORMATIVO': '🔵'}
@@ -42,8 +43,9 @@ def _mapas():
 
 
 # ── Detectores ────────────────────────────────────────────────────────────
-def detectar_stock(umbral=UMBRAL_STOCK_BAJO, limite=60):
-    """Prendas vendibles (con precio) agotadas o con stock bajo."""
+def detectar_stock(umbral=UMBRAL_WATCH, limite=60):
+    """Prendas vendibles (con precio) agotadas o dentro de la banda de vigilancia.
+    El analyzer decide después si un stock >3 realmente es riesgo (por velocidad)."""
     vendidos = {(pc.id_colegio, pc.id_producto) for pc in PrecioColegio.query.all()}
     if not vendidos:
         return []
@@ -62,7 +64,8 @@ def detectar_stock(umbral=UMBRAL_STOCK_BAJO, limite=60):
                 'detalle': f'{cole} · 0 unidades. Revisa si toca producir o reponer.',
                 'entidad_tipo': 'stock', 'entidad_id': s.id_stock,
                 'datos': {'colegio': cole, 'prenda': nombre,
-                          'talla': s.talla_individual, 'cantidad': 0},
+                          'talla': s.talla_individual, 'cantidad': 0,
+                          'id_colegio': s.id_colegio, 'id_producto': s.id_producto},
                 'clave_dedup': f'stock_agotado:{s.id_stock}',
             })
         else:
@@ -72,7 +75,8 @@ def detectar_stock(umbral=UMBRAL_STOCK_BAJO, limite=60):
                 'detalle': f'{cole} · quedan {cant} unidad(es).',
                 'entidad_tipo': 'stock', 'entidad_id': s.id_stock,
                 'datos': {'colegio': cole, 'prenda': nombre,
-                          'talla': s.talla_individual, 'cantidad': cant},
+                          'talla': s.talla_individual, 'cantidad': cant,
+                          'id_colegio': s.id_colegio, 'id_producto': s.id_producto},
                 'clave_dedup': f'stock_bajo:{s.id_stock}',
             })
     out.sort(key=lambda e: _ORDEN_SEV[e['severidad']])
@@ -197,6 +201,8 @@ def registrar_eventos(candidatos):
             tipo=c['tipo'], severidad=c['severidad'], titulo=c['titulo'][:200],
             detalle=(c.get('detalle') or '')[:500] or None,
             entidad_tipo=c.get('entidad_tipo'), entidad_id=c.get('entidad_id'),
+            score=c.get('score'),
+            recomendacion=(c.get('recomendacion') or None) and c['recomendacion'][:500],
             clave_dedup=c['clave_dedup'], estado='NUEVO',
         )
         ev.set_datos(c.get('datos'))
@@ -212,35 +218,110 @@ def registrar_eventos(candidatos):
     return nuevos
 
 
-def escanear():
-    """Corre todos los detectores y devuelve la lista plana de candidatos."""
+# Tipos que reflejan el estado ACTUAL de la BD → si el hecho ya no aparece en
+# un escaneo, el problema se resolvió solo y el evento se auto-cierra.
+_AUTO_RESUELVE = {'stock_bajo', 'stock_agotado', 'factura_por_cobrar',
+                  'pedido_retrasado', 'fabricacion_retrasada', 'venta_sin_descuento'}
+
+
+def escanear(analizar_eventos=True):
+    """Corre los detectores y (por defecto) analiza cada candidato para darle
+    contexto, score y recomendación. Devuelve la lista plana de candidatos."""
+    from app.services.event_analyzer import analizar, velocidad_ventas
     candidatos = []
     for det in DETECTORES:
         try:
             candidatos.extend(det() or [])
         except Exception as e:
             logger.warning("event_engine: detector %s falló: %s", det.__name__, e)
+    if analizar_eventos and candidatos:
+        try:
+            velmap = velocidad_ventas()
+            candidatos = [analizar(c, velmap) for c in candidatos]
+            candidatos = [c for c in candidatos if not c.get('descartar')]
+        except Exception as e:
+            logger.warning("event_engine: análisis falló: %s", e)
     return candidatos
 
 
+def reconciliar(candidatos):
+    """MEMORIA: cierra (RESUELTO) los eventos abiertos cuyo problema ya no
+    aparece en el escaneo actual. Así RALOZ no repite algo que ya se solucionó."""
+    from datetime import datetime as _dt
+    claves_actuales = {c['clave_dedup'] for c in candidatos}
+    abiertos = Evento.query.filter(Evento.estado.in_(('NUEVO', 'VISTO'))).all()
+    cerrados = 0
+    for e in abiertos:
+        if e.tipo in _AUTO_RESUELVE and e.clave_dedup not in claves_actuales:
+            e.estado = 'RESUELTO'
+            e.visto_en = _dt.utcnow()
+            cerrados += 1
+    if cerrados:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    return cerrados
+
+
+def _agrupar(eventos):
+    """Agrupa varios eventos de stock de la misma prenda+colegio en una sola
+    alerta ('riesgo de reposición en 4 tallas'). El resto pasa tal cual."""
+    grupos, sueltos = {}, []
+    for e in eventos:
+        d = e.datos_dict or {}
+        if e.tipo in ('stock_bajo', 'stock_agotado') and d.get('id_producto'):
+            grupos.setdefault((d.get('id_colegio'), d['id_producto']), []).append(e)
+        else:
+            sueltos.append(e)
+    items = []
+    for _, evs in grupos.items():
+        if len(evs) == 1:
+            sueltos.append(evs[0])
+            continue
+        evs.sort(key=lambda e: (_ORDEN_SEV.get(e.severidad, 9), -(e.score or 0)))
+        d0 = evs[0].datos_dict or {}
+        tallas = [ (e.datos_dict or {}).get('talla') for e in evs ]
+        sev = evs[0].severidad
+        score = max((e.score or 0) for e in evs)
+        rec = next((e.recomendacion for e in evs if e.recomendacion), None)
+        items.append({
+            'agrupado': True, 'severidad': sev, 'score': score,
+            'titulo': f'{d0.get("prenda","Prenda")} ({d0.get("colegio","")}): '
+                      f'reposición en {len(evs)} tallas',
+            'detalle': 'Tallas por debajo del objetivo: ' + ', '.join(str(t) for t in tallas) + '.',
+            'recomendacion': rec,
+            'ids': [e.id_evento for e in evs],
+            'tipo': 'grupo_stock',
+        })
+    for e in sueltos:
+        items.append(e.to_dict())
+    items.sort(key=lambda x: (_ORDEN_SEV.get(x.get('severidad'), 9), -(x.get('score') or 0)))
+    return items
+
+
 def observar(persistir=True):
-    """OBSERVAR → EVALUAR → PRIORIZAR. Corre los detectores, (opcionalmente)
-    registra los eventos nuevos y devuelve el resumen priorizado de todo lo
-    que está ABIERTO (NUEVO/VISTO)."""
-    candidatos = escanear()
-    nuevos = registrar_eventos(candidatos) if persistir else []
-    abiertos = (Evento.query
-                .filter(Evento.estado.in_(('NUEVO', 'VISTO')))
-                .all())
-    abiertos.sort(key=lambda e: (_ORDEN_SEV.get(e.severidad, 9), -(e.id_evento or 0)))
+    """OBSERVAR → ANALIZAR → PRIORIZAR → (recordar). Corre los detectores,
+    analiza y puntúa, cierra lo ya resuelto, registra lo nuevo y devuelve el
+    resumen priorizado y AGRUPADO de todo lo que sigue abierto."""
+    candidatos = escanear(analizar_eventos=True)
+    cerrados = 0
+    nuevos = []
+    if persistir:
+        cerrados = reconciliar(candidatos)
+        nuevos = registrar_eventos(candidatos)
+    abiertos = Evento.query.filter(Evento.estado.in_(('NUEVO', 'VISTO'))).all()
+    abiertos.sort(key=lambda e: (_ORDEN_SEV.get(e.severidad, 9), -(e.score or 0)))
     resumen = {'CRITICO': 0, 'IMPORTANTE': 0, 'PRECAUCION': 0, 'INFORMATIVO': 0}
     for e in abiertos:
         resumen[e.severidad] = resumen.get(e.severidad, 0) + 1
     return {
         'generado_en': date.today().isoformat(),
         'nuevos': len(nuevos),
+        'resueltos': cerrados,
         'total_abierto': len(abiertos),
         'resumen': resumen,
         'hay_algo': len(abiertos) > 0,
-        'eventos': [e.to_dict() for e in abiertos],
+        'items': _agrupar(abiertos),                    # agrupado + priorizado (para mostrar)
+        'eventos': [e.to_dict() for e in abiertos],     # crudo (compat)
     }

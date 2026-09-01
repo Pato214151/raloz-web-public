@@ -380,7 +380,7 @@ function TarjetasDatos({ datos }) {
         </div>
       )
     }
-    const eventos = (r.eventos || []).slice(0, 12)
+    const items = (r.items || r.eventos || []).slice(0, 12)
     return (
       <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-lg" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
         <div className="flex items-center gap-2 flex-wrap mb-2.5">
@@ -392,23 +392,32 @@ function TarjetasDatos({ datos }) {
           ))}
         </div>
         <div className="space-y-2">
-          {eventos.map((e, i) => {
+          {items.map((e, i) => {
             const m = sevMeta[e.severidad] || sevMeta.INFORMATIVO
+            const analisis = e.datos?.analisis
             return (
               <div key={i} className={`rounded-xl border ${m.bd} ${m.bg} px-3 py-2`}>
                 <div className="flex items-start gap-2">
                   <span className="text-[13px] leading-5">{m.emoji}</span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-[#10213F]">{e.titulo}</p>
-                    {e.detalle && <p className="text-[12px] text-[#5B6A88] mt-0.5">{e.detalle}</p>}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-semibold text-[#10213F]">{e.titulo}</p>
+                      {typeof e.score === 'number' && (
+                        <span className="text-[10px] font-semibold text-[#718096] tabular-nums">{e.score}</span>
+                      )}
+                    </div>
+                    {(analisis || e.detalle) && <p className="text-[12px] text-[#5B6A88] mt-0.5">{analisis || e.detalle}</p>}
+                    {e.recomendacion && (
+                      <p className="text-[12px] mt-1 text-[#10213F]"><span className="font-semibold">🎯 </span>{e.recomendacion}</p>
+                    )}
                   </div>
                 </div>
               </div>
             )
           })}
         </div>
-        {r.total_abierto > eventos.length && (
-          <p className="text-[11px] text-[#718096] mt-2">y {r.total_abierto - eventos.length} más…</p>
+        {r.total_abierto > items.length && (
+          <p className="text-[11px] text-[#718096] mt-2">y {r.total_abierto - items.length} más…</p>
         )}
       </div>
     )
