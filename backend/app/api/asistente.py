@@ -971,7 +971,11 @@ def preguntar():
             "Si el usuario expresa una DECISIÓN/PREFERENCIA ('prefiero el proveedor X'), "
             "propón recordarla y agrega:\n"
             "ACCION_JSON: {\"tipo\":\"crear_memoria\",\"tipo_memoria\":\"PREFERENCIA\",\"texto\":\"Prefiere el proveedor X\"}\n"
-            "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON."
+            "Si el usuario NO pide una acción, responde normal y NO agregues ACCION_JSON.\n"
+            "AUTO-CHEQUEO antes de proponer cualquier acción: ¿entendí el objetivo?, "
+            "¿usé datos reales (no inventados)?, ¿hay una regla que lo prohíba?, ¿el "
+            "alcance es correcto?, ¿no lo estoy duplicando?, ¿sé cómo verificarlo? Si algo "
+            "no cuadra, primero aclara o consulta; no propongas a ciegas."
         )
 
     busqueda = (
@@ -1051,27 +1055,10 @@ def preguntar():
 #  Bitácora de acciones · Verificación robusta · Rollback
 # ─────────────────────────────────────────────────────────────────────────
 def _verificar_accion(tipo, despues):
-    """Relee la FUENTE DE VERDAD y confirma que el cambio quedó aplicado.
-    Nunca asumas que un WRITE funcionó: se comprueba contra la BD."""
-    d = despues or {}
-    try:
-        if tipo == 'ajustar_stock':
-            st = Stock.query.get(d.get('id_stock'))
-            return bool(st) and st.cantidad == d.get('cantidad')
-        if tipo == 'fijar_costo':
-            ids = d.get('ids_precio') or []
-            costo = d.get('costo')
-            rows = (PrecioColegio.query.filter(PrecioColegio.id_precio.in_(ids)).all()
-                    if ids else [])
-            return bool(rows) and all(r.costo_unitario == costo for r in rows)
-        if tipo == 'cambiar_estado_pedido':
-            f = Factura.query.get(d.get('id_factura'))
-            return bool(f) and f.estado_entrega == d.get('estado_entrega')
-        if tipo == 'crear_tarea':
-            return Tarea.query.get(d.get('id_tarea')) is not None
-    except Exception as e:
-        logger.warning("asistente: verificación falló: %s", e)
-    return False
+    """Verificación contra la fuente de verdad. Delega en la capa Safety
+    (Governor), dueña de la verificación."""
+    from app.services.governor import verificar
+    return verificar(tipo, despues)
 
 
 def _registrar_accion(tipo, descripcion, antes, despues, reversible,
@@ -1359,6 +1346,13 @@ def ejecutar():
     data = request.get_json(silent=True) or {}
     tipo = data.get('tipo')
 
+    # ── Self-Check / Governor: checklist ANTES de tocar nada ──
+    from app.services import governor
+    _sc = governor.pre_check(data)
+    if not _sc['ok']:
+        return jsonify({'error': ' '.join(_sc['bloqueos']) or 'La acción no pasó el auto-chequeo.',
+                        'self_check': _sc['checklist'], 'code': 'self_check'}), 409
+
     # ── Crear recordatorio / tarea ──
     if tipo == 'crear_tarea':
         titulo = str(data.get('titulo', '')).strip()[:200]
@@ -1393,6 +1387,7 @@ def ejecutar():
                        + (f' para el {fecha.isoformat()}' if fecha else '')
                        + '. Lo ves en el menú *Tareas*.',
             'verificado': verificado,
+            'self_check': _sc['checklist'],
             'id_accion': acc.id_accion if acc else None,
             'reversible': bool(acc),
         }), 200
@@ -1496,7 +1491,8 @@ def ejecutar():
         antes = {'id_stock': stock.id_stock, 'id_colegio': cid, 'id_producto': pid,
                  'talla': talla, 'cantidad': cantidad_antes}
         despues = {'id_stock': stock.id_stock, 'cantidad': stock.cantidad}
-        verificado = _verificar_accion('ajustar_stock', despues)
+        _post = governor.post_check('ajustar_stock', despues)
+        verificado = _post['verificado']
         acc = _registrar_accion(
             'ajustar_stock',
             f'{pnombre} T{talla}: {cantidad_antes} → {stock.cantidad}',
@@ -1506,8 +1502,12 @@ def ejecutar():
             'ok': True,
             'mensaje': f'✅ Stock actualizado: {pnombre} talla {talla} → '
                        f'{stock.cantidad} unidades.'
-                       + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
+                       + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.')
+                       + (f' Cerré {_post["eventos_cerrados"]} alerta(s) relacionada(s).'
+                          if _post['eventos_cerrados'] else ''),
             'verificado': verificado,
+            'self_check': _sc['checklist'],
+            'eventos_cerrados': _post['eventos_cerrados'],
             'id_accion': acc.id_accion if acc else None,
             'reversible': bool(acc),
         }), 200
@@ -1554,6 +1554,7 @@ def ejecutar():
                        f'(aplica a {len(rows)} talla/s). Ya puedo calcular su margen.'
                        + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
             'verificado': verificado,
+            'self_check': _sc['checklist'],
             'id_accion': acc.id_accion if acc else None,
             'reversible': bool(acc),
         }), 200
@@ -1626,7 +1627,8 @@ def ejecutar():
         logger.warning("asistente: no se pudo auditar: %s", e)
 
     despues = {'id_factura': factura.id_factura, 'estado_entrega': estado}
-    verificado = _verificar_accion('cambiar_estado_pedido', despues)
+    _post = governor.post_check('cambiar_estado_pedido', despues)
+    verificado = _post['verificado']
     acc = _registrar_accion(
         'cambiar_estado_pedido',
         f'Factura {factura.numero_factura}: {anterior} → {estado}',
@@ -1637,8 +1639,12 @@ def ejecutar():
         'ok': True,
         'mensaje': f'✅ Factura {factura.numero_factura} marcada como '
                    f'"{_ESTADOS_ENTREGA[estado]}".'
-                   + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.'),
+                   + ('' if verificado else ' ⚠️ No pude confirmarlo en la base; revísalo.')
+                   + (f' Cerré {_post["eventos_cerrados"]} alerta(s) relacionada(s).'
+                      if _post['eventos_cerrados'] else ''),
         'verificado': verificado,
+        'self_check': _sc['checklist'],
+        'eventos_cerrados': _post['eventos_cerrados'],
         'id_accion': acc.id_accion if acc else None,
         'reversible': bool(acc),
     }), 200
