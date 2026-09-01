@@ -1148,7 +1148,7 @@ def _llamar_ia(prompt_text):
         'gemini': (GEMINI_API_KEY, _llamar_gemini),
         'deepseek': (DEEPSEEK_API_KEY, _llamar_deepseek),
     }
-    detalle = 'sin_modelo'
+    errores = []
     for nombre in _orden_ia():
         key, fn = motores.get(nombre, (None, None))
         if not key:
@@ -1156,9 +1156,12 @@ def _llamar_ia(prompt_text):
         t, d = fn(prompt_text)
         if t is not None:
             return t, None
-        detalle = d or detalle
-    # Devolvemos el error REAL del último motor (no lo enmascaramos).
-    return None, detalle
+        errores.append(f'{nombre}: {d}')
+    if errores:
+        logger.warning('asistente: todos los motores fallaron -> %s', ' | '.join(errores))
+    # Reportamos el error del motor PRINCIPAL (el primero configurado), que es el
+    # que el Jefe espera que funcione — no el del último respaldo.
+    return None, (errores[0] if errores else 'sin_modelo')
 
 
 def _llamar_deepseek(prompt_text):
@@ -1187,26 +1190,32 @@ def _llamar_deepseek(prompt_text):
 
 def _motivo_ia(detalle):
     """Traduce el error técnico del proveedor a un motivo claro para el admin,
-    SIN exponer texto crudo. Es sobre la config del motor (no datos de clientes)."""
+    SIN exponer texto crudo. `detalle` viene como '<motor>: <error>' para saber
+    cuál falló (gemini/grok/deepseek)."""
     d = (detalle or '').upper()
+    motor = 'GEMINI' if d.startswith('GEMINI') else 'GROK' if d.startswith('GROK') \
+        else 'DEEPSEEK' if d.startswith('DEEPSEEK') else 'IA'
+    keyvar = {'GEMINI': 'GEMINI_API_KEY', 'GROK': 'GROK_API_KEY',
+              'DEEPSEEK': 'DEEPSEEK_API_KEY'}.get(motor, 'la llave de IA')
     if '401' in d or '403' in d or 'API_KEY' in d or 'UNAUTHOR' in d:
-        return ('llave', 'La llave de IA fue rechazada. Revisa GROK_API_KEY en Render '
-                         '(que sea de console.x.ai y esté bien pegada).')
-    if '402' in d or 'INSUFFICIENT' in d or 'CREDIT' in d or 'BILLING' in d or 'QUOTA' in d:
-        return ('saldo', 'La cuenta de IA no tiene crédito/cupo. Recarga en xAI (o revisa '
-                         'el límite de facturación).')
+        return ('llave', f'La llave de {motor} fue rechazada. Revisa {keyvar} en Render '
+                         '(bien copiada y vigente).')
+    if '402' in d or 'INSUFFICIENT' in d or 'CREDIT' in d or 'BILLING' in d or 'QUOTA' in d \
+            or 'EXHAUST' in d:
+        return ('saldo', f'La cuenta de {motor} no tiene crédito/cupo (o agotó la capa '
+                         'gratis del día). Usa otro motor con IA_PRINCIPAL o recarga.')
     if '429' in d or 'RATE' in d:
-        return ('limite', 'Grok alcanzó su límite de peticiones (rate limit). Espera un '
-                          'momento; si es constante, tu plan de xAI tiene un tope muy bajo.')
+        return ('limite', f'{motor} alcanzó su límite de peticiones. Espera un momento; si '
+                          'es constante, cambia IA_PRINCIPAL a un motor con más cupo.')
     if '404' in d or 'MODEL' in d or 'NOT FOUND' in d:
-        return ('modelo', 'El modelo configurado no existe para tu cuenta. Prueba '
-                          'GROK_MODEL=grok-2-latest (o déjalo vacío) en Render.')
+        return ('modelo', f'El modelo de {motor} no existe para tu cuenta. Revisa '
+                          'GEMINI_MODEL / GROK_MODEL (o déjalos vacíos) en Render.')
     if 'CONEXIÓN' in d or 'CONEXION' in d or 'TIMEOUT' in d or 'TIMED OUT' in d:
-        return ('conexion', 'Grok tardó demasiado o no respondió. Reintenta en unos segundos.')
+        return ('conexion', f'{motor} tardó demasiado o no respondió. Reintenta en unos segundos.')
     if 'UNAVAILABLE' in d or '503' in d:
         return ('saturado', 'El servicio de IA está saturado ahora mismo. Reintenta en unos segundos.')
     return ('desconocido', 'No pude analizarlo en este momento. Reintenta; si sigue, revisa '
-                           'GROK_API_KEY / GROK_MODEL en Render.')
+                           'las llaves de IA en Render.')
 
 
 def _error_gemini(detalle):
