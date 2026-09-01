@@ -285,8 +285,11 @@ def _agrupar(eventos):
     grupos, cartera, sueltos = {}, [], []
     for e in eventos:
         d = e.datos_dict or {}
-        if e.tipo in ('stock_bajo', 'stock_agotado') and d.get('id_producto'):
-            grupos.setdefault((d.get('id_colegio'), d['id_producto']), []).append(e)
+        if e.tipo in ('stock_bajo', 'stock_agotado'):
+            # agrupa por id de producto; si el evento viejo no lo trae, por nombre
+            clave = (d.get('id_colegio'), d.get('id_producto')) if d.get('id_producto') \
+                else (d.get('colegio'), d.get('prenda'))
+            grupos.setdefault(clave, []).append(e)
         elif e.tipo == 'factura_por_cobrar':
             cartera.append(e)
         else:

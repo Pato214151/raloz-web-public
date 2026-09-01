@@ -9,11 +9,11 @@ def test_por_defecto_gemini_primero(monkeypatch):
     monkeypatch.delenv('IA_PRINCIPAL', raising=False)
     orden = _orden_ia()
     assert orden[0] == 'gemini'
-    assert set(orden) == {'gemini', 'grok', 'deepseek'}
+    assert set(orden) == {'gemini', 'groq', 'grok', 'deepseek'}
 
 
 def test_principal_configurable(monkeypatch):
-    monkeypatch.setenv('IA_PRINCIPAL', 'grok')
+    monkeypatch.setenv('IA_PRINCIPAL', 'groq')
     orden = _orden_ia()
-    assert orden[0] == 'grok'
-    assert set(orden) == {'gemini', 'grok', 'deepseek'}  # los otros siguen de respaldo
+    assert orden[0] == 'groq'
+    assert set(orden) == {'gemini', 'groq', 'grok', 'deepseek'}  # los otros siguen de respaldo

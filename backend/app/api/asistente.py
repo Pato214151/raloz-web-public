@@ -58,10 +58,13 @@ DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '').strip()
 # Grok (xAI), API compatible con OpenAI. Si está configurada, es el motor PRINCIPAL.
 GROK_API_KEY = os.getenv('GROK_API_KEY', '').strip()
 GROK_MODEL = os.getenv('GROK_MODEL', 'grok-3').strip()
+# Groq (groq.com — NO es xAI). Capa gratis MUY generosa (miles/día). OpenAI-compat.
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '').strip()
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile').strip()
 
 # ¿Hay AL MENOS un motor de IA configurado?
 def _hay_ia():
-    return bool(GROK_API_KEY or GEMINI_API_KEY or DEEPSEEK_API_KEY)
+    return bool(GROK_API_KEY or GROQ_API_KEY or GEMINI_API_KEY or DEEPSEEK_API_KEY)
 
 # ── Fase 2 (acciones) — APAGADO por defecto. Enciéndelo con ASISTENTE_ACCIONES=1.
 #    Aun encendido, NADA se ejecuta sin confirmación explícita del admin en la UI.
@@ -1054,10 +1057,14 @@ def _llamar_gemini(prompt_text):
     candidatos = []
     if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
         candidatos.append(GEMINI_MODEL)
-    for m in ('gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'):
+    # Preferimos modelos con MÁS cupo gratis por día (los 'lite' y 2.0 dan
+    # cientos/miles al día; 2.5-flash solo ~20). Se prueban en orden y el que
+    # exista se usa.
+    for m in ('gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.0-flash',
+              'gemini-flash-latest', 'gemini-2.5-flash'):
         if m not in candidatos:
             candidatos.append(m)
-    candidatos = candidatos[:3]
+    candidatos = candidatos[:5]
 
     ultimo_detalle = ''
     # Hasta 3 pasadas por la lista si todo dio 503 (alta demanda momentánea de Google).
@@ -1136,8 +1143,49 @@ def _orden_ia():
     (gemini | grok | deepseek); por defecto GEMINI, que tiene capa gratis y es
     el más estable. Los demás quedan de respaldo automático."""
     principal = os.getenv('IA_PRINCIPAL', 'gemini').strip().lower()
-    resto = [p for p in ('gemini', 'grok', 'deepseek') if p != principal]
+    resto = [p for p in ('gemini', 'groq', 'grok', 'deepseek') if p != principal]
     return [principal] + resto
+
+
+def _llamar_groq(prompt_text):
+    """Groq (groq.com), API compatible con OpenAI. Capa gratis generosa."""
+    if not GROQ_API_KEY:
+        return None, 'sin_groq'
+    candidatos = [GROQ_MODEL] if GROQ_MODEL else []
+    for m in ('llama-3.3-70b-versatile', 'llama-3.1-8b-instant'):
+        if m not in candidatos:
+            candidatos.append(m)
+    ultimo = ''
+    _espera = (2, 5, 8)
+    for modelo in candidatos:
+        for intento in range(3):
+            try:
+                r = requests.post(
+                    'https://api.groq.com/openai/v1/chat/completions',
+                    headers={'Authorization': f'Bearer {GROQ_API_KEY}',
+                             'Content-Type': 'application/json'},
+                    json={'model': modelo,
+                          'messages': [{'role': 'user', 'content': prompt_text}],
+                          'temperature': 0.2, 'max_tokens': 2000, 'stream': False},
+                    timeout=45,
+                )
+            except Exception as e:
+                ultimo = f'groq conexión: {e}'
+                break
+            if r.status_code == 200:
+                try:
+                    return (r.json()['choices'][0]['message']['content'] or '').strip(), None
+                except Exception:
+                    return '', 'groq_vacio'
+            ultimo = f'groq {r.status_code}: {r.text[:150]}'
+            logger.warning('asistente: Groq %s -> %s: %s', modelo, r.status_code, r.text[:150])
+            if r.status_code in (401, 403):
+                return None, ultimo
+            if r.status_code in (429, 503) and intento < 2:
+                time.sleep(_espera[intento])
+                continue
+            break
+    return None, ultimo
 
 
 def _llamar_ia(prompt_text):
@@ -1145,6 +1193,7 @@ def _llamar_ia(prompt_text):
     invisible para el Jefe (si el principal falla/satura, cae al siguiente)."""
     motores = {
         'grok': (GROK_API_KEY, _llamar_grok),
+        'groq': (GROQ_API_KEY, _llamar_groq),
         'gemini': (GEMINI_API_KEY, _llamar_gemini),
         'deepseek': (DEEPSEEK_API_KEY, _llamar_deepseek),
     }
@@ -1193,9 +1242,10 @@ def _motivo_ia(detalle):
     SIN exponer texto crudo. `detalle` viene como '<motor>: <error>' para saber
     cuál falló (gemini/grok/deepseek)."""
     d = (detalle or '').upper()
-    motor = 'GEMINI' if d.startswith('GEMINI') else 'GROK' if d.startswith('GROK') \
+    motor = 'GEMINI' if d.startswith('GEMINI') else 'GROQ' if d.startswith('GROQ') \
+        else 'GROK' if d.startswith('GROK') \
         else 'DEEPSEEK' if d.startswith('DEEPSEEK') else 'IA'
-    keyvar = {'GEMINI': 'GEMINI_API_KEY', 'GROK': 'GROK_API_KEY',
+    keyvar = {'GEMINI': 'GEMINI_API_KEY', 'GROK': 'GROK_API_KEY', 'GROQ': 'GROQ_API_KEY',
               'DEEPSEEK': 'DEEPSEEK_API_KEY'}.get(motor, 'la llave de IA')
     if '401' in d or '403' in d or 'API_KEY' in d or 'UNAUTHOR' in d:
         return ('llave', f'La llave de {motor} fue rechazada. Revisa {keyvar} en Render '
