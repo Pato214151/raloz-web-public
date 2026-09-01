@@ -38,7 +38,7 @@ from app.utils.decorators import rol_requerido, get_current_identity, registrar_
 from app.models import (
     Factura, FacturaDetalle, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea, MovimientoInventario,
-    AccionAsistente, Evento,
+    AccionAsistente, Evento, WaConversacion,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.inventario import registrar_movimiento, stock_descontado_neto
@@ -673,9 +673,44 @@ def _ejecutar_busqueda(obj):
         'flujo_caja': lambda: _tool_flujo_caja(obj.get('desde'), obj.get('hasta')),
         'simular_devolucion': lambda: _tool_simular_devolucion(
             obj.get('referencia') or obj.get('factura', '')),
+        'whatsapp_pendientes': lambda: _tool_whatsapp_pendientes(obj.get('limite') or 15),
     }
     handler = handlers.get(tipo)
     return handler() if handler else {'error': 'búsqueda no soportada'}
+
+
+def _tool_whatsapp_pendientes(limite):
+    """Chats de WhatsApp con mensajes SIN LEER (clientes esperando respuesta).
+    No expone teléfonos: solo nombre, cuántos sin leer y una vista corta."""
+    try:
+        n = min(max(int(limite), 1), 30)
+    except Exception:
+        n = 15
+    convs = (WaConversacion.query
+             .filter(WaConversacion.no_leidos > 0)
+             .order_by(WaConversacion.ultima_fecha.desc()).limit(n).all())
+    ahora = datetime.utcnow()
+    chats = []
+    for c in convs:
+        horas = None
+        if c.ultima_fecha:
+            horas = round((ahora - c.ultima_fecha).total_seconds() / 3600, 1)
+        chats.append({
+            'nombre': c.nombre or 'Cliente',
+            'no_leidos': c.no_leidos or 0,
+            'ultimo_mensaje': (c.ultimo_mensaje or '')[:80],
+            'hace_horas': horas,
+            'modo': c.modo,                    # 'bot' o 'asesor'
+            'asignado_a': c.asignado_a,
+        })
+    return {
+        'encontrado': bool(chats),
+        'tipo_wa': 'whatsapp_pendientes',
+        'total_chats': len(chats),
+        'total_sin_leer': sum(c['no_leidos'] for c in chats),
+        'chats': chats,
+        'nota': 'Chats con mensajes sin leer. Para responder, abre la bandeja de WhatsApp.',
+    }
 
 
 def _tool_ventas_por_dia(desde, hasta, dias):

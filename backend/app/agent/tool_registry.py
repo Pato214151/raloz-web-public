@@ -128,6 +128,12 @@ TOOLS: tuple[ToolSpec, ...] = (
         '{"tipo":"observar"}',
         category="análisis",
     ),
+    ToolSpec(
+        "whatsapp_pendientes",
+        "Lista los chats de WhatsApp con mensajes SIN LEER (clientes esperando respuesta). Úsalo para '¿tengo mensajes sin ver?', '¿algún cliente sin responder?'.",
+        '{"tipo":"whatsapp_pendientes","limite":<n>}',
+        category="análisis",
+    ),
 )
 
 
