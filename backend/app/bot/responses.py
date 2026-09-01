@@ -729,11 +729,25 @@ RESP_PAGOS = (
 )
 
 RESP_DOMICILIO = (
-    "🛵 *Domicilios*\n\n"
-    "¡Sí llevamos a domicilio en *Bogotá*! El *costo depende de la zona*.\n\n"
-    "Cuéntanos tu *dirección o barrio* y te cotizamos el envío. 📍\n"
-    "También puedes comprar en línea 👉 " + TIENDA_URL + " y elegir domicilio."
+    "🛵 *Domicilios* en Bogotá\n\n"
+    "El costo depende de tu *zona*. Como referencia:\n"
+    "• Zona *Manyanet*: aprox. *$8.000–$9.000*\n"
+    "• Zona *Marillac*: aprox. *$10.000–$12.000*\n"
+    "• Otras zonas: lo calculamos según la distancia.\n\n"
+    "Escríbeme tu *dirección y barrio* y te confirmo el *valor exacto*. 📍"
 )
+
+# Estimado de domicilio por zona del colegio (lo hace por DiDi; es referencia).
+_ENVIO_ZONAS = {"manyanet": "$8.000 y $9.000", "marillac": "$10.000 y $12.000"}
+
+
+def _estimado_envio(nombre_colegio: str):
+    """Rango aproximado de domicilio por la zona del colegio, o None."""
+    n = _norm(nombre_colegio or "")
+    for clave, rango in _ENVIO_ZONAS.items():
+        if clave in n:
+            return rango
+    return None
 
 # ✏️ DATOS DE PAGO POR TRANSFERENCIA — llénalos y el bot los da solo cuando
 # el cliente pregunte "¿a qué número consigno?" (déjalo vacío si no quieres publicarlos).
@@ -1635,11 +1649,18 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
         direccion = texto.strip()
         _guardar_lead(chat_id, f"Solicitó envío a: {direccion}")
         reset_estado(chat_id)
+        # Si menciona el colegio en la dirección, damos el estimado de su zona.
+        _idc, _nomcol = _detectar_colegio(t)
+        rango = _estimado_envio(_nomcol) if _nomcol else None
+        linea_est = (f"Por tu zona el domicilio suele estar entre *{rango}*. "
+                     if rango else "")
         aviso = ("🚚 *SOLICITUD DE ENVÍO*\n"
-                 f"Cliente: {chat_id}\nDirección: {direccion}")
+                 f"Cliente: {chat_id}\nDirección: {direccion}"
+                 + (f"\nZona {_nomcol} (~{rango})" if rango else ""))
         return Respuesta(
-            "¡Gracias! 🙌 Un asesor te confirma el *costo del envío* y coordinamos la entrega. "
-            "En un momento te escribimos por aquí.",
+            f"¡Gracias! 📍 Registré tu dirección: *{direccion}*.\n"
+            f"{linea_est}Un *asesor* te confirma el *valor exacto* del domicilio "
+            "(lo coordinamos por app) y la entrega. Te escribimos por aquí. 🙌",
             aviso, True)
 
     # ── 5) Estás dentro del submenú de SOPORTE ────────────────────
