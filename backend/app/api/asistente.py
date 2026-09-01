@@ -1252,11 +1252,12 @@ def _motivo_ia(detalle):
                          '(bien copiada y vigente).')
     if '402' in d or 'INSUFFICIENT' in d or 'CREDIT' in d or 'BILLING' in d or 'QUOTA' in d \
             or 'EXHAUST' in d:
-        return ('saldo', f'La cuenta de {motor} no tiene crédito/cupo (o agotó la capa '
-                         'gratis del día). Usa otro motor con IA_PRINCIPAL o recarga.')
+        return ('saldo', f'Se agotó el cupo gratis de {motor} por HOY. Se renueva a la '
+                         'medianoche (hora del Pacífico, ~2 a.m. en Colombia). Tip: pon '
+                         'GEMINI_MODEL=gemini-2.5-flash-lite para tener mucho más cupo gratis.')
     if '429' in d or 'RATE' in d:
-        return ('limite', f'{motor} alcanzó su límite de peticiones. Espera un momento; si '
-                          'es constante, cambia IA_PRINCIPAL a un motor con más cupo.')
+        return ('limite', f'{motor} llegó al límite por minuto. Espera ~1 minuto y vuelve a '
+                          'intentar (el cupo por minuto se renueva solo).')
     if '404' in d or 'MODEL' in d or 'NOT FOUND' in d:
         return ('modelo', f'El modelo de {motor} no existe para tu cuenta. Revisa '
                           'GEMINI_MODEL / GROK_MODEL (o déjalos vacíos) en Render.')
