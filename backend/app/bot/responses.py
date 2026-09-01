@@ -407,6 +407,12 @@ def _coincide_genero(nombre_prenda: str, genero: str) -> bool:
     return es_nino if genero == "nino" else es_nina
 
 
+# Colegio en LIQUIDACIÓN: solo se vende lo último en inventario, con descuento,
+# sin fabricación por encargo. (Adventista: contrato terminado.)
+_COLEGIO_LIQUIDACION = 2       # id de Adventista
+_LIQUIDACION_FACTOR = 0.5      # 50% de descuento
+
+
 def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
                        genero: str = "ambos", producto: str = None) -> str:
     """Pide el catálogo del colegio al backend y arma la respuesta para una talla,
@@ -448,17 +454,34 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
                 f"*{nombre_colegio}* 🤔. ¿Será otra talla? O escribe *asesor* y con "
                 "muchísimo gusto te ayudo a encontrarla. 🙌"), []
 
+    liq = (id_colegio == _COLEGIO_LIQUIDACION)
+
+    def _pv(pr):   # precio a mostrar (con descuento si es liquidación)
+        return int(round(pr * _LIQUIDACION_FACTOR)) if liq else int(pr)
+
     def _linea(n, pr):
         return f"• {n} — " + f"${int(pr):,}".replace(",", ".")
-    disp = [_linea(n, pr) for (pid, n, pr, st) in encontrados if st > 0]
-    encargo = [_linea(n, pr) for (pid, n, pr, st) in encontrados if st <= 0]
-    # Items disponibles ahora (con id_producto) para poder cerrar la venta en el chat
-    items_disp = [{"id_producto": pid, "nombre": n, "precio": int(pr), "talla": talla}
+    disp = [_linea(n, _pv(pr)) for (pid, n, pr, st) in encontrados if st > 0]
+    # En liquidación NO hay 'por encargo' (ya no se fabrica).
+    encargo = [] if liq else [_linea(n, pr) for (pid, n, pr, st) in encontrados if st <= 0]
+    # Items disponibles ahora (con id_producto) para cerrar la venta en el chat
+    # — con el precio ya descontado si es liquidación.
+    items_disp = [{"id_producto": pid, "nombre": n, "precio": _pv(pr), "talla": talla}
                   for (pid, n, pr, st) in encontrados if st > 0 and pid]
 
-    partes = [nota + f"🏷️ *Precios {nombre_colegio} · talla {talla}{etiqueta_gen}*\n"]
+    if liq and not disp:
+        return (f"En *{nombre_colegio}* estamos en *liquidación* y ya no me queda esa "
+                "talla en inventario 🙈. Escribe *asesor* para ver lo último disponible."), []
+
+    if liq:
+        partes = [nota + f"🏷️ *{nombre_colegio} · talla {talla}{etiqueta_gen}* — "
+                  "🔖 *LIQUIDACIÓN 50% dto*\n"
+                  "_Es lo último en inventario; ya no fabricamos este colegio._\n"]
+    else:
+        partes = [nota + f"🏷️ *Precios {nombre_colegio} · talla {talla}{etiqueta_gen}*\n"]
     if disp:
-        partes.append("✅ *Disponible ahora:*\n" + "\n".join(disp))
+        encabezado = "🔖 *En liquidación (50% dto):*\n" if liq else "✅ *Disponible ahora:*\n"
+        partes.append(encabezado + "\n".join(disp))
     if encargo:
         partes.append("\n🧵 *Por encargo* (demora aprox. 1 a 2 meses):\n" + "\n".join(encargo))
     _slug = {1: "marillac", 2: "adventista", 3: "manyanet"}.get(id_colegio, "")
