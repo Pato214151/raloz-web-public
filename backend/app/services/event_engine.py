@@ -458,11 +458,20 @@ def disparar(app, motivo='evento', delay=20):
         with _timer_lock:
             _timer['t'] = None
         try:
+            from sqlalchemy import text
             with app.app_context():
                 r = observar(persistir=True)
                 if r.get('nuevos_relevantes'):
-                    top = r.get('nuevo_top') or 'Hay algo que revisar'
-                    _push('RALOZ · Alerta', f'{top} — {_texto_resumen(r)}')
+                    # Con varios workers, un advisory lock evita el push duplicado.
+                    try:
+                        solo_uno = db.session.execute(
+                            text("SELECT pg_try_advisory_xact_lock(1007)")).scalar()
+                    except Exception:
+                        solo_uno = True   # SQLite/dev: sin lock, seguimos
+                    if solo_uno:
+                        top = r.get('nuevo_top') or 'Hay algo que revisar'
+                        _push('RALOZ · Alerta', f'{top} — {_texto_resumen(r)}')
+                    db.session.commit()
         except Exception as e:
             logger.warning("event_engine: disparo (%s) falló: %s", motivo, e)
 

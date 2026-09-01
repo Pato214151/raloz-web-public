@@ -23,7 +23,7 @@ _CTX_CACHE = {'t': 0.0, 'data': None}
 _CTX_TTL = 45  # segundos
 
 import requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from sqlalchemy import func, and_
 
@@ -1358,6 +1358,13 @@ def ejecutar():
         titulo = str(data.get('titulo', '')).strip()[:200]
         if not titulo:
             return jsonify({'error': 'Falta el título del recordatorio.'}), 400
+        # Idempotencia (¿estoy duplicando algo?): si ya existe un recordatorio
+        # abierto con el mismo título, no lo repito.
+        dup = Tarea.query.filter(Tarea.titulo == titulo,
+                                 Tarea.completada.isnot(True)).first()
+        if dup:
+            return jsonify({'ok': True, 'duplicado': True,
+                            'mensaje': f'Ya tienes ese recordatorio: “{titulo}”. No lo dupliqué.'}), 200
         fecha = None
         if data.get('fecha'):
             try:
@@ -1491,6 +1498,12 @@ def ejecutar():
         antes = {'id_stock': stock.id_stock, 'id_colegio': cid, 'id_producto': pid,
                  'talla': talla, 'cantidad': cantidad_antes}
         despues = {'id_stock': stock.id_stock, 'cantidad': stock.cantidad}
+        # Tiempo real: un cambio de stock puede crear/cerrar riesgos → re-evaluar.
+        try:
+            from app.services.event_engine import disparar
+            disparar(current_app._get_current_object(), motivo='stock')
+        except Exception:
+            pass
         _post = governor.post_check('ajustar_stock', despues)
         verificado = _post['verificado']
         acc = _registrar_accion(
@@ -1615,6 +1628,10 @@ def ejecutar():
         return jsonify({'error': 'Esa factura está anulada; no se puede cambiar.'}), 400
 
     anterior = factura.estado_entrega
+    if anterior == estado:   # no-op: ya está en ese estado (¿duplico?)
+        return jsonify({'ok': True, 'duplicado': True,
+                        'mensaje': f'La factura {factura.numero_factura} ya estaba en '
+                                   f'"{_ESTADOS_ENTREGA[estado]}". No cambié nada.'}), 200
     factura.estado_entrega = estado
     db.session.commit()
 
