@@ -32,7 +32,7 @@ from app.utils.decorators import rol_requerido, get_current_identity, registrar_
 from app.models import (
     Factura, FacturaDetalle, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea, MovimientoInventario,
-    AccionAsistente,
+    AccionAsistente, Evento,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.inventario import registrar_movimiento, stock_descontado_neto
@@ -583,7 +583,21 @@ def _ejecutar_busqueda(obj):
                                     obj.get('porcentaje'))
     if tipo == 'bitacora':
         return _tool_bitacora(obj.get('limite') or 10)
+    if tipo == 'observar':
+        return _tool_observar()
     return {'error': 'búsqueda no soportada'}
+
+
+def _tool_observar():
+    """Corre el Observador y devuelve las alertas priorizadas del negocio."""
+    from app.services.event_engine import observar
+    try:
+        r = observar(persistir=True)
+    except Exception as e:
+        logger.warning("asistente: _tool_observar falló: %s", e)
+        return {'encontrado': False, 'error': 'no pude revisar el negocio'}
+    r['encontrado'] = True
+    return r
 
 
 def _tool_bitacora(limite):
@@ -871,6 +885,7 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"top_productos\",\"limite\":<n>}  → prendas más vendidas (unidades y $); sin mes/rango = histórico, o agrega \"mes\"/\"anio\" o \"desde\"/\"hasta\". Úsalo para 'qué es lo que más se vende' / 'la mejor prenda'\n"
         "BUSCAR: {\"tipo\":\"simular_precio\",\"colegio\":\"<colegio o vacío>\",\"prenda\":\"<prenda o vacío>\",\"porcentaje\":<número, ej 5 o -10>}  → SIMULA (no cambia nada) el margen actual vs con ese % de cambio de precio. Úsalo para '¿qué pasa si subo/bajo los precios?'. Preséntalo como escenario, NO ejecutes\n"
         "BUSCAR: {\"tipo\":\"bitacora\",\"limite\":<n>}  → últimas acciones que ejecutaste (id, qué se hizo, si se verificó, si es reversible). Úsalo para '¿qué cambios hiciste?' o cuando el Jefe pida DESHACER algo: primero mira la bitácora para encontrar el id_accion a revertir\n"
+        "BUSCAR: {\"tipo\":\"observar\"}  → el Observador revisa el negocio (stock agotado/bajo, saldos por cobrar, pedidos retrasados, ventas sin descontar) y devuelve alertas priorizadas (🔴 crítico, 🟠 importante, 🟡 precaución). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'reviza todo'. Preséntalo priorizado y breve; si no hay nada, dilo en una línea\n"
         "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
         "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
     )
@@ -1044,6 +1059,58 @@ def bitacora():
              .order_by(AccionAsistente.creado_en.desc())
              .limit(limite).all())
     return jsonify({'acciones': [a.to_dict() for a in filas]}), 200
+
+
+@asistente_bp.route('/observar', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador')
+def observar_endpoint():
+    """El Observador: escanea el negocio y devuelve las alertas priorizadas
+    ('Buenos días, Jefe: detecté N cosas'). Registra los eventos nuevos."""
+    from app.services.event_engine import observar
+    try:
+        return jsonify(observar(persistir=True)), 200
+    except Exception as e:
+        logger.warning("asistente: observar falló: %s", e)
+        return jsonify({'error': 'No pude revisar el negocio en este momento.'}), 500
+
+
+@asistente_bp.route('/eventos', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador')
+def eventos_endpoint():
+    """Lista eventos del negocio. ?estado=NUEVO|VISTO|RESUELTO (por defecto abiertos)."""
+    estado = (request.args.get('estado') or '').upper().strip()
+    try:
+        limite = min(max(int(request.args.get('limite', 50)), 1), 200)
+    except Exception:
+        limite = 50
+    q = Evento.query
+    if estado in ('NUEVO', 'VISTO', 'RESUELTO'):
+        q = q.filter(Evento.estado == estado)
+    else:
+        q = q.filter(Evento.estado.in_(('NUEVO', 'VISTO')))
+    filas = q.order_by(Evento.creado_en.desc()).limit(limite).all()
+    return jsonify({'eventos': [e.to_dict() for e in filas]}), 200
+
+
+@asistente_bp.route('/eventos/<int:id_evento>/estado', methods=['POST'])
+@jwt_required()
+@rol_requerido('administrador')
+def evento_estado(id_evento):
+    """Marca un evento como VISTO o RESUELTO."""
+    from datetime import datetime as _dt
+    nuevo = (request.get_json(silent=True) or {}).get('estado', 'VISTO')
+    nuevo = str(nuevo).upper().strip()
+    if nuevo not in ('VISTO', 'RESUELTO', 'NUEVO'):
+        return jsonify({'error': 'Estado inválido.'}), 400
+    ev = Evento.query.get(id_evento)
+    if not ev:
+        return jsonify({'error': 'No encontré ese evento.'}), 404
+    ev.estado = nuevo
+    ev.visto_en = _dt.utcnow() if nuevo != 'NUEVO' else None
+    db.session.commit()
+    return jsonify({'ok': True, 'evento': ev.to_dict()}), 200
 
 
 @asistente_bp.route('/ejecutar', methods=['POST'])

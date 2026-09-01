@@ -446,6 +446,30 @@ MIGRACIONES = [
             "CREATE INDEX IF NOT EXISTS idx_acciones_asistente_creado ON acciones_asistente(creado_en DESC)",
         ],
     },
+    {
+        'version': '0029',
+        'descripcion': 'Event Engine: eventos del negocio detectados por el Observador',
+        'sql': [
+            """
+            CREATE TABLE IF NOT EXISTS eventos (
+                id_evento     SERIAL PRIMARY KEY,
+                tipo          VARCHAR(50) NOT NULL,
+                severidad     VARCHAR(15) NOT NULL DEFAULT 'INFORMATIVO',
+                titulo        VARCHAR(200) NOT NULL,
+                detalle       VARCHAR(500),
+                entidad_tipo  VARCHAR(30),
+                entidad_id    INTEGER,
+                datos         TEXT,
+                clave_dedup   VARCHAR(160) NOT NULL,
+                estado        VARCHAR(15) NOT NULL DEFAULT 'NUEVO',
+                creado_en     TIMESTAMP NOT NULL DEFAULT NOW(),
+                visto_en      TIMESTAMP
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_eventos_dedup ON eventos(clave_dedup)",
+            "CREATE INDEX IF NOT EXISTS idx_eventos_estado_sev ON eventos(estado, severidad)",
+        ],
+    },
 ]
 
 

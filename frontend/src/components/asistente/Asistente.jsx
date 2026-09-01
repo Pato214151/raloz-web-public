@@ -5,7 +5,7 @@ import api from '../../services/api'
 import {
   Sparkles, Send, Plus, Copy, RotateCcw, Check, AlertTriangle,
   ShoppingCart, Users, BookOpen, BarChart3, Boxes, ClipboardList,
-  Loader2, Clock, ChevronRight,
+  Loader2, Clock, ChevronRight, Activity,
 } from 'lucide-react'
 
 // ── Branding RALOZ ──
@@ -15,6 +15,7 @@ const STORAGE_KEY = 'raloz_asistente_chat'
 
 // Chips del estado vacío (mandan un comando de arranque al asistente)
 const ATAJOS = [
+  { id: 'revision',   label: 'Revisión',   icon: Activity,     prompt: '¿Cómo está el negocio? Revisa todo y dime lo importante.' },
   { id: 'ventas',     label: 'Ventas',     icon: ShoppingCart, prompt: '¿Cuánto hemos vendido hoy?' },
   { id: 'inventario', label: 'Inventario', icon: Boxes,        prompt: '¿Qué prendas tienen stock bajo?' },
   { id: 'pedidos',    label: 'Pedidos',    icon: ClipboardList, prompt: '¿Qué pedidos están pendientes?' },
@@ -361,6 +362,54 @@ function TarjetasDatos({ datos }) {
           <p className="text-[11px] text-amber-600 mt-2">⚠️ {r.sin_costo} referencia{r.sin_costo === 1 ? '' : 's'} sin costo cargado — no se pueden simular.</p>
         )}
         {r.nota && <p className="text-[11px] text-[#718096] mt-1.5">{r.nota}</p>}
+      </div>
+    )
+  }
+  if (datos?.tipo === 'observar' && r.encontrado) {
+    const sevMeta = {
+      CRITICO: { emoji: '🔴', bg: 'bg-red-50', bd: 'border-red-100', tx: 'text-red-700' },
+      IMPORTANTE: { emoji: '🟠', bg: 'bg-amber-50', bd: 'border-amber-100', tx: 'text-amber-700' },
+      PRECAUCION: { emoji: '🟡', bg: 'bg-yellow-50', bd: 'border-yellow-100', tx: 'text-yellow-800' },
+      INFORMATIVO: { emoji: '🔵', bg: 'bg-sky-50', bd: 'border-sky-100', tx: 'text-sky-700' },
+    }
+    if (!r.hay_algo) {
+      return (
+        <div className="mt-2 inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+          <Check size={15} className="text-emerald-600" />
+          <span className="text-[13.5px] text-[#10213F]">Todo en orden — no detecté nada que requiera tu atención.</span>
+        </div>
+      )
+    }
+    const eventos = (r.eventos || []).slice(0, 12)
+    return (
+      <div className="mt-2 rounded-2xl border border-[#E7EBF1] bg-white p-3.5 max-w-lg" style={{ boxShadow: '0 1px 2px rgba(7,30,73,.04)' }}>
+        <div className="flex items-center gap-2 flex-wrap mb-2.5">
+          <p className="text-[13px] font-semibold text-[#10213F]">Revisión del negocio</p>
+          {['CRITICO', 'IMPORTANTE', 'PRECAUCION'].filter(s => (r.resumen?.[s] || 0) > 0).map(s => (
+            <span key={s} className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${sevMeta[s].bg} ${sevMeta[s].tx}`}>
+              {sevMeta[s].emoji} {r.resumen[s]}
+            </span>
+          ))}
+        </div>
+        <div className="space-y-2">
+          {eventos.map((e, i) => {
+            const m = sevMeta[e.severidad] || sevMeta.INFORMATIVO
+            return (
+              <div key={i} className={`rounded-xl border ${m.bd} ${m.bg} px-3 py-2`}>
+                <div className="flex items-start gap-2">
+                  <span className="text-[13px] leading-5">{m.emoji}</span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[#10213F]">{e.titulo}</p>
+                    {e.detalle && <p className="text-[12px] text-[#5B6A88] mt-0.5">{e.detalle}</p>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {r.total_abierto > eventos.length && (
+          <p className="text-[11px] text-[#718096] mt-2">y {r.total_abierto - eventos.length} más…</p>
+        )}
       </div>
     )
   }

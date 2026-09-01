@@ -35,6 +35,7 @@ from app.models.promocion import Promocion
 from app.models.suscriptor import Suscriptor
 from app.models.push_subscription import PushSubscription
 from app.models.accion_asistente import AccionAsistente
+from app.models.evento import Evento
 
 __all__ = [
     'Usuario', 'Colegio', 'Producto', 'PrecioColegio', 'Stock',
@@ -46,5 +47,5 @@ __all__ = [
     'MovimientoInventario', 'OrdenProduccion',
     'WaConversacion', 'WaMensaje', 'Cita', 'Lead', 'ConfigSitio', 'Aviso',
     'ReglaAuto', 'Promocion', 'Suscriptor', 'PushSubscription',
-    'AccionAsistente',
+    'AccionAsistente', 'Evento',
 ]

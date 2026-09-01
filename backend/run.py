@@ -138,6 +138,33 @@ def _job_reglas_auto():
 threading.Thread(target=_job_reglas_auto, daemon=True, name='reglas-auto').start()
 
 
+# ─── Job: Observador (Event Engine) — escaneo del negocio (cada 3 h) ───
+def _job_observador():
+    """El sistema nervioso: escanea stock, cartera, pedidos y ventas, y
+    registra los eventos nuevos (con dedup, sin duplicar los ya abiertos).
+    Un advisory lock hace que solo un worker escanee por ciclo."""
+    from sqlalchemy import text
+    from app.services.event_engine import observar
+    time.sleep(120)  # espera inicial — deja que la app arranque
+    while True:
+        try:
+            with app.app_context():
+                tengo_lock = db.session.execute(
+                    text("SELECT pg_try_advisory_xact_lock(1005)")
+                ).scalar()
+                if tengo_lock:
+                    r = observar(persistir=True)
+                    if r.get('nuevos'):
+                        logger.info('[OBSERVADOR] %d evento(s) nuevo(s) detectado(s)', r['nuevos'])
+                db.session.commit()
+        except Exception as e:
+            logger.error('[OBSERVADOR] Error: %s', str(e))
+        time.sleep(10800)  # cada 3 horas
+
+
+threading.Thread(target=_job_observador, daemon=True, name='observador').start()
+
+
 # ─── Ducklab: latido de telemetría al portal (cada 3 min) ────────
 # Reporta "online" + versión al portal Ducklab para el monitoreo en vivo y el
 # dead-man switch. Se ACTIVA SOLO si DUCKLAB_API_KEY y DUCKLAB_TELEMETRY_URL
