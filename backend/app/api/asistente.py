@@ -677,9 +677,40 @@ def _ejecutar_busqueda(obj):
         'simular_devolucion': lambda: _tool_simular_devolucion(
             obj.get('referencia') or obj.get('factura', '')),
         'whatsapp_pendientes': lambda: _tool_whatsapp_pendientes(obj.get('limite') or 15),
+        'festivos': lambda: _tool_festivos(obj.get('anio') or obj.get('año')),
     }
     handler = handlers.get(tipo)
     return handler() if handler else {'error': 'búsqueda no soportada'}
+
+
+_FESTIVOS_CACHE = {}
+
+
+def _tool_festivos(anio):
+    """Festivos de Colombia del año (API pública Nager.Date, gratis, sin llave).
+    Se cachea por año (no cambian). Complementa 'calendario' para descontar días."""
+    hoy = date.today()
+    try:
+        y = int(anio) if anio else hoy.year
+    except Exception:
+        y = hoy.year
+    if y in _FESTIVOS_CACHE:
+        return _FESTIVOS_CACHE[y]
+    try:
+        r = requests.get(f'https://date.nager.at/api/v3/PublicHolidays/{y}/CO', timeout=8)
+        if r.status_code != 200:
+            return {'encontrado': False, 'error': 'no pude consultar los festivos ahora'}
+        data = r.json()
+    except Exception as e:
+        logger.warning('asistente: festivos falló: %s', e)
+        return {'encontrado': False, 'error': 'no pude consultar los festivos ahora'}
+    dias = [{'fecha': d.get('date'), 'nombre': d.get('localName') or d.get('name')}
+            for d in (data or []) if d.get('date')]
+    res = {'encontrado': bool(dias), 'tipo_fest': 'festivos', 'anio': y,
+           'pais': 'Colombia', 'festivos': dias, 'total': len(dias)}
+    if dias:
+        _FESTIVOS_CACHE[y] = res
+    return res
 
 
 def _tool_whatsapp_pendientes(limite):

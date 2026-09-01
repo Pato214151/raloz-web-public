@@ -134,6 +134,12 @@ TOOLS: tuple[ToolSpec, ...] = (
         '{"tipo":"whatsapp_pendientes","limite":<n>}',
         category="análisis",
     ),
+    ToolSpec(
+        "festivos",
+        "Festivos oficiales de Colombia del año. Combínalo con calendario para NO contar días festivos en turnos/pagos, y para avisar días sin atención.",
+        '{"tipo":"festivos","anio":<año>}',
+        category="análisis",
+    ),
 )
 
 
