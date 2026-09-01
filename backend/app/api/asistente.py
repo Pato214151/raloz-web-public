@@ -660,6 +660,12 @@ def _ejecutar_busqueda(obj):
         return _tool_calendario(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
     if tipo == 'ventas_por_dia':
         return _tool_ventas_por_dia(obj.get('desde'), obj.get('hasta'), obj.get('dias'))
+    if tipo == 'gastos':
+        return _tool_gastos(obj.get('desde'), obj.get('hasta'))
+    if tipo == 'flujo_caja':
+        return _tool_flujo_caja(obj.get('desde'), obj.get('hasta'))
+    if tipo == 'simular_devolucion':
+        return _tool_simular_devolucion(obj.get('referencia') or obj.get('factura', ''))
     return {'error': 'búsqueda no soportada'}
 
 
@@ -844,6 +850,106 @@ def _tool_home():
         return {'encontrado': False, 'error': 'no pude armar el resumen'}
     r['encontrado'] = True
     return r
+
+
+_REVISION_KW = ('cómo está', 'como esta', 'revisa', 'revisá', 'revision', 'revisión',
+                'buenos días', 'buenos dias', 'resumen del', 'resumen general',
+                'algo importante', 'algo urgente', 'qué hay', 'que hay', 'cómo va todo',
+                'como va todo', 'cómo vamos', 'como vamos', 'alertas', 'panorama',
+                'estado del negocio')
+
+
+def _es_revision(pregunta):
+    """¿El usuario pidió una revisión GENERAL del negocio? (para permitir observar)."""
+    p = _norm(pregunta) if '_norm' in globals() else str(pregunta or '').lower()
+    return any(k in p for k in _REVISION_KW)
+
+
+def _tool_gastos(desde, hasta):
+    """Gastos agrupados por CATEGORÍA en un rango (por defecto, mes actual)."""
+    from calendar import monthrange
+    hoy = date.today()
+
+    def _p(s, d):
+        try:
+            return datetime.strptime(str(s)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return d
+    d0 = _p(desde, date(hoy.year, hoy.month, 1))
+    d1 = _p(hasta, date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1]))
+    filas = (db.session.query(Gasto.categoria, func.coalesce(func.sum(Gasto.valor), 0),
+                              func.count(Gasto.id_gasto))
+             .filter(Gasto.fecha >= d0, Gasto.fecha <= d1)
+             .group_by(Gasto.categoria)
+             .order_by(func.sum(Gasto.valor).desc()).all())
+    cats = [{'categoria': c or 'Otros', 'total': round(t or 0), 'cantidad': int(n or 0)}
+            for c, t, n in filas]
+    total = sum(x['total'] for x in cats)
+    return {'encontrado': bool(cats), 'tipo_gastos': 'gastos', 'desde': d0.isoformat(),
+            'hasta': d1.isoformat(), 'categorias': cats, 'total': total,
+            'nota': 'Solo gastos REGISTRADOS. Si está vacío, puede que no se hayan cargado, '
+                    'no que no existan.'}
+
+
+def _tool_flujo_caja(desde, hasta):
+    """Flujo de caja simple: cobros reales (entradas) − gastos (salidas)."""
+    from calendar import monthrange
+    hoy = date.today()
+
+    def _p(s, d):
+        try:
+            return datetime.strptime(str(s)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return d
+    d0 = _p(desde, date(hoy.year, hoy.month, 1))
+    d1 = _p(hasta, date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1]))
+    ingresos = float(db.session.query(func.coalesce(func.sum(Pago.valor), 0))
+                     .filter(Pago.fecha_pago >= d0, Pago.fecha_pago <= d1).scalar() or 0)
+    egresos = float(db.session.query(func.coalesce(func.sum(Gasto.valor), 0))
+                    .filter(Gasto.fecha >= d0, Gasto.fecha <= d1,
+                            func.coalesce(Gasto.estado_pago, 'PAGADO') != 'PENDIENTE')
+                    .scalar() or 0)
+    return {'encontrado': True, 'tipo_flujo': 'flujo_caja', 'desde': d0.isoformat(),
+            'hasta': d1.isoformat(), 'ingresos': round(ingresos), 'egresos': round(egresos),
+            'neto': round(ingresos - egresos),
+            'nota': 'Ingresos = cobros reales (no ventas a crédito). Egresos = gastos '
+                    'registrados pagados. Es CAJA, no utilidad.'}
+
+
+def _tool_simular_devolucion(referencia):
+    """SIMULA (no ejecuta) el impacto de devolverle el dinero de una factura:
+    cuánto sale de caja, qué stock regresaría y la utilidad que se pierde."""
+    f = _buscar_factura(referencia)
+    if not f:
+        return {'encontrado': False, 'mensaje': f'No encontré la factura "{referencia}".'}
+    pagado = float(f.total_abonado or 0)
+    detalles = FacturaDetalle.query.filter_by(id_factura=f.id_factura).all()
+    unidades, utilidad = 0, 0.0
+    estimado = False
+    for d in detalles:
+        unidades += (d.cantidad or 0)
+        grupo = TALLA_INDIVIDUAL_A_GRUPO.get(d.talla_individual, d.talla_individual)
+        pc = (PrecioColegio.query
+              .filter_by(id_colegio=f.id_colegio, id_producto=d.id_producto, talla_grupo=grupo)
+              .first())
+        precio_linea = float(d.precio_unitario or 0) * (d.cantidad or 0)
+        if pc and pc.costo_unitario is not None:
+            utilidad += precio_linea - float(pc.costo_unitario) * (d.cantidad or 0)
+        else:
+            utilidad += precio_linea * 0.4   # sin costo → margen estimado 40%
+            estimado = True
+    return {
+        'encontrado': True, 'tipo_dev': 'simular_devolucion',
+        'numero': f.numero_factura, 'total': round(f.total or 0),
+        'pagado': round(pagado), 'a_devolver': round(pagado),
+        'impacto_caja': -round(pagado),
+        'unidades_regresan': unidades,
+        'utilidad_que_se_pierde': round(utilidad),
+        'estimado': estimado,
+        'nota': 'ESCENARIO, no aplicado. Devolver el dinero saca de caja lo cobrado; si '
+                'la prenda vuelve al inventario recuperas stock (a costo). La utilidad '
+                + ('es ESTIMADA (sin costos reales).' if estimado else 'usa los costos cargados.'),
+    }
 
 
 def _tool_observar():
@@ -1260,6 +1366,9 @@ def preguntar():
         "BUSCAR: {\"tipo\":\"home\"}  → el Daily Briefing ('Buenos días, Jefe'): alertas priorizadas + progreso de metas + cartera pendiente + las 3 acciones que recomiendas hoy. Úsalo para 'resumen del día', 'buenos días', 'cómo vamos'\n"
         "BUSCAR: {\"tipo\":\"calendario\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\",\"dias\":[\"lunes\",\"sabado\"]}  → cuenta cuántos días de la semana caen en un rango (sin desde/hasta = mes actual). Úsalo SIEMPRE para cálculos de calendario/turnos/pagos por día (ej. cuántos lunes y sábados hay); NO cuentes fechas a mano. Luego multiplica el total por la tarifa\n"
         "BUSCAR: {\"tipo\":\"ventas_por_dia\",\"dias\":[\"lunes\",\"sabado\"]}  → cuánto se factura en promedio por día de la semana (por defecto últimos 90 días). Úsalo para decidir '¿me conviene abrir/contratar para esos días?': compara el pago del ayudante contra lo que se factura esos días\n"
+        "BUSCAR: {\"tipo\":\"gastos\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\"}  → gastos por categoría en un rango (def mes actual). Úsalo para 'reducir gastos', 'en qué gasto más'. Si viene vacío, di que quizá no están registrados (no que no existan)\n"
+        "BUSCAR: {\"tipo\":\"flujo_caja\",\"desde\":\"YYYY-MM-DD\",\"hasta\":\"YYYY-MM-DD\"}  → caja: cobros reales − gastos (def mes actual). Úsalo para '¿cómo está la caja?', flujo, liquidez\n"
+        "BUSCAR: {\"tipo\":\"simular_devolucion\",\"referencia\":\"<numero o RALOZ-...>\"}  → SIMULA devolverle el dinero de una factura: cuánto sale de caja, qué stock vuelve y la utilidad que se pierde. Úsalo para '¿qué pasa si me devuelven plata?'. NO ejecutes nada\n"
         "BUSCAR: {\"tipo\":\"observar\"}  → SOLO para una revisión general ('¿cómo está el negocio?', 'revisa todo'). NO lo uses en preguntas puntuales ni para adornar respuestas. El Observador revisa el negocio y devuelve alertas ANALIZADAS y priorizadas por 'score' (0-100), agrupadas por prenda, con el POR QUÉ (campo datos.analisis), la RECOMENDACIÓN y a veces una acción sugerida (datos.accion_sugerida). Úsalo para '¿cómo está el negocio?', '¿hay algo importante?', 'revisa todo'. Preséntalo priorizado (🔴🟠🟡), con el porqué y qué recomiendas; si hay una acción sugerida, OFRÉCELA ('¿quieres que prepare …?') pero NO la ejecutes: solo si el Jefe dice que sí, propón el ACCION_JSON correspondiente. Si no hay nada, dilo en una línea\n"
         "Una sola BÚSQUEDA por turno, pero puedes encadenar varias (una tras otra) hasta "
         "completar el objetivo. Si la respuesta ya está en el resumen, NO uses BUSCAR."
@@ -1284,12 +1393,27 @@ def preguntar():
         consulta = _extraer_json_marcador(texto, 'BUSCAR')
         if not consulta:
             break
+        tipo_c = consulta.get('tipo')
+        # GATE del Observador (backend): si la intención NO es una revisión general,
+        # no dejamos que 'observar' contamine la respuesta ni pinte el tablero.
+        if tipo_c == 'observar' and not _es_revision(pregunta):
+            resultado = {'bloqueado': True,
+                         'nota': 'El usuario NO pidió una revisión general; no uses el '
+                                 'tablero del Observador. Responde con herramientas '
+                                 'específicas (gastos, flujo_caja, ventas_por_dia, '
+                                 'simular_devolucion…) o con los datos que ya tienes.'}
+            texto, detalle = _llamar_ia(
+                f"{base}\n\n=== NOTA DEL SISTEMA ===\n{resultado['nota']}\n\n"
+                "Responde ahora sin usar 'observar'.")
+            if texto is None:
+                return _error_gemini(detalle)
+            continue   # no fija ultima_busqueda → sin tarjeta del Observador
         try:
             resultado = _sin_pii(_ejecutar_busqueda(consulta))
         except Exception as e:
             logger.warning("asistente: búsqueda falló: %s", e)
             resultado = {'error': 'la búsqueda falló'}
-        ultima_busqueda = {'tipo': consulta.get('tipo'), 'resultado': resultado}
+        ultima_busqueda = {'tipo': tipo_c, 'resultado': resultado}
         seguimiento = (
             f"{base}\n\n=== RESULTADO DE LA BÚSQUEDA ({consulta.get('tipo')}) ===\n"
             f"{json.dumps(resultado, ensure_ascii=False, default=str)}\n\n"
