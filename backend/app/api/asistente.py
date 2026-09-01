@@ -933,28 +933,33 @@ def _llamar_grok(prompt_text):
             candidatos.append(m)
     ultimo = ''
     for modelo in candidatos:
-        try:
-            r = requests.post(
-                'https://api.x.ai/v1/chat/completions',
-                headers={'Authorization': f'Bearer {GROK_API_KEY}',
-                         'Content-Type': 'application/json'},
-                json={'model': modelo,
-                      'messages': [{'role': 'user', 'content': prompt_text}],
-                      'temperature': 0.2, 'max_tokens': 1500, 'stream': False},
-                timeout=30,
-            )
-        except Exception as e:
-            ultimo = f'grok conexión: {e}'
-            continue
-        if r.status_code == 200:
+        for intento in range(2):   # 1 reintento ante saturación (429/503)
             try:
-                return (r.json()['choices'][0]['message']['content'] or '').strip(), None
-            except Exception:
-                return '', 'grok_vacio'
-        ultimo = f'grok {r.status_code}: {r.text[:150]}'
-        logger.warning('asistente: Grok %s -> %s: %s', modelo, r.status_code, r.text[:150])
-        if r.status_code in (401, 403):
-            return None, ultimo   # llave inválida → no seguir probando modelos
+                r = requests.post(
+                    'https://api.x.ai/v1/chat/completions',
+                    headers={'Authorization': f'Bearer {GROK_API_KEY}',
+                             'Content-Type': 'application/json'},
+                    json={'model': modelo,
+                          'messages': [{'role': 'user', 'content': prompt_text}],
+                          'temperature': 0.2, 'max_tokens': 2000, 'stream': False},
+                    timeout=45,
+                )
+            except Exception as e:
+                ultimo = f'grok conexión: {e}'
+                break   # error de red → probar el siguiente modelo
+            if r.status_code == 200:
+                try:
+                    return (r.json()['choices'][0]['message']['content'] or '').strip(), None
+                except Exception:
+                    return '', 'grok_vacio'
+            ultimo = f'grok {r.status_code}: {r.text[:150]}'
+            logger.warning('asistente: Grok %s -> %s: %s', modelo, r.status_code, r.text[:150])
+            if r.status_code in (401, 403):
+                return None, ultimo   # llave inválida → no seguir probando
+            if r.status_code in (429, 503) and intento == 0:
+                time.sleep(2)
+                continue              # saturado → reintenta el mismo modelo
+            break                     # 400/404/422… → probar el siguiente modelo
     return None, ultimo
 
 
@@ -972,10 +977,14 @@ def _llamar_ia(prompt_text):
         if t is not None:
             return t, None
         detalle = d or detalle
-    ds, dsd = _llamar_deepseek(prompt_text)
-    if ds is not None:
-        return ds, None
-    return None, dsd or detalle
+    if DEEPSEEK_API_KEY:
+        ds, dsd = _llamar_deepseek(prompt_text)
+        if ds is not None:
+            return ds, None
+        detalle = dsd or detalle
+    # Sin respaldo configurado: devolvemos el error REAL del motor principal
+    # (no lo enmascaramos con 'sin_deepseek').
+    return None, detalle
 
 
 def _llamar_deepseek(prompt_text):
