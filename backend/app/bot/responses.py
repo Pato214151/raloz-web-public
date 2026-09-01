@@ -1416,6 +1416,7 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
         n = _num_cantidad(t)
         if n and 1 <= n <= 20:
             set_dato(chat_id, "compra_cant", str(n))
+            set_dato(chat_id, "cant_intentos", "0")
             set_estado(chat_id, "comprar_nombre")
             return Respuesta(
                 "¿A nombre de *quién* va el pedido? Escríbeme *nombre y apellido*. 🙂\n\n"
@@ -1425,7 +1426,22 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
         if n and n > 20:
             return Respuesta("Para pedidos de más de *20* escribe *asesor* 🙂. "
                              "Si no, dime cuántas (1 a 20).")
-        # No dio un número → salir del checkout con gracia hacia un asesor
+        # ¿Preguntó por disponibilidad ('¿cuántos hay?') en vez de dar el número?
+        # NO botes la venta: confírmale que hay y vuelve a pedir la cantidad.
+        if _tiene(t, ["cuanto", "cuantos", "cuantas", "hay", "disponible",
+                      "disponibles", "quedan", "tienen", "stock", "existencia", "queda"]):
+            return Respuesta("Sí, *hay disponible* ✅. ¿*Cuántas* quieres? "
+                             "Escribe un número (ej: *1*), de 1 a 20.")
+        # No dio un número: reintenta UNA vez antes de pasar a un asesor.
+        intentos = 0
+        try:
+            intentos = int(get_dato(chat_id, "cant_intentos") or 0)
+        except Exception:
+            intentos = 0
+        if intentos < 1:
+            set_dato(chat_id, "cant_intentos", "1")
+            return Respuesta("Casi 🙂. Escríbeme solo el *número* de unidades "
+                             "(ej: *1*, *2*). ¿Cuántas quieres?")
         _guardar_lead(chat_id, f"Iba a comprar pero respondió: {texto[:200]}")
         reset_estado(chat_id)
         return Respuesta("Mmm, no te entendí la cantidad 🙈. Te paso con un *asesor* "
