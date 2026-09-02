@@ -518,6 +518,21 @@ MIGRACIONES = [
             """,
         ],
     },
+    {
+        'version': '0032',
+        'descripcion': 'Liquidación Adventista: precios de venta al 50% (contrato terminado)',
+        'sql': [
+            # Se aplica UNA sola vez. Por NOMBRE (no por id) para no tocar otros colegios.
+            # Solo el precio de venta; el costo no se cambia.
+            """
+            UPDATE precios_colegio
+               SET precio_unitario = ROUND(precio_unitario * 0.5)
+             WHERE id_colegio IN (
+                   SELECT id_colegio FROM colegios
+                    WHERE LOWER(nombre) LIKE '%adventista%')
+            """,
+        ],
+    },
 ]
 
 
