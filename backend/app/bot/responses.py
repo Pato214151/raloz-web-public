@@ -1247,11 +1247,17 @@ def _compra_finalizar(chat_id: str, correo: str) -> Respuesta:
         ref = ped.get("referencia", "")
         _guardar_lead(chat_id, f"Pedido por chat: {cant}x {it['nombre']} talla {it['talla']} "
                                f"({nombre}, {correo}) ref {ref}")
+        nota_dom = ("🎁 *¡Tu domicilio es GRATIS!* (tu compra supera $500.000). "
+                    "Coordinamos la entrega contigo."
+                    if (total or 0) >= 500000 else
+                    "🛵 Este pago es *solo por los productos*. El *domicilio* se cotiza "
+                    "aparte según tu zona (o recoge *gratis* en el local).")
         return Respuesta(
             f"✅ ¡Listo, {nombre.split()[0]}! Aparté *{cant}x {it['nombre']} "
             f"talla {it['talla']}*.\n"
             f"💵 Total: *{_cop(total)}*\n\n"
             f"👉 Paga aquí (link seguro de MercadoPago):\n{data['pago_url']}\n\n"
+            f"{nota_dom}\n\n"
             "Al pagar te llega la *factura* al correo y la talla queda *reservada* "
             "mientras pagas. 🧾",
             aviso_admin=("🛒 *PEDIDO POR WHATSAPP*\n"
