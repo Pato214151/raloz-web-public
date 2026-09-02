@@ -52,7 +52,9 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.6-flash').strip()
 # Modelos que Google ya retiró (dan 404); si la env trae uno de estos, lo ignoramos.
 _MODELOS_RETIRADOS = {'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro',
-                      'gemini-1.0-pro', 'gemini-pro', 'gemini-2.0-flash-001'}
+                      'gemini-1.0-pro', 'gemini-pro', 'gemini-2.0-flash-001',
+                      'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+                      'gemini-2.0-flash-lite', 'gemini-3.6-flash-lite'}
 # Respaldo cuando Gemini falla/satura (routing invisible al Jefe). Opcional: DEEPSEEK_API_KEY en Render.
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '').strip()
 # Grok (xAI), API compatible con OpenAI. Si está configurada, es el motor PRINCIPAL.
@@ -1088,14 +1090,12 @@ def _llamar_gemini(prompt_text):
     candidatos = []
     if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
         candidatos.append(GEMINI_MODEL)
-    # Preferimos modelos con MÁS cupo gratis por día (los 'lite' y 2.0 dan
-    # cientos/miles al día; 2.5-flash solo ~20). Se prueban en orden y el que
-    # exista se usa.
-    for m in ('gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.0-flash',
-              'gemini-flash-latest', 'gemini-2.5-flash'):
+    # Modelos VIGENTES (sep 2026, familia Gemini 3.x). El 'lite' da más cupo
+    # gratis. Se prueban en orden y el primero que exista/responda se usa.
+    for m in ('gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-flash-latest'):
         if m not in candidatos:
             candidatos.append(m)
-    candidatos = candidatos[:5]
+    candidatos = candidatos[:4]
 
     ultimo_detalle = ''
     # Hasta 3 pasadas por la lista si todo dio 503 (alta demanda momentánea de Google).
@@ -1105,7 +1105,7 @@ def _llamar_gemini(prompt_text):
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                    f"{modelo}:generateContent?key={GEMINI_API_KEY}")
             try:
-                r = requests.post(url, json=payload, timeout=40)
+                r = requests.post(url, json=payload, timeout=30)
             except Exception as e:
                 ultimo_detalle = f'conexión: {e}'
                 continue
