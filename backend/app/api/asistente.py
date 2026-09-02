@@ -1105,7 +1105,7 @@ def _llamar_gemini(prompt_text):
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                    f"{modelo}:generateContent?key={GEMINI_API_KEY}")
             try:
-                r = requests.post(url, json=payload, timeout=15)
+                r = requests.post(url, json=payload, timeout=40)
             except Exception as e:
                 ultimo_detalle = f'conexión: {e}'
                 continue
