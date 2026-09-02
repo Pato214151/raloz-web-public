@@ -12,15 +12,15 @@ _CAT = {"productos": [
 ]}
 
 
-def test_adventista_liquidacion_50_sin_encargo(monkeypatch):
+def test_adventista_liquidacion_banner_stock_sin_encargo(monkeypatch):
     monkeypatch.setattr(responses, '_get_backend_json', lambda *a, **k: _CAT)
     texto, items = responses._consultar_precios(2, "Adventista", "M", "ambos")
     assert 'iquidaci' in texto.lower()          # banner de liquidación
-    assert '50.000' in texto                     # 100.000 → 50%
     assert 'Por encargo' not in texto            # ya no se fabrica
     assert 'Pantal' not in texto                 # sin stock → no aparece
-    # el item para el checkout ya lleva el precio con descuento
-    assert items and items[0]['precio'] == 50000
+    # el precio mostrado = el real de la base (= lo que se cobra), sin doble magia
+    assert '100.000' in texto
+    assert items and items[0]['precio'] == 100000
 
 
 def test_otro_colegio_precio_normal_y_encargo(monkeypatch):

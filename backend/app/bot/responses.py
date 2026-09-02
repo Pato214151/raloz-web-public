@@ -456,17 +456,15 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
 
     liq = (id_colegio == _COLEGIO_LIQUIDACION)
 
-    def _pv(pr):   # precio a mostrar (con descuento si es liquidación)
-        return int(round(pr * _LIQUIDACION_FACTOR)) if liq else int(pr)
-
     def _linea(n, pr):
         return f"• {n} — " + f"${int(pr):,}".replace(",", ".")
-    disp = [_linea(n, _pv(pr)) for (pid, n, pr, st) in encontrados if st > 0]
-    # En liquidación NO hay 'por encargo' (ya no se fabrica).
+    # Los PRECIOS que se muestran son los reales de la base (= lo que se cobra).
+    # El descuento de liquidación se aplica cambiando el precio en el panel, para
+    # que bot, web, POS y el cobro queden SIEMPRE iguales.
+    disp = [_linea(n, pr) for (pid, n, pr, st) in encontrados if st > 0]
+    # En liquidación NO hay 'por encargo' (ya no se fabrica): solo lo que hay.
     encargo = [] if liq else [_linea(n, pr) for (pid, n, pr, st) in encontrados if st <= 0]
-    # Items disponibles ahora (con id_producto) para cerrar la venta en el chat
-    # — con el precio ya descontado si es liquidación.
-    items_disp = [{"id_producto": pid, "nombre": n, "precio": _pv(pr), "talla": talla}
+    items_disp = [{"id_producto": pid, "nombre": n, "precio": int(pr), "talla": talla}
                   for (pid, n, pr, st) in encontrados if st > 0 and pid]
 
     if liq and not disp:
@@ -475,12 +473,12 @@ def _consultar_precios(id_colegio: int, nombre_colegio: str, talla: str,
 
     if liq:
         partes = [nota + f"🏷️ *{nombre_colegio} · talla {talla}{etiqueta_gen}* — "
-                  "🔖 *LIQUIDACIÓN 50% dto*\n"
-                  "_Es lo último en inventario; ya no fabricamos este colegio._\n"]
+                  "🔖 *LIQUIDACIÓN*\n"
+                  "_Últimas unidades en inventario; ya no fabricamos este colegio._\n"]
     else:
         partes = [nota + f"🏷️ *Precios {nombre_colegio} · talla {talla}{etiqueta_gen}*\n"]
     if disp:
-        encabezado = "🔖 *En liquidación (50% dto):*\n" if liq else "✅ *Disponible ahora:*\n"
+        encabezado = "🔖 *En liquidación:*\n" if liq else "✅ *Disponible ahora:*\n"
         partes.append(encabezado + "\n".join(disp))
     if encargo:
         partes.append("\n🧵 *Por encargo* (demora aprox. 1 a 2 meses):\n" + "\n".join(encargo))
@@ -991,7 +989,10 @@ _EMPRESA   = ["empresa", "empresas", "dotacion", "dotaciones", "constructora",
              "institucional", "institucion", "corporativ", "por referencia",
              "para mi empresa", "de una empresa", "somos una empresa", "mi negocio",
              "para una empresa", "uniforme empresarial", "uniformes empresarial",
-             "logo de la empresa", "pasadia", "camisetas para la empresa"]
+             "logo de la empresa", "pasadia", "camisetas para la empresa",
+             "por mayor", "al por mayor", "mayorista", "orden de compra",
+             "licitacion", "muchas unidades", "me comunicara con", "me pidieron que",
+             "conjunto residencial", "cotizacion para una"]
 # Piden un número / quieren llamar (frases específicas para no chocar con "número de pedido")
 _LLAMAR    = ["numero para llamar", "numero donde llamar", "donde puedo llamar", "numero donde",
              "un numero donde", "me pasas el numero", "me das el numero", "me das un numero",
