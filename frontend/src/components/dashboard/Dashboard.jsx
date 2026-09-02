@@ -107,6 +107,7 @@ export default function Dashboard() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUp, setLastUp]   = useState(null)
+  const [home, setHome]       = useState(null)   // Daily Briefing de RALOZ (admin)
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -122,6 +123,11 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => { loadDashboard() }, [loadDashboard])
+  // Daily Briefing del Observador (solo admin; endpoint protegido).
+  useEffect(() => {
+    if (usuario?.rol !== 'administrador') return
+    api.get('/asistente/home').then(r => setHome(r.data)).catch(() => {})
+  }, [usuario])
 
   const rol     = usuario?.rol
   const isAdmin = rol === 'administrador'
@@ -211,6 +217,58 @@ export default function Dashboard() {
               <span className="text-xs font-semibold leading-tight text-center">{a.label}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* ── RALOZ · Daily Briefing (solo admin) ── */}
+      {isAdmin && home && (home.total_alertas > 0 || (home.recomendaciones || []).length > 0 || (home.metas || []).length > 0) && (
+        <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: '#071E49' }}>
+            <p className="text-sm font-semibold text-white flex items-center gap-2">
+              <MessageSquare size={15} style={{ color: '#FFD84D' }} /> RALOZ · Buenos días
+            </p>
+            <button onClick={() => navigate('/asistente')}
+              className="text-[12px] font-medium text-white/90 flex items-center gap-1 hover:text-white">
+              Abrir <ArrowRight size={13} />
+            </button>
+          </div>
+          <div className="bg-white p-4 space-y-3">
+            {/* Alertas */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {['CRITICO', 'IMPORTANTE', 'PRECAUCION'].map(s => (home.alertas?.[s] || 0) > 0 && (
+                <span key={s} className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-gray-50 border border-gray-100 text-gray-700">
+                  {{ CRITICO: '🔴', IMPORTANTE: '🟠', PRECAUCION: '🟡' }[s]} {home.alertas[s]}
+                </span>
+              ))}
+              {(home.total_alertas || 0) === 0 && <span className="text-[13px] text-emerald-600 font-medium">Sin alertas ✓</span>}
+              {home.cartera_pendiente > 0 && (
+                <span className="text-[12px] text-gray-500 ml-auto">💰 Cartera {fmt(home.cartera_pendiente)}</span>
+              )}
+            </div>
+            {/* Metas */}
+            {(home.metas || []).map((m, i) => (
+              <div key={i}>
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <span className="text-gray-500">📈 {m.descripcion || 'Meta'}</span>
+                  <span className="font-semibold text-gray-800 tabular-nums">{fmt(m.actual)} / {fmt(m.meta)} · {m.pct}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, m.pct)}%`, background: m.proyecta_ok === false ? '#E7B85A' : '#071E49' }} />
+                </div>
+              </div>
+            ))}
+            {/* Recomendaciones */}
+            {(home.recomendaciones || []).length > 0 && (
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-[12px] font-semibold text-gray-800 mb-1.5">🎯 Hoy recomiendo</p>
+                <ol className="space-y-1">
+                  {home.recomendaciones.map((rec, i) => (
+                    <li key={i} className="text-[12px] text-gray-500 flex gap-1.5"><span className="text-gray-400">{i + 1}.</span> {rec}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

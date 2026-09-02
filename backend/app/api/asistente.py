@@ -886,6 +886,13 @@ def _bloque_politica():
                 f"('margen estimado, aún sin costos reales') y sugiere cargar los reales.")
     except Exception:
         pass
+    # Regla permanente: Adventista terminó contrato → LIQUIDACIÓN TOTAL.
+    partes.append(
+        "⚠️ COLEGIO ADVENTISTA = LIQUIDACIÓN TOTAL: se terminó el contrato, ya NO se "
+        "fabrica ni se repone nada de Adventista; solo se vende lo ÚLTIMO en inventario "
+        "(precios ya rebajados al 50%). NUNCA sugieras reponer, producir ni 'mantener "
+        "precio alto' en Adventista: el objetivo es liquidar lo que queda. El foco de "
+        "crecimiento va en los colegios activos (Marillac, Manyanet).")
     try:
         rt = reglas_texto()
         if rt:

@@ -30,10 +30,12 @@ def _modelo_configurado():
     """Construye el modelo PydanticAI usando el proveedor disponible."""
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     if gemini_key:
-        return GoogleModel(
-            os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip(),
-            provider=GoogleProvider(api_key=gemini_key),
-        )
+        modelo = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+        # Modelos 2.x fueron retirados por Google (404); usa 3.x.
+        if modelo in ("gemini-2.5-flash", "gemini-2.5-flash-lite",
+                      "gemini-2.0-flash", "gemini-2.0-flash-lite"):
+            modelo = "gemini-3.5-flash-lite"
+        return GoogleModel(modelo, provider=GoogleProvider(api_key=gemini_key))
 
     grok_key = os.getenv("GROK_API_KEY", "").strip()
     if grok_key:
