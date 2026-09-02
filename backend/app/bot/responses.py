@@ -753,7 +753,8 @@ RESP_PAGOS = (
 
 RESP_DOMICILIO = (
     "🛵 *Domicilios* en Bogotá\n\n"
-    "El costo depende de tu *zona*. Como referencia:\n"
+    "🎁 *GRATIS* en compras desde *$500.000*.\n"
+    "En pedidos menores, el costo depende de tu *zona* (referencia):\n"
     "• Zona *Manyanet*: aprox. *$8.000–$9.000*\n"
     "• Zona *Marillac*: aprox. *$10.000–$12.000*\n"
     "• Otras zonas: lo calculamos según la distancia.\n\n"
