@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
-import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
+import { qrTienda, bloqueQR, bloqueLogo, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
 
 const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
 const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
@@ -268,6 +268,7 @@ export default function Facturacion() {
       ${CSS_QR}
       @media print{body{margin:0}}
     </style></head><body>
+    ${bloqueLogo()}
     <div class="c">
       <h1 class="b">${empresa.nombre}</h1>
       ${empresa.nit ? `<p>NIT ${empresa.nit}</p>` : ''}

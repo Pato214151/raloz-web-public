@@ -6,7 +6,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Printer, Check, Package,
 } from 'lucide-react'
 import { fotoPrenda } from '../../data/prendasFotos'
-import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
+import { qrTienda, bloqueQR, bloqueLogo, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
 
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 
@@ -227,6 +227,7 @@ export default function Vender() {
       ${CSS_QR}
       @media print{body{margin:0}}
     </style></head><body>
+    ${bloqueLogo()}
     <div class="c"><h1 class="b">${empresa.nombre}</h1>${empresa.nit ? `<p>NIT ${empresa.nit}</p>` : ''}${empresa.direccion ? `<p>${empresa.direccion}</p>` : ''}${empresa.ciudad ? `<p>${empresa.ciudad}</p>` : ''}${empresa.telefono ? `<p>Cel: ${empresa.telefono}</p>` : ''}<p>${web}</p></div>
     <div class="sep"></div>
     <div class="row"><span>Recibo:</span><span class="b">${v.numero}</span></div>
