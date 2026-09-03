@@ -97,6 +97,18 @@ MANUAL = (
     "sistema tiene su propio módulo de Tareas.)\n"
     "- Reportes e histórico de ventas: menú 'Reportes' y 'Buscar facturas' (se puede "
     "filtrar por fechas de meses anteriores).\n"
+    "- Registrar un pago o abono: en 'Buscar facturas' abre la factura y registra el "
+    "pago del saldo (efectivo, transferencia, etc.); el saldo pendiente se actualiza solo.\n"
+    "- Marcar como entregado: en 'Operación' (o 'Pedidos') cambia el estado del pedido "
+    "POR_ENTREGAR → EMPACADO → ENTREGADO a medida que avanza. Los pagados por MercadoPago "
+    "ya descuentan el stock solos.\n"
+    "- Responder WhatsApp: menú 'WhatsApp' (la bandeja). Ahí ves los chats con mensajes "
+    "sin leer; el bot ya cotiza y aparta solo — el asesor entra para cerrar o casos "
+    "especiales. Se puede asignar el chat y dejar notas.\n"
+    "- Ver stock o precio de una prenda: menú 'Stock' (por colegio/talla). Los precios "
+    "solo los cambia un administrador.\n"
+    "- '¿Qué hago hoy?': botón en el inicio con las tareas del día (entregar, cobrar, "
+    "responder). Ideal para empezar la jornada.\n"
     "- Horario del punto: lunes y sábado 10:00 a.m. – 5:00 p.m."
 )
 

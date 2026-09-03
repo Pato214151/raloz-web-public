@@ -152,13 +152,26 @@ def reporte_ventas():
         )
     ).group_by(Factura.fecha_factura).order_by(Factura.fecha_factura).all()
 
+    # Costo de la mercancía vendida (CMV) → utilidad real
+    from app.services.rentabilidad import cmv_periodo
+    cmv = cmv_periodo(fecha_desde, fecha_hasta)
+    _ventas = float(ventas.total_ventas or 0)
+    _gastos = float(gastos_total.total_gastos or 0)
+    utilidad_bruta = _ventas - cmv['cmv_total']
+    utilidad_operacional = utilidad_bruta - _gastos
+
     return jsonify({
         'resumen': {
             'total_facturas': ventas.total_facturas or 0,
-            'total_ventas': float(ventas.total_ventas or 0),
+            'total_ventas': _ventas,
             'total_cobrado': float(cobros.total_cobrado or 0),
-            'total_gastos': float(gastos_total.total_gastos or 0),
-            'utilidad_neta': float((cobros.total_cobrado or 0) - (gastos_total.total_gastos or 0)),
+            'total_gastos': _gastos,
+            'costo_mercancia': cmv['cmv_total'],
+            'utilidad_bruta': round(utilidad_bruta, 2),
+            'utilidad_operacional': round(utilidad_operacional, 2),
+            'costo_estimado': cmv['hay_estimado'],
+            # compat: 'utilidad_neta' ahora es la operacional (ventas − CMV − gastos)
+            'utilidad_neta': round(utilidad_operacional, 2),
         },
         'ventas_diarias': [{
             'fecha': str(v.fecha_factura),
@@ -328,12 +341,18 @@ def reporte_cuentas():
     total_por_pagar = sum(g.valor for g in deudas)
 
     # Calcular totales
+    from app.services.rentabilidad import cmv_periodo
+    cmv = cmv_periodo(fecha_desde, fecha_hasta, colegio_id)
     total_ingresos = sum(f.total for f in facturas)
     total_gastos = sum(g.valor for g in gastos)
-    utilidad_bruta = total_ingresos - total_gastos
+    costo_mercancia = cmv['cmv_total']
+    # Utilidad bruta = ventas − costo de la mercancía vendida (NO ingresos − gastos)
+    utilidad_bruta = total_ingresos - costo_mercancia
     total_cobrado = sum(p.valor for p in pagos)
     total_pendiente = sum(f.saldo_pendiente or 0 for f in facturas if f.estado == 'PENDIENTE')
-    utilidad_neta = total_cobrado - total_gastos
+    # Utilidad operacional = utilidad bruta − gastos operativos
+    utilidad_operacional = utilidad_bruta - total_gastos
+    utilidad_neta = utilidad_operacional
 
     # Detalles de ingresos
     cantidad_facturas = len(facturas)
@@ -369,7 +388,10 @@ def reporte_cuentas():
 
     por_colegio = list(colegios_dict.values())
     for colegio in por_colegio:
-        colegio['utilidad'] = colegio['ingresos'] - colegio['gastos']
+        # Utilidad bruta del colegio = ventas − costo de su mercancía vendida
+        cmv_col = cmv_periodo(fecha_desde, fecha_hasta, colegio['id_colegio'])
+        colegio['costo_mercancia'] = cmv_col['cmv_total']
+        colegio['utilidad'] = colegio['ingresos'] - cmv_col['cmv_total']
 
     return jsonify({
         'fecha_desde': fecha_desde.isoformat(),
@@ -377,7 +399,10 @@ def reporte_cuentas():
         'resumen': {
             'total_ingresos': float(total_ingresos),
             'total_gastos': float(total_gastos),
+            'costo_mercancia': float(costo_mercancia),
             'utilidad_bruta': float(utilidad_bruta),
+            'utilidad_operacional': float(utilidad_operacional),
+            'costo_estimado': cmv['hay_estimado'],
             'total_cobrado': float(total_cobrado),
             'total_pendiente': float(total_pendiente),
             'utilidad_neta': float(utilidad_neta),
