@@ -78,10 +78,17 @@ _IA_SISTEMA = (
     "• Cotiza y toma pedidos por colegio + prenda + talla + cantidad (y género si aplica).\n"
     "• Domicilio en Bogotá (el costo depende de la zona; lo coordina un asesor).\n"
     "• Pago en línea con MercadoPago (tarjeta, PSE, Nequi, Efecty) o transferencia/Nequi.\n"
-    "• Agenda citas para medir/probar (atención lunes y sábado 10:00 a.m.–5:00 p.m.).\n"
+    "• Agenda citas para medir/probar.\n"
     "• Consulta el estado de un pedido ya hecho.\n"
     "• Garantía de confección (costuras/hilo) de 6 meses; cambio por talla equivocada dentro de 5 días hábiles.\n"
     "• Emite factura de la compra. Tienda en línea: https://ralozcolsas.com\n"
+    "\n"
+    "HORARIOS (dilo EXACTO — es un error MUY común): atendemos SIN cita SOLO los "
+    "*lunes y sábado* de 10:00 a.m. a 5:00 p.m. Son ÚNICAMENTE esos DOS días. "
+    "PROHIBIDO decir 'de lunes a sábado', 'lunes a sábado' o 'todos los días' — eso "
+    "es FALSO. Martes a viernes: solo con *cita previa*. Domingos y festivos: NO se "
+    "atiende. Si el cliente dice que fue y estaba cerrado, discúlpate, aclara que "
+    "sin cita solo abrimos *lunes y sábado*, y ofrécele *agendar una cita* para otro día.\n"
     "\n"
     "CÓMO TOMAR UN PEDIDO: si falta info, pregunta lo justo (colegio, prenda, talla, "
     "cantidad). Con el CATÁLOGO REAL que te doy, dale el precio exacto por talla y un "
@@ -628,8 +635,8 @@ _CITA = ["cita", "agendar", "agenda", "reservar", "reserva", "separar hora", "tu
 
 CITA_PEDIR_NOMBRE = (
     "📅 *Agendar cita*\n\n"
-    "Los *lunes y sábados* atendemos sin cita (10 a.m.–6 p.m.). Para *otro día* "
-    "te agendamos con gusto — ideal si quieres venir a *medir tallas*. 👕\n\n"
+    "Solo *lunes y sábado* atendemos sin cita (10 a.m.–5 p.m.). Para *cualquier otro "
+    "día* te agendamos con gusto — ideal si quieres venir a *medir tallas*. 👕\n\n"
     "¿A nombre de quién? Escríbeme tu *nombre completo*."
 )
 CITA_PEDIR_DIA = (
@@ -1409,6 +1416,15 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
             _tiene(t, ["hoy", "ahora", "ahorita"]) and
             _tiene(t, ["atend", "atien", "abiert", "pasar", "paso", "abren", "local"])):
         return Respuesta(_resp_abierto_hoy() + VOLVER)
+
+    # "Fui y estaba cerrado" → disculpa + aclara que solo lun/sáb sin cita + ofrece cita.
+    if _tiene(t, ["cerrado", "cerrada", "cerrados", "cerraron", "cerro", "cerró",
+                  "no abrieron", "no abrio", "no abrió", "estaba cerrado"]):
+        return Respuesta(
+            "🙏 ¡Ofrezco disculpas! Sin cita atendemos *solo lunes y sábado* de "
+            "10:00 a.m. a 5:00 p.m. Si pasaste otro día, por eso estaba cerrado. 🗓️\n"
+            "¿Quieres que te *agende una cita* para venir a medir/comprar tranquilo? "
+            "Escribe *cita* 🙂" + VOLVER)
 
     # ── 4) Estás dentro del flujo de GARANTÍA (esperando fotos) ───
     if estado == "garantia_fotos":
