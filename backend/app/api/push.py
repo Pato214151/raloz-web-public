@@ -57,6 +57,10 @@ def enviar_push_a_todos(titulo, cuerpo, url='/whatsapp', tag=None):
                 data=payload,
                 vapid_private_key=priv,
                 vapid_claims={'sub': sub},
+                ttl=1800,   # el push se guarda hasta 30 min si el equipo está offline
+                # Urgency 'high' → el servicio de push (FCM/APNs) intenta entregarlo
+                # de INMEDIATO en vez de agruparlo (evita retrasos de horas en móvil).
+                headers={'Urgency': 'high'},
                 timeout=10,
             )
             enviados += 1
