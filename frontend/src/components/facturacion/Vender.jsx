@@ -206,7 +206,7 @@ export default function Vender() {
     }
   }
 
-  // ---- Ticket 76mm (Epson TM-U220) ----
+  // ---- Ticket 80mm (Xprinter XP-N160, termica) ----
   const imprimirTicket = (v) => {
     let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', web: '' }
     try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* default */ }
@@ -218,8 +218,8 @@ export default function Vender() {
     ).join('')
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${v.numero}</title>
     <style>
-      @page { size: 76mm auto; margin: 0; }
-      *{box-sizing:border-box} body{width:76mm;margin:0;padding:2mm 3mm;color:#000;line-height:1.4;font-family:'Courier New',monospace;font-size:12px}
+      @page { size: 80mm auto; margin: 0; }
+      *{box-sizing:border-box} body{width:80mm;margin:0;padding:2mm 4mm;color:#000;line-height:1.4;font-family:'Courier New',monospace;font-size:12px}
       h1{font-size:16px;margin:0 0 2px}.c{text-align:center}.b{font-weight:bold}.big{font-size:14px;font-weight:bold}
       .sep{border-top:1px dashed #000;margin:6px 0}.row{display:flex;justify-content:space-between;gap:8px}
       .it{margin:4px 0}.itn{font-weight:bold}.terms{font-size:10px;line-height:1.35;margin-top:2px}

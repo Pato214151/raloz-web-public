@@ -377,7 +377,7 @@ export default function BuscarFacturas() {
     printWindow.print()
   }
 
-  // Reimprime el TICKET de 76mm (Epson TM-U220) desde una factura ya guardada.
+  // Reimprime el TICKET de 80mm (Xprinter XP-N160, termica) desde una factura ya guardada.
   // Sirve para imprimir desde el computador ventas hechas en el celular, o reimpresos.
   const imprimirTicket = () => {
     if (!selected) return
@@ -400,9 +400,9 @@ export default function BuscarFacturas() {
     const w = window.open('', '_blank')
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${selected.numero_factura}</title>
     <style>
-      @page { size: 76mm auto; margin: 0; }
+      @page { size: 80mm auto; margin: 0; }
       *{box-sizing:border-box}
-      body{width:76mm;margin:0;padding:2mm 3mm;color:#000;line-height:1.4;
+      body{width:80mm;margin:0;padding:2mm 4mm;color:#000;line-height:1.4;
            font-family:'Courier New',monospace;font-size:12px}
       h1{font-size:16px;margin:0 0 2px}
       p{margin:1px 0}
