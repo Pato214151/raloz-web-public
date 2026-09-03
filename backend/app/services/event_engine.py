@@ -417,9 +417,12 @@ def puede_auto(ev, accion):
 
 
 def modo_observador():
+    # Por defecto AUTÓNOMO: crea solo los recordatorios (acciones de bajo riesgo)
+    # para que el negocio funcione sin depender del dueño. Se puede cambiar en el
+    # panel del Asistente.
     from app.models import ConfigSitio
-    m = (ConfigSitio.get('observador_modo', MODO_SUGERIR) or MODO_SUGERIR).upper()
-    return m if m in _MODOS else MODO_SUGERIR
+    m = (ConfigSitio.get('observador_modo', MODO_AUTONOMO) or MODO_AUTONOMO).upper()
+    return m if m in _MODOS else MODO_AUTONOMO
 
 
 def set_modo_observador(modo):

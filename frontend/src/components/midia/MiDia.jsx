@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+import { activarNotificaciones, estadoNotificaciones } from '../../services/push'
 import {
   RefreshCw, Package, Scissors, Wallet, MessageCircle, CalendarClock,
-  CheckCircle2, ArrowRight,
+  CheckCircle2, ArrowRight, Bell,
 } from 'lucide-react'
 
 const cop = (n) => '$' + Math.round(Number(n || 0)).toLocaleString('es-CO')
@@ -36,6 +37,15 @@ export default function MiDia() {
   const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [notif, setNotif] = useState(estadoNotificaciones())  // default | granted | denied | no-soportado
+  const [notifMsg, setNotifMsg] = useState('')
+
+  const activarAvisos = async () => {
+    setNotifMsg('Activando…')
+    const r = await activarNotificaciones()
+    if (r.ok) { setNotif('granted'); setNotifMsg('') }
+    else { setNotifMsg(r.motivo || 'No se pudo activar.') }
+  }
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -69,6 +79,20 @@ export default function MiDia() {
             : '🟡 Hoy solo con cita previa (sin cita: solo lunes y sábado).'}
         </p>
       </div>
+
+      {/* Activar avisos en este celular (si aún no están) */}
+      {notif !== 'granted' && notif !== 'no-soportado' && (
+        <button onClick={activarAvisos}
+          className="w-full rounded-2xl p-4 flex items-center gap-3 bg-amber-50 border border-amber-200 active:scale-[.99] transition">
+          <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <Bell size={22} className="text-amber-600" />
+          </div>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="text-[15px] font-bold text-amber-900 leading-tight">🔔 Activar avisos en este celular</p>
+            <p className="text-[12.5px] text-amber-700">{notifMsg || 'Para que te lleguen las tareas y los mensajes nuevos.'}</p>
+          </div>
+        </button>
+      )}
 
       <div className="flex justify-end">
         <button onClick={cargar} className="text-[13px] text-gray-500 flex items-center gap-1.5 hover:text-gray-700">

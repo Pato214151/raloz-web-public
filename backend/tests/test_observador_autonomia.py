@@ -36,11 +36,11 @@ def _escenario_riesgo():
 
 def test_modo_por_defecto_y_cambio(app):
     with app.app_context():
-        assert ee.modo_observador() == ee.MODO_SUGERIR
-        assert ee.set_modo_observador('AUTONOMO') == 'AUTONOMO'
-        assert ee.modo_observador() == 'AUTONOMO'
+        assert ee.modo_observador() == ee.MODO_AUTONOMO   # por defecto autónomo
+        assert ee.set_modo_observador('SUGERIR') == 'SUGERIR'
+        assert ee.modo_observador() == 'SUGERIR'
         assert ee.set_modo_observador('inventado') is None   # inválido → no cambia
-        assert ee.modo_observador() == 'AUTONOMO'
+        assert ee.modo_observador() == 'SUGERIR'
 
 
 def test_modo_autonomo_crea_tarea_y_la_registra(app):
@@ -57,7 +57,8 @@ def test_modo_autonomo_crea_tarea_y_la_registra(app):
 
 def test_modo_sugerir_no_ejecuta_nada(app):
     with app.app_context():
-        _escenario_riesgo()  # modo por defecto = SUGERIR
+        _escenario_riesgo()
+        ee.set_modo_observador('SUGERIR')   # en SUGERIR no ejecuta acciones solo
         ee.observar(persistir=True)
         assert Tarea.query.count() == 0
         assert AccionAsistente.query.count() == 0
