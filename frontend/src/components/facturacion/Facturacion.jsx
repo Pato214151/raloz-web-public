@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
+import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo } from '../../utils/ticket'
 
 const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
 const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
@@ -232,7 +233,7 @@ export default function Facturacion() {
   const colegioNombre = colegios.find(c => String(c.id_colegio) === String(form.id_colegio))?.nombre || ''
 
   // === IMPRIMIR RECIBO (reusa el patrón window.open + @media print del proyecto) ===
-  const imprimirRecibo = () => {
+  const imprimirRecibo = async () => {
     if (!recibo) return
     let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '', web: '' }
     try { empresa = { ...empresa, ...(JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || {}) } } catch { /* usa default */ }
@@ -241,6 +242,7 @@ export default function Facturacion() {
 
     const w = window.open('', '_blank')
     if (!w) { toast.error('Habilita las ventanas emergentes para imprimir el recibo'); return }
+    const qr = await qrTienda()
 
     const itemsHTML = recibo.items.map(it =>
       `<div class="it"><div class="itn">${it.nombre}${it.talla ? ' · T' + it.talla : ''}</div>` +
@@ -264,6 +266,7 @@ export default function Facturacion() {
       .it{margin:4px 0}
       .itn{font-weight:bold}
       .terms{font-size:10px;line-height:1.35;margin-top:2px}
+      ${CSS_QR}
       @media print{body{margin:0}}
     </style></head><body>
     <div class="c">
@@ -299,10 +302,10 @@ export default function Facturacion() {
     </div>
     <div class="sep"></div>
     <p class="c">¡Gracias por tu compra!</p>
+    ${bloqueQR(qr)}
     </body></html>`)
     w.document.close()
-    w.focus()
-    w.print()
+    imprimirCuandoListo(w)
   }
 
   return (

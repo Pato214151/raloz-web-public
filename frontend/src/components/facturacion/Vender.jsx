@@ -6,6 +6,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Printer, Check, Package,
 } from 'lucide-react'
 import { fotoPrenda } from '../../data/prendasFotos'
+import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo } from '../../utils/ticket'
 
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 
@@ -207,11 +208,12 @@ export default function Vender() {
   }
 
   // ---- Ticket 80mm (Xprinter XP-N160, termica) ----
-  const imprimirTicket = (v) => {
+  const imprimirTicket = async (v) => {
     let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', web: '' }
     try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* default */ }
     const web = empresa.web || 'ralozcolsas.com'
     const w = window.open('', '_blank')
+    const qr = await qrTienda()
     const itemsHTML = v.items.map(it =>
       `<div class="it"><div class="itn">${it.nombre}${it.talla ? ' · T' + it.talla : ''}</div>` +
       `<div class="row"><span>${it.cantidad} x ${money(it.precio)}</span><span>${money(it.cantidad * it.precio)}</span></div></div>`
@@ -223,6 +225,7 @@ export default function Vender() {
       h1{font-size:16px;margin:0 0 2px}.c{text-align:center}.b{font-weight:bold}.big{font-size:14px;font-weight:bold}
       .sep{border-top:1px dashed #000;margin:6px 0}.row{display:flex;justify-content:space-between;gap:8px}
       .it{margin:4px 0}.itn{font-weight:bold}.terms{font-size:10px;line-height:1.35;margin-top:2px}
+      ${CSS_QR}
       @media print{body{margin:0}}
     </style></head><body>
     <div class="c"><h1 class="b">${empresa.nombre}</h1>${empresa.nit ? `<p>NIT ${empresa.nit}</p>` : ''}${empresa.direccion ? `<p>${empresa.direccion}</p>` : ''}${empresa.ciudad ? `<p>${empresa.ciudad}</p>` : ''}${empresa.telefono ? `<p>Cel: ${empresa.telefono}</p>` : ''}<p>${web}</p></div>
@@ -244,8 +247,9 @@ export default function Vender() {
       - Personalizados/bordados: sin cambio salvo defecto.<br>
       - Reembolsos por el mismo medio de pago.<br>- Conserva este ticket.<br>${web}/terminos.html</div>
     <div class="sep"></div><p class="c">¡Gracias por tu compra!</p>
+    ${bloqueQR(qr)}
     </body></html>`)
-    w.document.close(); w.focus(); w.print()
+    w.document.close(); imprimirCuandoListo(w)
   }
 
   // ---------------- UI ----------------

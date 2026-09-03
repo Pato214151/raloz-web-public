@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X, PackageCheck, MessageCircle } from 'lucide-react'
+import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo } from '../../utils/ticket'
 
 const ESTADOS = [
   { value: '', label: 'Todos' },
@@ -379,7 +380,7 @@ export default function BuscarFacturas() {
 
   // Reimprime el TICKET de 80mm (Xprinter XP-N160, termica) desde una factura ya guardada.
   // Sirve para imprimir desde el computador ventas hechas en el celular, o reimpresos.
-  const imprimirTicket = () => {
+  const imprimirTicket = async () => {
     if (!selected) return
     let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '', web: '' }
     try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* usa default */ }
@@ -398,6 +399,7 @@ export default function BuscarFacturas() {
     ).join('')
 
     const w = window.open('', '_blank')
+    const qr = await qrTienda()
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${selected.numero_factura}</title>
     <style>
       @page { size: 80mm auto; margin: 0; }
@@ -414,6 +416,7 @@ export default function BuscarFacturas() {
       .it{margin:4px 0}
       .itn{font-weight:bold}
       .terms{font-size:10px;line-height:1.35;margin-top:2px}
+      ${CSS_QR}
       @media print{body{margin:0}}
     </style></head><body>
     <div class="c">
@@ -449,10 +452,10 @@ export default function BuscarFacturas() {
     </div>
     <div class="sep"></div>
     <p class="c">¡Gracias por tu compra!</p>
+    ${bloqueQR(qr)}
     </body></html>`)
     w.document.close()
-    w.focus()
-    w.print()
+    imprimirCuandoListo(w)
   }
 
   const badgeEstado = (est) => {
