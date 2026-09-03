@@ -478,10 +478,10 @@ def _texto_resumen(r):
     return ' · '.join(partes) if partes else 'Todo en orden'
 
 
-def _push(titulo, cuerpo):
+def _push(titulo, cuerpo, url='/mi-dia'):
     try:
         from app.api.push import enviar_push_a_todos
-        return enviar_push_a_todos(titulo, cuerpo, url='/asistente', tag='observador')
+        return enviar_push_a_todos(titulo, cuerpo, url=url, tag='observador')
     except Exception as e:
         logger.warning("event_engine: push falló: %s", e)
         return 0

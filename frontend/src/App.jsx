@@ -9,6 +9,7 @@ import DucklabBadge from './components/common/DucklabBadge'
 // Lazy: cada vista carga en su propio chunk → bundle inicial mucho más liviano
 // (mejor carga en celular). recharts, WhatsApp, etc. salen del arranque.
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'))
+const MiDia = lazy(() => import('./components/midia/MiDia'))
 const Asistente = lazy(() => import('./components/asistente/Asistente'))
 const Facturacion = lazy(() => import('./components/facturacion/Facturacion'))
 const Vender = lazy(() => import('./components/facturacion/Vender'))
@@ -87,6 +88,7 @@ export default function App() {
           <ProtectedRoute><Layout /></ProtectedRoute>
         }>
           <Route index element={<Dashboard />} />
+          <Route path="mi-dia" element={<MiDia />} />
           <Route path="asistente" element={<Asistente />} />
 
           {/* ── ÁREAS PRINCIPALES (hubs con pestañas) ── */}

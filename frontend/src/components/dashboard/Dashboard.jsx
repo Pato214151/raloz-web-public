@@ -204,6 +204,20 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── ¿Qué hago hoy? (modo simple para atender el día) ── */}
+      <button onClick={() => navigate('/mi-dia')}
+        className="w-full rounded-2xl p-4 flex items-center gap-3 text-white shadow-sm active:scale-[.99] transition"
+        style={{ background: 'linear-gradient(135deg,#071E49,#123a86)' }}>
+        <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+          <ClipboardList size={22} />
+        </div>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="text-[16px] font-bold leading-tight">¿Qué hago hoy?</p>
+          <p className="text-[12.5px] text-white/80">Tus tareas del día, claras y en orden</p>
+        </div>
+        <ArrowRight size={18} className="opacity-80" />
+      </button>
+
       {/* ── Accesos rápidos ── */}
       {accesos.length > 0 && (
         <div className={`grid gap-2 ${accesos.length >= 4 ? 'grid-cols-4' : `grid-cols-${accesos.length}`}`}>

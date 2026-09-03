@@ -38,7 +38,7 @@ from app.utils.decorators import rol_requerido, get_current_identity, registrar_
 from app.models import (
     Factura, FacturaDetalle, Pago, Gasto, PedidoFabricacion, PrendaPendiente, CajaDiaria,
     Stock, Producto, Colegio, PedidoWeb, PrecioColegio, Tarea, MovimientoInventario,
-    AccionAsistente, Evento, WaConversacion,
+    AccionAsistente, Evento, WaConversacion, Cita,
 )
 from app.utils.tallas import TALLA_INDIVIDUAL_A_GRUPO
 from app.utils.inventario import registrar_movimiento, stock_descontado_neto
@@ -1747,6 +1747,86 @@ def estimar_costos_endpoint():
     n, factor = _aplicar_costos_estimados(d.get('factor', 0.6), bool(solo))
     return jsonify({'ok': True, 'actualizadas': n, 'factor': factor,
                     'margen_estimado_pct': round((1 - factor) * 100)}), 200
+
+
+@asistente_bp.route('/mi-dia', methods=['GET'])
+@jwt_required()
+@rol_requerido('administrador', 'vendedor', 'cajero')
+def mi_dia():
+    """'¿Qué hago hoy?' — lista SIMPLE de tareas del día para quien atiende el
+    negocio (pensado para un uso sin experiencia). Solo lo accionable."""
+    from datetime import timedelta
+    hoy = date.today()
+    tareas = {}
+
+    # 1) Pedidos por entregar (pagados o en proceso, aún no entregados)
+    try:
+        q = (Factura.query
+             .filter(Factura.estado != 'ANULADA',
+                     Factura.estado_entrega.in_(['POR_ENTREGAR', 'EMPACADO', 'LISTO_LLAMAR']),
+                     Factura.fecha_factura >= hoy - timedelta(days=120))
+             .order_by(Factura.fecha_factura.desc()))
+        pend = q.limit(25).all()
+        _ESTA = {'POR_ENTREGAR': 'por empacar', 'EMPACADO': 'empacado, entregar',
+                 'LISTO_LLAMAR': 'listo — llamar al cliente'}
+        tareas['entregar'] = {
+            'total': q.count(),
+            'items': [{'numero': f.numero_factura, 'cliente': f.cliente_nombre or 'Cliente',
+                       'estado': _ESTA.get(f.estado_entrega, f.estado_entrega),
+                       'canal': f.canal} for f in pend],
+        }
+    except Exception as e:
+        logger.warning("mi-dia entregar: %s", e)
+
+    # 2) Fabricaciones listas para entregar
+    try:
+        listas = PedidoFabricacion.query.filter(
+            PedidoFabricacion.estado.in_(['listo_para_entrega', 'listo'])).all()
+        tareas['fabricacion_lista'] = {'total': len(listas)}
+    except Exception:
+        pass
+
+    # 3) Facturas por cobrar (saldo pendiente)
+    try:
+        cobrar = (Factura.query
+                  .filter(Factura.estado == 'PENDIENTE', Factura.saldo_pendiente > 0)
+                  .order_by(Factura.saldo_pendiente.desc()).all())
+        total_cartera = sum(f.saldo_pendiente or 0 for f in cobrar)
+        tareas['cobrar'] = {
+            'total': len(cobrar), 'monto': round(total_cartera),
+            'items': [{'numero': f.numero_factura, 'cliente': f.cliente_nombre or 'Cliente',
+                       'saldo': round(f.saldo_pendiente or 0)} for f in cobrar[:12]],
+        }
+    except Exception as e:
+        logger.warning("mi-dia cobrar: %s", e)
+
+    # 4) WhatsApp sin responder
+    try:
+        convs = WaConversacion.query.filter(WaConversacion.no_leidos > 0).all()
+        tareas['whatsapp'] = {'chats': len(convs),
+                              'mensajes': sum(c.no_leidos or 0 for c in convs)}
+    except Exception:
+        pass
+
+    # 5) Citas pendientes
+    try:
+        cits = Cita.query.filter(Cita.estado == 'pendiente').order_by(Cita.creada.desc()).all()
+        tareas['citas'] = {
+            'total': len(cits),
+            'items': [{'nombre': c.nombre or 'Cliente', 'dia': c.dia, 'hora': c.hora,
+                       'colegio': c.colegio} for c in cits[:10]],
+        }
+    except Exception as e:
+        logger.warning("mi-dia citas: %s", e)
+
+    _dias = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+    hoy_co = datetime.utcnow() - timedelta(hours=5)
+    return jsonify({
+        'fecha': hoy.isoformat(),
+        'dia_semana': _dias[hoy_co.weekday()],
+        'atiende_sin_cita': hoy_co.weekday() in (0, 5),   # lunes o sábado
+        'tareas': tareas,
+    }), 200
 
 
 @asistente_bp.route('/home', methods=['GET'])
