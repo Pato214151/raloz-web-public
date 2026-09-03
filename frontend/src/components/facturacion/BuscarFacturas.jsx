@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X, PackageCheck, MessageCircle } from 'lucide-react'
-import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo } from '../../utils/ticket'
+import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
 
 const ESTADOS = [
   { value: '', label: 'Todos' },
@@ -312,8 +312,7 @@ export default function BuscarFacturas() {
   // === IMPRIMIR ===
   const imprimirFactura = () => {
     if (!selected) return
-    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '' }
-    try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* usa default */ }
+    const empresa = datosEmpresa()
 
     const printWindow = window.open('', '_blank')
     const detallesHTML = (selected.detalles || []).map(d =>
@@ -382,8 +381,7 @@ export default function BuscarFacturas() {
   // Sirve para imprimir desde el computador ventas hechas en el celular, o reimpresos.
   const imprimirTicket = async () => {
     if (!selected) return
-    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '', web: '' }
-    try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* usa default */ }
+    const empresa = datosEmpresa()
     const web = empresa.web || 'ralozcolsas.com'
     const money = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -435,6 +433,7 @@ export default function BuscarFacturas() {
     <div class="sep"></div>
     ${itemsHTML}
     <div class="sep"></div>
+    ${(descuento > 0 || (selected.domicilio || 0) > 0) ? `<div class="row"><span>Subtotal</span><span>${money(selected.subtotal || selected.total)}</span></div>` : ''}
     ${descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(descuento)}</span></div>` : ''}
     ${domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(domicilio)}</span></div>` : ''}
     <div class="row big"><span>TOTAL</span><span>${money(total)}</span></div>

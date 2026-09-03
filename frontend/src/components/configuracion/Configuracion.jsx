@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Settings, School, Package, CreditCard, Plus, Edit, ToggleLeft, ToggleRight, X, Save, Users, KeyRound, Building2, Eye, EyeOff } from 'lucide-react'
+import { EMPRESA_DEFAULT } from '../../utils/ticket'
 
 const TABS = [
   { id: 'colegios', label: 'Colegios', icon: School, color: 'blue' },
@@ -11,7 +12,7 @@ const TABS = [
   { id: 'empresa', label: 'Empresa', icon: Building2, color: 'indigo' },
 ]
 
-const EMPRESA_DEFAULT = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '' }
+// Los datos del punto viven en utils/ticket para no duplicarlos con el ticket.
 
 function cargarEmpresa() {
   try { return JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || EMPRESA_DEFAULT } catch { return EMPRESA_DEFAULT }

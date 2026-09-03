@@ -5,6 +5,36 @@ import QRCode from 'qrcode'
 
 export const URL_TIENDA = 'https://ralozcolsas.com'
 
+// Datos del punto de venta. Van como valores por defecto (no sólo en
+// Configuración) porque la config vive en localStorage: en un equipo nuevo,
+// o si alguien borra los datos del navegador, el ticket saldría sin
+// dirección ni teléfono.
+export const EMPRESA_DEFAULT = {
+  nombre: 'RALOZ COL SAS',
+  nit: '',
+  direccion: 'San Andresito de la 68 - Local M14',
+  telefono: '321 341 2903',
+  ciudad: 'Bogotá',
+  email: '',
+  web: 'ralozcolsas.com',
+}
+
+// Lo guardado en Configuración manda, pero un campo vacío no borra el dato
+// real: un equipo con la configuración a medio llenar seguiría imprimiendo
+// tickets sin dirección.
+export function datosEmpresa() {
+  const datos = { ...EMPRESA_DEFAULT }
+  try {
+    const guardado = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || {}
+    for (const [campo, valor] of Object.entries(guardado)) {
+      if (valor !== null && valor !== undefined && String(valor).trim() !== '') {
+        datos[campo] = valor
+      }
+    }
+  } catch { /* se queda con los valores por defecto */ }
+  return datos
+}
+
 // El QR es siempre el mismo, así que se genera una vez por sesión: la
 // impresión no puede quedarse esperando en cada venta.
 let _qrCache = null

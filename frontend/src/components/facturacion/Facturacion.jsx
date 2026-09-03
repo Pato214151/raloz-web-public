@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, Save, DollarSign, User, School, ShoppingCart, Mail, MapPin, FileText, Printer } from 'lucide-react'
-import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo } from '../../utils/ticket'
+import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
 
 const TALLAS_NORMAL = ['4', '6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'Única']
 const TALLAS_MEDIAS = ['6-8', '8-10', '10-12', '12-14', '14-16']
@@ -235,8 +235,7 @@ export default function Facturacion() {
   // === IMPRIMIR RECIBO (reusa el patrón window.open + @media print del proyecto) ===
   const imprimirRecibo = async () => {
     if (!recibo) return
-    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', email: '', web: '' }
-    try { empresa = { ...empresa, ...(JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || {}) } } catch { /* usa default */ }
+    const empresa = datosEmpresa()
     const web = empresa.web || 'ralozcolsas.com'
     const money = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -285,6 +284,7 @@ export default function Facturacion() {
     <div class="sep"></div>
     ${itemsHTML}
     <div class="sep"></div>
+    ${(recibo.descuento > 0 || recibo.domicilio > 0) ? `<div class="row"><span>Subtotal</span><span>${money(recibo.subtotal)}</span></div>` : ''}
     ${recibo.descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(recibo.descuento)}</span></div>` : ''}
     ${recibo.domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(recibo.domicilio)}</span></div>` : ''}
     <div class="row big"><span>TOTAL</span><span>${money(recibo.total)}</span></div>

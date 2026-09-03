@@ -6,7 +6,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Printer, Check, Package,
 } from 'lucide-react'
 import { fotoPrenda } from '../../data/prendasFotos'
-import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo } from '../../utils/ticket'
+import { qrTienda, bloqueQR, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
 
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 
@@ -209,8 +209,7 @@ export default function Vender() {
 
   // ---- Ticket 80mm (Xprinter XP-N160, termica) ----
   const imprimirTicket = async (v) => {
-    let empresa = { nombre: 'RALOZ COL SAS', nit: '', direccion: '', telefono: '', ciudad: '', web: '' }
-    try { empresa = JSON.parse(localStorage.getItem('raloz_empresa') || 'null') || empresa } catch { /* default */ }
+    const empresa = datosEmpresa()
     const web = empresa.web || 'ralozcolsas.com'
     const w = window.open('', '_blank')
     const qr = await qrTienda()
@@ -235,6 +234,7 @@ export default function Vender() {
     ${v.cliente ? `<div class="row"><span>Cliente:</span><span>${v.cliente}</span></div>` : ''}
     ${v.colegio ? `<div class="row"><span>Colegio:</span><span>${v.colegio}</span></div>` : ''}
     <div class="sep"></div>${itemsHTML}<div class="sep"></div>
+    ${(v.descuento > 0 || v.domicilio > 0) ? `<div class="row"><span>Subtotal</span><span>${money(v.subtotal)}</span></div>` : ''}
     ${v.descuento > 0 ? `<div class="row"><span>Descuento</span><span>-${money(v.descuento)}</span></div>` : ''}
     ${v.domicilio > 0 ? `<div class="row"><span>Domicilio</span><span>+${money(v.domicilio)}</span></div>` : ''}
     <div class="row big"><span>TOTAL</span><span>${money(v.total)}</span></div>
