@@ -260,6 +260,25 @@ def _extraer_accion(texto):
                 'descripcion_tarea': str(obj.get('descripcion', '')).strip()[:500],
                 'descripcion': desc,
             }
+    elif tipo == 'registrar_gasto':
+        concepto = str(obj.get('concepto') or obj.get('descripcion', '')).strip()
+        try:
+            valor = float(str(obj.get('valor', 0)).replace('.', '').replace(',', '.'))
+        except Exception:
+            valor = 0
+        fecha = str(obj.get('fecha', '')).strip()[:10]
+        deuda = bool(obj.get('es_deuda') or obj.get('deuda'))
+        if concepto and valor > 0:
+            desc = ('Registrar deuda' if deuda else 'Registrar gasto') +                    f': “{concepto}” por ${valor:,.0f}'.replace(',', '.')
+            if fecha:
+                desc += f' del {fecha}'
+            accion = {
+                'tipo': tipo, 'concepto': concepto[:200], 'valor': valor, 'fecha': fecha,
+                'categoria': str(obj.get('categoria', 'Otros')).strip()[:100] or 'Otros',
+                'metodo_pago': str(obj.get('metodo_pago', 'EFECTIVO')).strip().upper()[:50],
+                'es_deuda': deuda,
+                'descripcion': desc,
+            }
     elif tipo == 'ajustar_stock':
         colegio = str(obj.get('colegio', '')).strip()
         prenda = str(obj.get('prenda') or obj.get('texto', '')).strip()
@@ -1989,6 +2008,62 @@ def ejecutar():
                         'self_check': _sc['checklist'], 'code': 'self_check'}), 409
 
     # ── Crear recordatorio / tarea ──
+    if tipo == 'registrar_gasto':
+        concepto = str(data.get('concepto', '')).strip()[:500]
+        try:
+            valor = float(data.get('valor', 0))
+        except Exception:
+            valor = 0
+        if not concepto or valor <= 0:
+            return jsonify({'error': 'Falta el concepto o el valor del gasto.'}), 400
+        fecha = date.today()
+        if data.get('fecha'):
+            try:
+                fecha = datetime.strptime(str(data['fecha'])[:10], '%Y-%m-%d').date()
+            except Exception:
+                pass
+        # Idempotencia: el mismo concepto, valor y fecha ya registrado no se
+        # repite. Dictando varios gastos seguidos es facil mandar uno dos veces.
+        dup = Gasto.query.filter(Gasto.descripcion == concepto,
+                                 Gasto.valor == valor,
+                                 Gasto.fecha == fecha).first()
+        if dup:
+            return jsonify({'ok': True, 'duplicado': True,
+                            'mensaje': f'Ese gasto ya estaba registrado: “{concepto}”. No lo dupliqué.'}), 200
+        deuda = bool(data.get('es_deuda'))
+        ident = get_current_identity()
+        g = Gasto(
+            fecha=fecha, descripcion=concepto, valor=valor,
+            metodo_pago=str(data.get('metodo_pago', 'EFECTIVO'))[:50],
+            categoria=str(data.get('categoria', 'Otros'))[:100] or 'Otros',
+            tipo_gasto='TIENDA',
+            estado_pago='PENDIENTE' if deuda else 'PAGADO',
+            usuario_registro=ident['usuario'],
+        )
+        db.session.add(g)
+        db.session.commit()
+        try:
+            registrar_auditoria('gastos', g.id_gasto,
+                                'CREAR_DEUDA' if deuda else 'CREAR',
+                                f'[Asistente] {concepto} ${valor:,.0f}')
+        except Exception as e:
+            logger.warning("asistente: no se pudo auditar gasto: %s", e)
+        despues = {'id_gasto': g.id_gasto}
+        acc = _registrar_accion('registrar_gasto',
+                                ('Deuda' if deuda else 'Gasto') + f': {concepto}',
+                                {}, despues, reversible=True, verificado=True,
+                                usuario=ident.get('usuario'))
+        etiqueta = 'Deuda registrada' if deuda else 'Gasto registrado'
+        return jsonify({
+            'ok': True,
+            'mensaje': f'✅ {etiqueta}: “{concepto}” por ${valor:,.0f}'.replace(',', '.')
+                       + '. Lo ves en el menú *Gastos*.',
+            'verificado': True,
+            'self_check': _sc['checklist'],
+            'id_accion': acc.id_accion if acc else None,
+            'reversible': bool(acc),
+        }), 200
+
     if tipo == 'crear_tarea':
         titulo = str(data.get('titulo', '')).strip()[:200]
         if not titulo:

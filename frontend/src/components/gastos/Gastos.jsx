@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { Plus, Wallet, X, Edit, Printer, Store, Briefcase, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Plus, Wallet, X, Edit, Printer, Store, Briefcase, AlertTriangle, CheckCircle, Upload } from 'lucide-react'
 
 const formatMoney = (n) => '$' + Math.round(n || 0).toLocaleString('es-CO')
 
@@ -38,6 +38,9 @@ export default function Gastos() {
   const [gastos, setGastos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showImportar, setShowImportar] = useState(false)
+  const [textoImportar, setTextoImportar] = useState('')
+  const [importando, setImportando] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
@@ -165,6 +168,60 @@ export default function Gastos() {
   const totalGastos = gastosReales.reduce((sum, g) => sum + (g.valor || 0), 0)
   const totalTienda = gastosReales.filter(g => (g.tipo_gasto || 'TIENDA') === 'TIENDA').reduce((sum, g) => sum + g.valor, 0)
   const totalEmpresa = gastosReales.filter(g => g.tipo_gasto === 'EMPRESA').reduce((sum, g) => sum + g.valor, 0)
+  // Importar una lista pegada. Cada línea:
+  //   fecha | descripción | valor | categoría | método | deuda
+  // Sólo fecha, descripción y valor son obligatorios.
+  const parsearLineas = (texto) => {
+    const filas = []
+    const errores = []
+    texto.split('\n').forEach((linea, i) => {
+      const cruda = linea.trim()
+      if (!cruda || cruda.startsWith('#')) return
+      const c = cruda.split('|').map(x => x.trim())
+      if (c.length < 3) { errores.push(`Línea ${i + 1}: faltan datos`); return }
+      // el valor puede venir como "1.576.986" o "$ 600.000"
+      const valor = parseFloat(c[2].replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.'))
+      if (!valor || valor <= 0) { errores.push(`Línea ${i + 1}: valor inválido (${c[2]})`); return }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(c[0])) { errores.push(`Línea ${i + 1}: fecha debe ser AAAA-MM-DD`); return }
+      filas.push({
+        fecha: c[0],
+        descripcion: c[1],
+        valor,
+        categoria: c[3] || 'Otros',
+        metodo_pago: (c[4] || 'EFECTIVO').toUpperCase(),
+        tipo_gasto: 'TIENDA',
+        es_deuda: /deuda/i.test(c[5] || ''),
+      })
+    })
+    return { filas, errores }
+  }
+
+  const importarGastos = async () => {
+    const { filas, errores } = parsearLineas(textoImportar)
+    if (errores.length) { toast.error(errores[0]); return }
+    if (!filas.length) { toast.error('No hay nada que importar'); return }
+    setImportando(true)
+    let ok = 0
+    const fallaron = []
+    // Uno por uno: si alguno falla, los demás igual entran y el usuario
+    // sabe exactamente cuál repetir.
+    for (const fila of filas) {
+      try {
+        await api.post('/gastos', fila)
+        ok++
+      } catch {
+        fallaron.push(fila.descripcion)
+      }
+    }
+    setImportando(false)
+    if (ok) toast.success(`${ok} registro${ok === 1 ? '' : 's'} importado${ok === 1 ? '' : 's'}`)
+    if (fallaron.length) toast.error(`No entraron: ${fallaron.join(', ')}`)
+    if (!fallaron.length) { setShowImportar(false); setTextoImportar('') }
+    loadGastos()
+  }
+
+  const previa = parsearLineas(textoImportar)
+
   const gastosPorCategoria = CATEGORIAS.map(cat => ({
     categoria: cat,
     total: gastosReales.filter(g => g.categoria === cat).reduce((sum, g) => sum + g.valor, 0)
@@ -183,9 +240,14 @@ export default function Gastos() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Gastos</h2>
-        <button onClick={() => openForm()} className="btn-primary flex items-center gap-2">
-          <Plus size={18} /> Nuevo Gasto
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImportar(true)} className="btn-secondary flex items-center gap-2">
+            <Upload size={18} /> Importar lista
+          </button>
+          <button onClick={() => openForm()} className="btn-primary flex items-center gap-2">
+            <Plus size={18} /> Nuevo Gasto
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -377,6 +439,59 @@ export default function Gastos() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal Importar lista */}
+      {showImportar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 space-y-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Upload size={20} className="text-raloz-600" /> Importar lista de gastos
+              </h3>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                <p className="font-medium mb-1">Una línea por gasto, separando con <b>|</b></p>
+                <code className="block bg-white/70 rounded p-2 text-xs leading-relaxed">
+                  fecha | descripción | valor | categoría | método | deuda
+                </code>
+                <p className="mt-2 text-xs">
+                  Sólo <b>fecha, descripción y valor</b> son obligatorios. La fecha va como
+                  <b> 2026-08-11</b>. Escribe <b>deuda</b> al final si es algo que pagas después.
+                </p>
+              </div>
+              <textarea
+                value={textoImportar}
+                onChange={e => setTextoImportar(e.target.value)}
+                rows={12}
+                className="input-field font-mono text-xs"
+                placeholder={'2026-08-11 | Telas Lafayette | 511578 | Costo Mercancía | BANCOLOMBIA'}
+              />
+              {textoImportar.trim() && (
+                <div className="text-sm">
+                  {previa.errores.length > 0 ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700">
+                      {previa.errores.slice(0, 5).map((e, i) => <p key={i}>⚠️ {e}</p>)}
+                    </div>
+                  ) : (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-green-800">
+                      ✅ {previa.filas.length} registro{previa.filas.length === 1 ? '' : 's'} listo
+                      {previa.filas.length === 1 ? '' : 's'} · total{' '}
+                      <b>{formatMoney(previa.filas.reduce((t, f) => t + f.valor, 0))}</b>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button onClick={importarGastos} disabled={importando || !previa.filas.length}
+                        className="btn-primary flex-1 disabled:opacity-50">
+                  {importando ? 'Importando…' : `Importar ${previa.filas.length || ''}`}
+                </button>
+                <button onClick={() => { setShowImportar(false); setTextoImportar('') }}
+                        className="btn-secondary flex-1">Cancelar</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

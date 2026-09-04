@@ -159,6 +159,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
         reversible=True,
     ),
     ActionSpec(
+        "registrar_gasto",
+        "Registrar un gasto o una deuda del negocio. Una accion por gasto: si el "
+        "jefe dicta varios, se confirma y registra uno a uno.",
+        '{"tipo":"registrar_gasto","concepto":"<en que se gasto>","valor":<numero sin puntos>,'
+        '"fecha":"<YYYY-MM-DD o vacio = hoy>","categoria":"<Costo Mercancia|Arriendo|'
+        'Servicios Publicos|Transporte|Alimentacion|Suministros|Nomina|Impuestos|Otros>",'
+        '"metodo_pago":"<EFECTIVO|NEQUI|BANCOLOMBIA|DAVIPLATA|TRANSFERENCIA>",'
+        '"es_deuda":<true si se paga despues>}',
+        required=("concepto", "valor"),
+        risk="bajo",
+        reversible=True,
+    ),
+    ActionSpec(
         "ajustar_stock",
         "Sumar, restar o fijar unidades de una talla.",
         '{"tipo":"ajustar_stock","colegio":"<colegio>","prenda":"<prenda>","talla":"<talla>","modo":"<sumar|restar|fijar>","cantidad":<número>}',
