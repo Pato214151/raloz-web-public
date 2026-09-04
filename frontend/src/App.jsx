@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import { Toaster } from 'react-hot-toast'
+import { lazyConRecarga as lazy } from './utils/lazyConRecarga'
 // Eager: se necesitan de inmediato en el primer render.
 import Login from './components/auth/Login'
 import Layout from './components/common/Layout'

@@ -25,6 +25,16 @@ jwt = JWTManager()
 limiter = Limiter(key_func=get_remote_address, default_limits=["200 per minute"])
 
 
+def es_archivo_del_build(path: str) -> bool:
+    """¿La ruta pedida es un archivo del build (JS/CSS) y no una vista de la app?
+
+    Sirve para responder 404 en vez de index.html cuando el navegador pide un
+    archivo de una versión anterior: recibir HTML donde espera JavaScript deja
+    el panel en blanco, sin error visible para quien lo está usando.
+    """
+    return path.startswith('assets/') or path.endswith(('.js', '.css', '.map'))
+
+
 def create_app(config_name=None):
     """Application Factory"""
     app = Flask(__name__)
@@ -240,6 +250,12 @@ def create_app(config_name=None):
         file_path = os.path.join(frontend_dir, path)
         if path and os.path.isfile(file_path):
             return send_from_directory(frontend_dir, path)
+        # Un archivo del build que ya no existe (el navegador quedó con el
+        # index.html viejo tras un despliegue) NO puede responder index.html:
+        # el navegador recibe HTML donde espera JavaScript, falla por MIME y
+        # el panel queda en blanco. Un 404 limpio deja que el front recargue.
+        if es_archivo_del_build(path):
+            return jsonify({'error': 'Archivo no encontrado'}), 404
         # Para cualquier otra ruta, servir index.html (SPA)
         index_path = os.path.join(frontend_dir, 'index.html')
         if os.path.isfile(index_path):
