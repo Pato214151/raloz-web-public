@@ -12,6 +12,7 @@ construir_respuesta() devuelve un objeto Respuesta(texto, aviso_admin):
 import json
 import logging
 import os
+import difflib
 import re
 import unicodedata
 from collections import namedtuple
@@ -168,6 +169,17 @@ def _catalogo_publico(id_colegio: int):
         return None
 
 
+# Frases con las que la IA se inventa el horario. Cualquiera de ellas invalida
+# su respuesta: el horario es dato duro, no se negocia con el modelo.
+_HORARIO_INVENTADO = ("lunes a sabado", "lunes a viernes", "lunes a domingo",
+                      "todos los dias", "de lunes a", "6:00 p", "6 p.m", "6pm",
+                      "7:00 p", "toda la semana")
+
+
+def _habla_de_horario(txt: str) -> bool:
+    return _tiene(_norm(txt), _HORARIO_INVENTADO)
+
+
 def _respuesta_ia(chat_id: str, texto: str):
     """IA de respaldo/pedidos: entiende mensajes naturales que el bot de reglas no
     resuelve. Solo actúa si BOT_IA_FALLBACK=1 y hay llave. Devuelve un Respuesta
@@ -196,6 +208,11 @@ def _respuesta_ia(chat_id: str, texto: str):
         t = _ia_deepseek(sistema, mensaje)
     if not t:
         return None
+    # Blindaje del horario: la IA ya le dijo "de lunes a sábado" a una clienta
+    # que por eso viajó un día que estaba cerrado. Un prompt no es garantía —
+    # si la respuesta habla de días de atención, mandamos el horario real.
+    if _habla_de_horario(t):
+        return Respuesta(RESP_HORARIOS)
     # La IA pide pasar a un asesor → quitamos la etiqueta, avisamos al humano y
     # guardamos el lead con el pedido/consulta como resumen.
     if "[asesor]" in t.lower():
@@ -362,11 +379,26 @@ COLEGIOS = {"marillac": (1, "Marillac"), "marilac": (1, "Marillac"),
             "manyanet": (3, "Manyanet"), "manyannet": (3, "Manyanet"), "manyanette": (3, "Manyanet")}
 
 
+_COLEGIO_CANON = {"marillac": (1, "Marillac"), "adventista": (2, "Adventista"),
+                  "manyanet": (3, "Manyanet")}
+
+
 def _detectar_colegio(t: str):
     for clave, (idc, nombre) in COLEGIOS.items():
         if clave in t:
             return idc, nombre
+    # Los nombres se escriben mal muy seguido ("mayanet", "marilac"). Sin esto
+    # el cliente queda atrapado repitiendo la misma pregunta hasta que se rinde
+    # y pide un asesor, que fue justo lo que pasó en el chat del 1/09.
+    for palabra in re.findall(r"[a-z]{5,}", t):
+        cerca = difflib.get_close_matches(palabra, _COLEGIO_CANON, n=1, cutoff=0.78)
+        if cerca:
+            return _COLEGIO_CANON[cerca[0]]
     return None, None
+
+
+# Tallas que existen de verdad en el catálogo (2 a 20 + letras).
+_TALLAS_VALIDAS = {str(n) for n in range(2, 21)} | {"XS", "S", "M", "L", "XL", "XXL"}
 
 
 def _detectar_talla(t: str):
@@ -374,8 +406,16 @@ def _detectar_talla(t: str):
     m = re.search(r"\b(\d{1,2}\s*-\s*\d{1,2}|[sml]\s*-\s*[sml])\b", t)
     if m:
         return m.group(1).replace(" ", "").upper()
+    # Un número suelto dentro de una frase larga no es una talla: el bot tomó
+    # el "68" de una dirección ("San Andresito de la 68") y respondió que esa
+    # talla no existe. Si el mensaje es largo, exigimos que diga "talla".
+    if len(t.split()) > 6 and "talla" not in t:
+        return None
     m = re.search(r"\b(\d{1,2}|xl|xs|s|m|l)\b", t)
-    return m.group(1).upper() if m else None
+    if not m:
+        return None
+    talla = m.group(1).upper()
+    return talla if talla in _TALLAS_VALIDAS else None
 
 
 def _talla_tokens(x):
@@ -812,6 +852,22 @@ RESP_FACTURA = (
     "🧾 *¿No te llegó la factura?*\n\n"
     "Revisa tu *correo*, incluida la carpeta de *spam / no deseado* — llega ahí.\n\n"
     "Si aún no la ves, escribe *asesor* y te la reenviamos enseguida. 🙌"
+)
+
+RESP_GUIA_TALLAS = (
+    "📏 *Guía de tallas*\n\n"
+    "Nuestras tallas van por *número* (2 a 18) en primaria y por *letra* "
+    "(S, M, L, XL) en bachillerato — cambian según el colegio y la prenda.\n\n"
+    "La forma segura de acertar es *medir al estudiante*: cada colegio corta "
+    "distinto y una talla 12 de uno no es igual a la de otro. 📐\n\n"
+    "Tienes dos opciones:\n"
+    "👕 *Trae al niñ@ al punto* y te tomamos la talla ahí mismo "
+    "(lunes y sábado, 10:00 a.m. a 5:00 p.m.).\n"
+    "📅 *Agenda una cita* cualquier otro día — escribe *cita*.\n\n"
+    "Si prefieres pedir ya, dime la *edad y la estatura* del estudiante y te "
+    "sugiero la talla. 🙌\n"
+    "🔄 Y tranquil@: si no queda, tienes *5 días hábiles* para "
+    "cambiarla (sin uso, limpia y con etiquetas)."
 )
 
 RESP_HORARIOS = (
@@ -1424,6 +1480,11 @@ def _responder(chat_id: str, texto: str, contenido: str = "texto") -> Respuesta:
             _tiene(t, ["hoy", "ahora", "ahorita"]) and
             _tiene(t, ["atend", "atien", "abiert", "pasar", "paso", "abren", "local"])):
         return Respuesta(_resp_abierto_hoy() + VOLVER)
+
+    # "¿Me pasas la guía de tallas?" → antes iba a la IA, que respondía vago y
+    # luego el flujo de precios se lo tragaba pidiendo talla. Va antes de precios.
+    if (("guia" in t or "tabla" in t) and "talla" in t) or "guia de talla" in t:
+        return Respuesta(RESP_GUIA_TALLAS + VOLVER)
 
     # "Fui y estaba cerrado" → disculpa + aclara que solo lun/sáb sin cita + ofrece cita.
     if _tiene(t, ["cerrado", "cerrada", "cerrados", "cerraron", "cerro", "cerró",
