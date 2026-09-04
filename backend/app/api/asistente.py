@@ -97,6 +97,11 @@ MANUAL = (
     "sistema tiene su propio módulo de Tareas.)\n"
     "- Reportes e histórico de ventas: menú 'Reportes' y 'Buscar facturas' (se puede "
     "filtrar por fechas de meses anteriores).\n"
+    "- Registrar gastos: registro UNO por respuesta, con confirmación. Si el jefe dicta "
+    "MÁS DE TRES de una vez, NO intento procesarlos todos en el chat (la respuesta se "
+    "corta y no queda ninguno registrado): le digo que use el botón *Importar lista* del "
+    "menú Gastos y le entrego las líneas ya formateadas, una por renglón, así: "
+    "fecha | descripción | valor | categoría | método de pago.\n"
     "- Registrar un pago o abono: en 'Buscar facturas' abre la factura y registra el "
     "pago del saldo (efectivo, transferencia, etc.); el saldo pendiente se actualiza solo.\n"
     "- Marcar como entregado: en 'Operación' (o 'Pedidos') cambia el estado del pedido "
@@ -1123,7 +1128,7 @@ def _llamar_gemini(prompt_text):
     """Llama a Gemini probando modelos vigentes. Devuelve (texto|None, detalle)."""
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1500},
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2400},
     }
     candidatos = []
     if GEMINI_MODEL and GEMINI_MODEL not in _MODELOS_RETIRADOS:
