@@ -63,6 +63,12 @@ export async function qrTienda() {
   return _qrCache
 }
 
+// Crédito discreto de quien hizo el software. Va al final y en letra pequeña:
+// el ticket es el documento del cliente, no un aviso publicitario.
+export function bloqueCredito() {
+  return `<p class="cred">Software por Ducklab</p>`
+}
+
 export function bloqueQR(dataUrl) {
   if (!dataUrl) return ''
   return `<div class="qr">
@@ -75,6 +81,7 @@ export function bloqueQR(dataUrl) {
 export const CSS_QR =
   '.logo{text-align:center;margin:0 0 3px}' +
   '.logo img{width:26mm;display:block;margin:0 auto}' +
+  '.cred{text-align:center;font-size:9px;margin:6px 0 0}' +
   '.qr{text-align:center;margin:8px 0 2px}' +
   '.qr img{width:22mm;height:22mm;display:block;margin:0 auto}' +
   '.qrt{font-size:10px;margin:1px 0}'

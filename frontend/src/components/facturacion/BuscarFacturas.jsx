@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { Search, FileText, CreditCard, XCircle, RefreshCw, Filter, ChevronDown, Printer, Edit3, Trash2, Plus, Save, X, PackageCheck, MessageCircle } from 'lucide-react'
-import { qrTienda, bloqueQR, bloqueLogo, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
+import { qrTienda, bloqueQR, bloqueLogo, CSS_QR, imprimirCuandoListo, datosEmpresa, bloqueCredito } from '../../utils/ticket'
 
 const ESTADOS = [
   { value: '', label: 'Todos' },
@@ -453,6 +453,7 @@ export default function BuscarFacturas() {
     <div class="sep"></div>
     <p class="c">¡Gracias por tu compra!</p>
     ${bloqueQR(qr)}
+    ${bloqueCredito()}
     </body></html>`)
     w.document.close()
     imprimirCuandoListo(w)

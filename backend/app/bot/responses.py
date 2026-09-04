@@ -963,7 +963,8 @@ GARANTIA_INFO = (
     "• La prenda debe estar *limpia* (sucia no se arregla)\n"
     "• *No* se recibe mojada\n"
     "• El arreglo tarda *máximo de 1 a 2 semanas*\n"
-    "• Si no se puede arreglar, hablamos contigo"
+    "• Si no se puede arreglar, hablamos contigo\n"
+    "• Trae tu *comprobante de compra* (ticket, factura o el correo del pago)"
 )
 
 GARANTIA_RECORDAR_FOTO = (

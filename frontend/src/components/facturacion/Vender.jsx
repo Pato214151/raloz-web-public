@@ -6,7 +6,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, X, Printer, Check, Package,
 } from 'lucide-react'
 import { fotoPrenda } from '../../data/prendasFotos'
-import { qrTienda, bloqueQR, bloqueLogo, CSS_QR, imprimirCuandoListo, datosEmpresa } from '../../utils/ticket'
+import { qrTienda, bloqueQR, bloqueLogo, CSS_QR, imprimirCuandoListo, datosEmpresa, bloqueCredito } from '../../utils/ticket'
 
 const METODOS_PAGO = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'TRANSFERENCIA']
 
@@ -249,6 +249,7 @@ export default function Vender() {
       - Reembolsos por el mismo medio de pago.<br>- <b>Conserva este ticket: es tu comprobante de compra. Sin comprobante no se tramitan cambios, garantias ni reembolsos.</b><br>${web}/terminos.html</div>
     <div class="sep"></div><p class="c">¡Gracias por tu compra!</p>
     ${bloqueQR(qr)}
+    ${bloqueCredito()}
     </body></html>`)
     w.document.close(); imprimirCuandoListo(w)
   }
