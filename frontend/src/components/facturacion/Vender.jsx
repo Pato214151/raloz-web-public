@@ -246,7 +246,7 @@ export default function Vender() {
       - Garantía de 6 meses por defectos de confección (costuras/hilo).<br>
       - Cambio por talla: 5 días hábiles, prenda sin uso, limpia y con etiquetas.<br>
       - Personalizados/bordados: sin cambio salvo defecto.<br>
-      - Reembolsos por el mismo medio de pago.<br>- Conserva este ticket.<br>${web}/terminos.html</div>
+      - Reembolsos por el mismo medio de pago.<br>- <b>Conserva este ticket: es tu comprobante de compra. Sin comprobante no se tramitan cambios, garantias ni reembolsos.</b><br>${web}/terminos.html</div>
     <div class="sep"></div><p class="c">¡Gracias por tu compra!</p>
     ${bloqueQR(qr)}
     </body></html>`)

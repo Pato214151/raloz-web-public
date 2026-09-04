@@ -298,7 +298,7 @@ export default function Facturacion() {
       - Cambio por talla: 5 días hábiles, prenda sin uso, limpia y con etiquetas.<br>
       - Personalizados/bordados: sin cambio salvo defecto.<br>
       - Reembolsos por el mismo medio de pago.<br>
-      - Conserva este ticket.<br>
+      - <b>Conserva este ticket: es tu comprobante de compra. Sin comprobante no se tramitan cambios, garantias ni reembolsos.</b><br>
       ${web}/terminos.html
     </div>
     <div class="sep"></div>
