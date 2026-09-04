@@ -582,7 +582,9 @@ export default function BuscarFacturas() {
                   <h3 className="text-lg font-semibold">{selected.numero_factura}</h3>
                   <span className={badgeEstado(selected.estado)}>{selected.estado}</span>
                 </div>
-                <button onClick={imprimirFactura} className="text-gray-400 hover:text-blue-600 p-2 rounded hover:bg-blue-50" title="Imprimir">
+                {/* El icono rapido imprime el TICKET: es lo del dia a dia en el
+                    mostrador. La factura A4 queda en su boton, mas abajo. */}
+                <button onClick={imprimirTicket} className="text-gray-400 hover:text-blue-600 p-2 rounded hover:bg-blue-50" title="Imprimir ticket">
                   <Printer size={18} />
                 </button>
               </div>
