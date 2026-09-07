@@ -48,3 +48,25 @@ def tienda_app():
 @pytest.fixture
 def tienda_client(tienda_app):
     return tienda_app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def _sin_cierres_excepcionales():
+    """Los tests no dependen del calendario real.
+
+    CIERRES lleva fechas de días en que el local no atiende; el día que una de
+    esas fechas llega, el bot antepone el aviso a toda respuesta y cualquier
+    test que compare textos falla sin que nada esté roto. Se limpia por defecto;
+    los tests del aviso lo reponen ellos mismos.
+    """
+    try:
+        from app.bot import responses
+    except Exception:
+        yield
+        return
+    original = responses.CIERRES
+    responses.CIERRES = {}
+    try:
+        yield
+    finally:
+        responses.CIERRES = original

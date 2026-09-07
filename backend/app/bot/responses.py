@@ -1385,10 +1385,52 @@ def construir_respuesta(chat_id: str, texto: str, contenido: str = "texto") -> R
         set_dato(chat_id, "confusion", str(n))
     elif n:
         set_dato(chat_id, "confusion", "0")   # respondió bien → reinicia el contador
-    return resp
+    return _con_aviso(resp)
+
+
+def _con_aviso(resp):
+    """El día que no se atiende, el aviso encabeza TODA respuesta.
+
+    Quien pregunta por un precio no pregunta por el horario, pero igual se va a
+    montar en un bus para venir. El aviso tiene que salir aunque no lo pidan.
+    """
+    aviso = _aviso_cierre()
+    if not aviso or not getattr(resp, "texto", None) or resp.texto.startswith("🚨"):
+        return resp
+    try:
+        return resp._replace(texto=aviso + resp.texto)
+    except AttributeError:       # por si Respuesta deja de ser namedtuple
+        resp.texto = aviso + resp.texto
+        return resp
 
 
 _DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+# Días en que EXCEPCIONALMENTE no se atiende, aunque sean lunes o sábado.
+# Con fecha para que el aviso desaparezca solo: nadie tiene que acordarse de
+# borrarlo, y un aviso viejo colgado es peor que no ponerlo.
+CIERRES = {
+    '2026-09-07': 'nos surgió algo',
+}
+
+
+def _cierre_hoy():
+    """Motivo del cierre si HOY es un día cerrado por excepción, si no None."""
+    from datetime import datetime, timedelta, timezone
+    hoy = (datetime.now(timezone.utc) - timedelta(hours=5)).date().isoformat()
+    return CIERRES.get(hoy)
+
+
+def _aviso_cierre() -> str:
+    """Aviso para encabezar cualquier respuesta el día que no se atiende."""
+    motivo = _cierre_hoy()
+    if not motivo:
+        return ''
+    return ("🚨 *AVISO IMPORTANTE* 🚨\n"
+            f"*HOY NO ATENDEMOS* — {motivo}. 🙏\n"
+            "Te esperamos el *sábado* de 10:00 a.m. a 5:00 p.m.\n"
+            "Puedes comprar en línea cuando quieras: https://ralozcolsas.com\n\n")
 
 
 def _resp_abierto_hoy() -> str:
@@ -1398,6 +1440,11 @@ def _resp_abierto_hoy() -> str:
     hoy = datetime.now(timezone.utc) - timedelta(hours=5)
     wd = hoy.weekday()            # 0=lunes … 6=domingo
     dia = _DIAS_ES[wd]
+    motivo = _cierre_hoy()
+    if motivo:
+        return (f"🚨 Hoy *{dia}* *NO atendemos* — {motivo}. ¡Ofrezco disculpas! 🙏\n"
+                "Te esperamos el *sábado* de 10:00 a.m. a 5:00 p.m. en el Local *M14*.\n"
+                "🛒 Y en línea puedes comprar a cualquier hora: https://ralozcolsas.com")
     if wd in (0, 5):              # lunes o sábado → sin cita
         return (f"✅ ¡Sí! Hoy *{dia}* atendemos *sin cita* de *10:00 a.m. a 5:00 p.m.* "
                 "en el Local *M14*, San Andresito de la 68. 🏪\n"
