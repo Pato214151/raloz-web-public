@@ -7,12 +7,14 @@ export default function DucklabBadge() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Hecho por Ducklab"
+      // En celular la barra inferior ocupa ese rincón: el sello quedaba
+      // ENCIMA del botón "Inicio" (z-index 9999) y lo volvía intocable.
+      className="hidden lg:inline-flex"
       style={{
         position: 'fixed',
         left: 14,
         bottom: 14,
         zIndex: 9999,
-        display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
         padding: '5px 10px 5px 5px',

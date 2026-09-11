@@ -144,6 +144,29 @@
   }
 }
 
+/* ── scrollbar-thin ───────────────────────────────────────────────────────
+   Se usa en 6 pantallas (pestañas, chips del asistente, kanban, WhatsApp)
+   pero NUNCA estuvo definida: venía de un plugin de Tailwind que no está
+   instalado, así que el navegador pintaba su barra por defecto — la franja
+   gris gruesa que se ve bajo las pestañas en Android. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, .18) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.scrollbar-thin::-webkit-scrollbar { height: 4px; width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, .18);
+  border-radius: 999px;
+}
+
+/* En celular la barra estorba más de lo que ayuda: se rueda con el dedo. */
+@media (max-width: 767px) {
+  .scrollbar-thin { scrollbar-width: none; }
+  .scrollbar-thin::-webkit-scrollbar { display: none; }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    CELULAR
    El panel se usa de pie en el mostrador, con el cliente enfrente. Lo que
@@ -153,8 +176,20 @@
    ══════════════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
 
-  /* La página NUNCA se corre de lado: la tabla ancha scrollea por dentro. */
-  html, body { max-width: 100%; overflow-x: hidden; }
+  /* Sin overflow-x:hidden a proposito: esconderlo no arregla el desborde,
+     solo deja contenido fuera de pantalla y SIN forma de alcanzarlo (era lo
+     que pasaba en Stock). Se corrigen los anchos reales, no el sintoma. */
+  html, body { max-width: 100%; }
+
+  /* Las pestañas (Clientes/WhatsApp/Citas/Leads, Inventario/Conteo/...) no
+     caben en un celular: que rueden con el dedo, sin la barra gris encima. */
+  .tabs-scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs-scroll::-webkit-scrollbar { display: none; }
+  .tabs-scroll > * { flex-shrink: 0; }
 
   table {
     display: block;

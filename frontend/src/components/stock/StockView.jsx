@@ -335,11 +335,13 @@ export default function StockView() {
       </div>
 
       {/* ════════════════ TAB INVENTARIO ════════════════ */}
+      {/* En celular se apilan: 224px de columna fija + el contenido no caben
+          en 375px, y todo quedaba cortado a lado y lado. */}
       {tab === 'inventario' && (
-        <div className="flex gap-4" style={{ minHeight: '70vh' }}>
+        <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: '70vh' }}>
 
           {/* Panel izquierdo: colegios */}
-          <div className="w-56 flex-shrink-0 space-y-1">
+          <div className="w-full lg:w-56 flex-shrink-0 space-y-1">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-2">Colegios</p>
             {colegios.map(c => {
               const resCol = resumen.find(r => r.id_colegio === c.id_colegio)
