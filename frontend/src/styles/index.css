@@ -143,3 +143,43 @@
     background-size: 24px 24px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CELULAR
+   El panel se usa de pie en el mostrador, con el cliente enfrente. Lo que
+   más lo rompía: tablas anchas que empujaban la página entera de lado, y
+   iOS haciendo zoom al tocar un campo. Va como CSS global para que aplique
+   a las 11 pantallas con tablas sin envolver cada una a mano.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* La página NUNCA se corre de lado: la tabla ancha scrollea por dentro. */
+  html, body { max-width: 100%; overflow-x: hidden; }
+
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table thead, table tbody, table tr { width: max-content; min-width: 100%; }
+  table th, table td { white-space: nowrap; }
+
+  /* iOS hace zoom si el campo tiene menos de 16px, y la pantalla queda
+     descuadrada al tocar cada input. Con 16px no pasa. */
+  .input-field,
+  input, select, textarea { font-size: 16px; }
+
+  /* Dedo, no mouse: 44px es el mínimo para no errarle al botón. */
+  .btn-primary, .btn-secondary, .btn-danger, .btn-success {
+    min-height: 44px;
+    padding-top: .625rem;
+    padding-bottom: .625rem;
+  }
+
+  /* Las tarjetas se comían el ancho útil con su propio padding. */
+  .card { padding: 1rem; border-radius: 1rem; }
+
+  /* Los modales quedaban pegados a los bordes y cortados abajo. */
+  .fixed.inset-0 > div { max-height: 92vh; }
+}
