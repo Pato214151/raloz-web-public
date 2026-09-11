@@ -228,7 +228,13 @@ export default function PedidosOnline() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.referencia}</td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmtFecha(p.fecha_creacion)}</td>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-800">{p.nombre_cliente}</div>
+                    <div className="font-medium text-gray-800 flex items-center gap-1.5">
+                      {p.nombre_cliente}
+                      {/* Local o envío de un vistazo, sin tener que abrir el pedido */}
+                      <span title={p.metodo_entrega === 'envio' ? 'Envío a domicilio' : 'Recoge en el local'}>
+                        {p.metodo_entrega === 'envio' ? '🚚' : '🏪'}
+                      </span>
+                    </div>
                     <div className="text-xs text-gray-500">{p.email_cliente}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{p.nombre_colegio || '—'}</td>
@@ -314,8 +320,27 @@ export default function PedidosOnline() {
                 <p><span className="text-gray-500">Email:</span> {seleccionado.email_cliente}</p>
                 <p><span className="text-gray-500">Teléfono:</span> {seleccionado.telefono_cliente || '—'}</p>
                 <p><span className="text-gray-500">Colegio:</span> {seleccionado.nombre_colegio || '—'}</p>
+                {/* Local o envío: decide si se empaca para despacho o se deja
+                    apartado. Va destacado porque es lo primero que hay que saber. */}
+                <p className="flex items-center gap-2">
+                  <span className="text-gray-500">Entrega:</span>
+                  {seleccionado.metodo_entrega === 'envio' ? (
+                    <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full text-xs">
+                      🚚 ENVÍO A DOMICILIO
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full text-xs">
+                      🏪 RECOGE EN EL LOCAL
+                    </span>
+                  )}
+                </p>
                 {seleccionado.direccion_envio && (
                   <p><span className="text-gray-500">Dirección:</span> {seleccionado.direccion_envio}</p>
+                )}
+                {seleccionado.metodo_entrega === 'envio' && !seleccionado.direccion_envio && (
+                  <p className="text-red-600 font-medium">
+                    ⚠️ Pidió envío pero no dejó dirección — hay que llamarlo.
+                  </p>
                 )}
                 {seleccionado.factura_numero && (
                   <p><span className="text-gray-500">Factura:</span> <span className="font-mono font-semibold">{seleccionado.factura_numero}</span></p>

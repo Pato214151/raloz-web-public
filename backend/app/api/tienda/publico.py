@@ -415,6 +415,8 @@ def crear_pedido():
     data['nombre_cliente']    = sanitize_string(data.get('nombre_cliente'), 200)
     data['documento_cliente'] = sanitize_string(data.get('documento_cliente'), 50)
     data['direccion_envio']   = sanitize_string(data.get('direccion_envio'), 300)
+    _entrega = str(data.get('metodo_entrega', '')).strip().lower()
+    data['metodo_entrega'] = _entrega if _entrega in ('local', 'envio') else 'local'
     data['telefono_cliente']  = sanitize_string(data.get('telefono_cliente'), 50)
     data['email_cliente']     = sanitize_string(data.get('email_cliente'), 200)
     if not validate_email(data['email_cliente']):
@@ -542,6 +544,7 @@ def crear_pedido():
         telefono_cliente=data['telefono_cliente'],
         documento_cliente=data.get('documento_cliente', ''),
         direccion_envio=data.get('direccion_envio', '') or '',
+        metodo_entrega=data.get('metodo_entrega', 'local'),
         id_colegio=colegio.id_colegio if colegio else None,
         nombre_colegio=nombre_colegio_str,
         items_json=json.dumps(items_validados),

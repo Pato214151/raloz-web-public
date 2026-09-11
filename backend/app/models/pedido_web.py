@@ -28,6 +28,9 @@ class PedidoWeb(db.Model):
     abono_porcentaje = db.Column(db.Integer, default=100)
     tiene_fabricacion = db.Column(db.Boolean, default=False)
     tipo_entrega = db.Column(db.String(20), default='completa')
+    # Cómo lo recibe el cliente: 'local' (recoge en el punto) o 'envio'.
+    # Sin esto no se sabe si empacar para despacho o dejarlo apartado.
+    metodo_entrega = db.Column(db.String(20), default='local')
 
     # Pago
     estado = db.Column(db.String(50), default='pendiente')  # pendiente, pagado, fallido, cancelado
@@ -59,6 +62,7 @@ class PedidoWeb(db.Model):
             'abono_porcentaje': getattr(self, 'abono_porcentaje', 100),
             'tiene_fabricacion': getattr(self, 'tiene_fabricacion', False),
             'tipo_entrega': getattr(self, 'tipo_entrega', 'completa'),
+            'metodo_entrega': getattr(self, 'metodo_entrega', None) or 'local',
             'estado': self.estado,
             'metodo_pago': self.metodo_pago,
             'fecha_creacion': (self.fecha_creacion.isoformat() + 'Z') if self.fecha_creacion else None,

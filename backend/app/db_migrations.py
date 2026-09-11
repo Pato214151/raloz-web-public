@@ -533,6 +533,18 @@ MIGRACIONES = [
             """,
         ],
     },
+    {
+        'version': '0033',
+        'descripcion': 'metodo_entrega en pedidos_web (local | envio)',
+        'sql': [
+            """ALTER TABLE pedidos_web
+                 ADD COLUMN IF NOT EXISTS metodo_entrega VARCHAR(20) DEFAULT 'local'""",
+            # Los pedidos anteriores no traen el dato: quedan como 'local',
+            # que es lo que se asumia antes de que la tienda preguntara.
+            """UPDATE pedidos_web SET metodo_entrega = 'local'
+                 WHERE metodo_entrega IS NULL""",
+        ],
+    },
 ]
 
 
