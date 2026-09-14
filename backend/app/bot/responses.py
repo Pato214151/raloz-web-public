@@ -1411,7 +1411,7 @@ _DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "do
 # Con fecha para que el aviso desaparezca solo: nadie tiene que acordarse de
 # borrarlo, y un aviso viejo colgado es peor que no ponerlo.
 CIERRES = {
-    '2026-09-07': 'nos surgió algo',
+    # 'AAAA-MM-DD': 'motivo',
 }
 
 
