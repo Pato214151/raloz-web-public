@@ -31,13 +31,3 @@ frontend/dist/
 # Respaldos de la base de datos (contienen datos reales de clientes)
 backups/
 *.sql.bak
-
-# Respaldos de precios (datos reales de clientes)
-respaldo_*.csv
-backend/respaldo_*.csv
-*.dead
-
-.claude/
-CLAUDE.md
-.agents/
-para_claude.txt
