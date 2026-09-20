@@ -1,3 +1,8 @@
+/**
+ * Inicio del panel: resumen del día (ventas, pendientes, caja) y lo que el
+ * asistente sugiere atender.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'

@@ -1,3 +1,7 @@
+"""
+Movimiento de la caja del día: entrada o salida de dinero con su concepto.
+"""
+
 from app import db
 from datetime import datetime
 

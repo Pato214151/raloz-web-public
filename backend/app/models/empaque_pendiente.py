@@ -1,3 +1,7 @@
+"""
+Marca qué prendas pendientes de una factura ya fueron empacadas.
+"""
+
 from app import db
 
 

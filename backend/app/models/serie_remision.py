@@ -1,3 +1,7 @@
+"""
+Serie de numeración de remisiones.
+"""
+
 from app import db
 
 

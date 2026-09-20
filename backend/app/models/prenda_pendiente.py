@@ -1,3 +1,7 @@
+"""
+Prenda que se vendió pero quedó pendiente de entregar.
+"""
+
 from app import db
 from datetime import date
 

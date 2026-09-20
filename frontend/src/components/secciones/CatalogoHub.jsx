@@ -1,3 +1,8 @@
+/**
+ * Centro de Catálogo: inventario, conteo físico, movimientos, precios y
+ * órdenes de producción en pestañas.
+ */
+
 import { Activity, DollarSign, Scissors, History, ClipboardCheck } from 'lucide-react'
 import Hub from '../common/Hub'
 import StockView from '../stock/StockView'

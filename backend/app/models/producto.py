@@ -1,3 +1,8 @@
+"""
+Producto (prenda): código, nombre, tipo y si se publica en la tienda
+(con ventana de fechas).
+"""
+
 from app import db
 from datetime import datetime
 

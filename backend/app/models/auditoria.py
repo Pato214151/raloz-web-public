@@ -1,3 +1,7 @@
+"""
+Auditoría: qué tabla y registro se tocó, qué acción, quién y desde qué IP.
+"""
+
 from app import db
 from datetime import datetime
 

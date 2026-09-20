@@ -1,3 +1,7 @@
+"""
+Gasto del negocio: valor, categoría, si ya se pagó y con qué método.
+"""
+
 from app import db
 from datetime import datetime
 

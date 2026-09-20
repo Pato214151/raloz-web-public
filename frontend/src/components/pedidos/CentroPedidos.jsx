@@ -1,3 +1,8 @@
+/**
+ * Centro de pedidos: reúne los pedidos en línea, los de fabricación y las
+ * prendas pendientes para trabajarlos desde un solo lugar.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

@@ -1,3 +1,8 @@
+"""
+Conversaciones y mensajes de WhatsApp que se ven en la bandeja del panel.
+Cada conversación guarda si la atiende el bot o una persona.
+"""
+
 from datetime import datetime
 
 from app import db

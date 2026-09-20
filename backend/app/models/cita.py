@@ -1,3 +1,7 @@
+"""
+Citas que agenda el bot de WhatsApp (nombre, día, hora y colegio).
+"""
+
 from datetime import datetime
 
 from app import db

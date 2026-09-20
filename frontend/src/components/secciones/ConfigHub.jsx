@@ -1,3 +1,8 @@
+/**
+ * Centro de Configuración: colegios y productos, usuarios, automatización,
+ * avisos y tareas en pestañas.
+ */
+
 import { Settings, UserCog, Zap, Megaphone, ListTodo } from 'lucide-react'
 import Hub from '../common/Hub'
 import Configuracion from '../configuracion/Configuracion'

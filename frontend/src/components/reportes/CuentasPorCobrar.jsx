@@ -1,3 +1,5 @@
+/** Cuentas por cobrar: facturas con saldo pendiente. */
+
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

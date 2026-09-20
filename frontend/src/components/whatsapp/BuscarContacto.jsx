@@ -1,3 +1,5 @@
+/** Escribirle a un cliente por WhatsApp buscándolo por nombre o teléfono. */
+
 import { useState } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

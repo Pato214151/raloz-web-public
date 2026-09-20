@@ -1,3 +1,7 @@
+"""
+Pago o abono aplicado a una factura.
+"""
+
 from app import db
 from datetime import datetime
 

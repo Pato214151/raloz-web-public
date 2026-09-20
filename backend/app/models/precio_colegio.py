@@ -1,3 +1,7 @@
+"""
+Precio (y costo) de un producto por colegio y grupo de tallas.
+"""
+
 from app import db
 
 

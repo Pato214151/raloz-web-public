@@ -1,3 +1,5 @@
+/** Centro de Finanzas: reportes, caja, gastos y hoja de ventas en pestañas. */
+
 import { BarChart3, BookOpen, Wallet, TrendingUp } from 'lucide-react'
 import Hub from '../common/Hub'
 import Reportes from '../reportes/Reportes'

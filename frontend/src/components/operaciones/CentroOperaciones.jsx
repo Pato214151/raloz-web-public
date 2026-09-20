@@ -1,3 +1,5 @@
+/** Centro de operaciones: qué está por preparar y qué está listo para entregar. */
+
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

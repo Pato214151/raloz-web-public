@@ -1,3 +1,8 @@
+"""
+Interruptores de las automatizaciones (qué tarea automática está activa
+y cuándo corrió por última vez).
+"""
+
 from app import db
 from datetime import datetime
 import json

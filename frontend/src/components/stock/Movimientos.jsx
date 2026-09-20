@@ -1,3 +1,5 @@
+/** Historial de movimientos de inventario (entradas, salidas y ajustes). */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

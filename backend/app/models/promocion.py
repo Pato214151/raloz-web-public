@@ -1,3 +1,7 @@
+"""
+Promoción que se muestra en la tienda en línea.
+"""
+
 from app import db
 from datetime import datetime
 

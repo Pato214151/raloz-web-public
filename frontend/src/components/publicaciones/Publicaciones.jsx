@@ -1,3 +1,5 @@
+/** Qué se publica en la tienda: banner, colegios y productos visibles. */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

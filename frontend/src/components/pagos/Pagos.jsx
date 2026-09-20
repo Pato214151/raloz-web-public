@@ -1,3 +1,8 @@
+/**
+ * Pagos y abonos: registrar, editar o eliminar pagos de una factura e imprimir
+ * el recibo.
+ */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

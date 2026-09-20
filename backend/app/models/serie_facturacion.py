@@ -1,3 +1,7 @@
+"""
+Serie de numeración de facturas (prefijo, año y consecutivo).
+"""
+
 from app import db
 
 

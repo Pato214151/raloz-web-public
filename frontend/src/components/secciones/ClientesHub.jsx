@@ -1,3 +1,5 @@
+/** Centro de Clientes: clientes, WhatsApp, citas y leads en pestañas. */
+
 import { Users, MessageCircle, CalendarClock, MessageSquare } from 'lucide-react'
 import Hub from '../common/Hub'
 import Clientes from '../clientes/Clientes'

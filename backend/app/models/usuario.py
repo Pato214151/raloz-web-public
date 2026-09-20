@@ -1,3 +1,8 @@
+"""
+Usuario del panel: rol (administrador, vendedor, cajero), contraseña
+hasheada, login con Google y bloqueo por intentos fallidos.
+"""
+
 from app import db
 from datetime import datetime
 

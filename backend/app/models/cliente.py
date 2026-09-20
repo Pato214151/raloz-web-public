@@ -1,3 +1,8 @@
+"""
+Cliente: datos de contacto y facturación, colegio y estudiante, más totales
+acumulados de compras.
+"""
+
 from app import db
 from datetime import datetime
 

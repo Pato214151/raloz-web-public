@@ -1,3 +1,5 @@
+/** Centro de Ventas: nueva venta, facturas, por cobrar y pagos en pestañas. */
+
 import { ShoppingCart, Search, AlertCircle, CreditCard } from 'lucide-react'
 import Hub from '../common/Hub'
 import Vender from '../facturacion/Vender'

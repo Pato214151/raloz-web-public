@@ -1,3 +1,8 @@
+/**
+ * Punto de entrada del panel: router + sesión + <App />, y registra el
+ * service worker (PWA) solo en producción.
+ */
+
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'

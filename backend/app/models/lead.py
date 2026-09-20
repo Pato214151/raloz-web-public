@@ -1,3 +1,7 @@
+"""
+Lead: cliente interesado que dejó sus datos (web, WhatsApp o el bot).
+"""
+
 from datetime import datetime
 
 from app import db

@@ -1,3 +1,9 @@
+/**
+ * Armazón del panel: barra lateral con las 9 áreas (según el rol), encabezado
+ * con el título de la página, barra inferior en el celular y los contadores de
+ * pendientes (pedidos nuevos, WhatsApp sin leer, citas y leads).
+ */
+
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'

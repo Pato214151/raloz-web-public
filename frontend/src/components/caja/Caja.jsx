@@ -1,3 +1,8 @@
+/**
+ * Caja diaria: abrir con base, registrar entradas y salidas, y cerrar con el
+ * arqueo (diferencia entre lo esperado y lo contado).
+ */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

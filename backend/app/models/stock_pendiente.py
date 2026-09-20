@@ -1,3 +1,7 @@
+"""
+Faltante de stock detectado al facturar: lo que se vendió y no había.
+"""
+
 from app import db
 from datetime import date
 

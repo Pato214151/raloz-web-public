@@ -1,3 +1,7 @@
+"""
+Métodos de pago disponibles (efectivo, transferencia, tarjeta...).
+"""
+
 from app import db
 
 

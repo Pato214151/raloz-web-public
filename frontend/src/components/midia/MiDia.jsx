@@ -1,3 +1,8 @@
+/**
+ * "¿Qué hago hoy?": lista priorizada de lo que hay que hacer, armada por el
+ * asistente.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

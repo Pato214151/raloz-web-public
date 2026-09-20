@@ -1,3 +1,8 @@
+"""
+Caja diaria: apertura, cierre, totales del día y la diferencia entre lo
+esperado y lo contado.
+"""
+
 from app import db
 
 

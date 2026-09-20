@@ -1,3 +1,5 @@
+/** Tablero tipo kanban con el trabajo del día por etapa. */
+
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

@@ -1,3 +1,7 @@
+"""
+Tareas internas del equipo: asignado, prioridad, vencimiento y si está hecha.
+"""
+
 from app import db
 from datetime import datetime
 

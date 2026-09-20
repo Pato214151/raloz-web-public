@@ -1,3 +1,5 @@
+/** Leads (interesados): seguimiento y cambio de estado. */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

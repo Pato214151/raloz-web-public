@@ -1,3 +1,8 @@
+"""
+Eventos que detecta el sistema (stock bajo, ventas raras, pagos sin
+confirmar...). Tienen severidad, recomendación y clave para no repetirse.
+"""
+
 from app import db
 from datetime import datetime
 import json

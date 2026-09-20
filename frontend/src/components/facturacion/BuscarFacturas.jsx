@@ -1,3 +1,8 @@
+/**
+ * Buscador de facturas: filtros, detalle, abonos, reimpresión del ticket y
+ * enlace para escribirle al cliente por WhatsApp.
+ */
+
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'

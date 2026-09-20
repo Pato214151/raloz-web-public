@@ -1,3 +1,5 @@
+/** Citas agendadas por el bot: confirmar, marcar como atendida o cancelar. */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

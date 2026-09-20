@@ -1,3 +1,7 @@
+"""
+Línea de una factura: producto, talla, cantidad y precio.
+"""
+
 from app import db
 
 

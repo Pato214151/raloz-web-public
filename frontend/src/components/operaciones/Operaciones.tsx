@@ -1,3 +1,8 @@
+/**
+ * Centro de Operación: tablero, resumen del día, pedidos web, fabricación,
+ * stock por fabricar, empaque y prendas pendientes en pestañas (según el rol).
+ */
+
 import type { ComponentType } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'

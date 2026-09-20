@@ -1,3 +1,8 @@
+"""
+Orden de producción para un taller: prenda, tallas, insumos, logo y costos.
+Se imprime en PDF.
+"""
+
 from app import db
 from datetime import datetime
 import json

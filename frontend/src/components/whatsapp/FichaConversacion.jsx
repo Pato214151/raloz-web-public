@@ -1,3 +1,5 @@
+/** Ficha del cliente dentro del chat: sus datos e historial de compras. */
+
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

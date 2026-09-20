@@ -1,3 +1,8 @@
+"""
+Pedido de la tienda que hay que fabricar: abono, saldo, fecha estimada
+y estado.
+"""
+
 from app import db
 from datetime import datetime
 

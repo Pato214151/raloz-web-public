@@ -1,3 +1,8 @@
+/**
+ * Empaque: se busca la factura, se marcan las prendas empacadas, se avisa al
+ * cliente que ya está listo y se registra la entrega.
+ */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

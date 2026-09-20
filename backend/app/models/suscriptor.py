@@ -1,3 +1,7 @@
+"""
+Personas suscritas a los avisos por WhatsApp (con su autorización de datos).
+"""
+
 from app import db
 from datetime import datetime
 

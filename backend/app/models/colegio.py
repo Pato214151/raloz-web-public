@@ -1,3 +1,7 @@
+"""
+Colegio al que se le confeccionan uniformes. De él cuelgan precios y stock.
+"""
+
 from app import db
 from datetime import datetime
 

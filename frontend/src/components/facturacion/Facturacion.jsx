@@ -1,3 +1,8 @@
+/**
+ * Nueva venta con captura manual: cliente, prendas por talla, método de pago
+ * e impresión del ticket.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

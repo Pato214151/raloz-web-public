@@ -1,3 +1,8 @@
+"""
+Avisos masivos enviados por WhatsApp: texto, a qué segmento y cuántos
+llegaron o fallaron.
+"""
+
 from app import db
 from datetime import datetime
 

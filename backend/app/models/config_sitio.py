@@ -1,3 +1,8 @@
+"""
+Configuración de la tienda en línea guardada como clave/valor
+(banner, textos, interruptores).
+"""
+
 from app import db
 from datetime import datetime
 

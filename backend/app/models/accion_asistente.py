@@ -1,3 +1,8 @@
+"""
+Acciones que ejecutó el asistente de IA: qué hizo, cómo estaba antes y
+después, y si se puede revertir.
+"""
+
 from app import db
 from datetime import datetime
 import json

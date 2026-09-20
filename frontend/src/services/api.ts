@@ -1,3 +1,9 @@
+/**
+ * Cliente HTTP (axios) hacia la API. Agrega el token JWT a cada petición y,
+ * si una respuesta da 401, intenta refrescar el token una vez; si falla,
+ * cierra la sesión y manda al login.
+ */
+
 import axios, {
   type AxiosError,
   type AxiosInstance,

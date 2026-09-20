@@ -1,3 +1,5 @@
+/** Prendas por mandar a fabricar (agrupadas) y registro de lo que ya llegó. */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

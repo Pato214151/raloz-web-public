@@ -1,3 +1,5 @@
+/** Órdenes de producción para el taller: crearlas, listarlas y descargar el PDF. */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import { toast } from 'react-hot-toast'

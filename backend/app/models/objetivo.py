@@ -1,3 +1,7 @@
+"""
+Metas del negocio (por mes o año) que el asistente usa para comparar.
+"""
+
 from app import db
 from datetime import datetime
 

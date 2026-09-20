@@ -1,3 +1,7 @@
+"""
+Suscripción del navegador para enviar notificaciones push al equipo.
+"""
+
 from app import db
 from datetime import datetime
 

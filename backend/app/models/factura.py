@@ -1,3 +1,8 @@
+"""
+Factura de venta: cliente, totales, abonos, saldo, estado de pago y de
+entrega, y sus líneas de detalle.
+"""
+
 from app import db
 from datetime import datetime
 

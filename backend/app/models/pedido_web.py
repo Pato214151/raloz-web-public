@@ -1,3 +1,8 @@
+"""
+Pedido hecho en la tienda en línea: items, totales, tipo de entrega y
+estado del pago (MercadoPago).
+"""
+
 from app import db
 from datetime import datetime
 

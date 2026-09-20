@@ -1,3 +1,7 @@
+"""
+Prendas que hay que mandar a fabricar, agrupadas por colegio, producto y talla.
+"""
+
 from app import db
 from datetime import datetime
 

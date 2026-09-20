@@ -1,3 +1,10 @@
+/**
+ * Rutas del panel. Casi todas las pantallas se cargan de forma diferida
+ * (lazy) para que el arranque sea liviano en el celular, y están agrupadas
+ * en "centros" (hubs) por área: ventas, operación, catálogo, clientes,
+ * finanzas, tienda y configuración. Cada ruta exige sesión y, algunas, un rol.
+ */
+
 import { Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
@@ -49,6 +56,7 @@ const FinanzasHub = lazy(() => import('./components/secciones/FinanzasHub'))
 const CatalogoHub = lazy(() => import('./components/secciones/CatalogoHub'))
 const ConfigHub = lazy(() => import('./components/secciones/ConfigHub'))
 
+/** Deja pasar solo si hay sesión (y el rol correcto); si no, manda al login. */
 function ProtectedRoute({ children, roles }) {
   const { usuario, loading } = useAuth()
 

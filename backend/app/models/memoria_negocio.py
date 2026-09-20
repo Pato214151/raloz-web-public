@@ -1,3 +1,8 @@
+"""
+Memoria del negocio: cosas que el dueño le enseña al asistente de IA
+para que las recuerde.
+"""
+
 from app import db
 from datetime import datetime
 

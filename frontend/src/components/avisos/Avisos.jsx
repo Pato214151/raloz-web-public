@@ -1,3 +1,8 @@
+/**
+ * Avisos masivos por WhatsApp: redactar, elegir el segmento, enviar y ver el
+ * historial de envíos.
+ */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

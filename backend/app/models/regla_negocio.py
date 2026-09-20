@@ -1,3 +1,8 @@
+"""
+Reglas del negocio que el asistente debe respetar (precios, descuentos,
+horarios...).
+"""
+
 from app import db
 from datetime import datetime
 import json

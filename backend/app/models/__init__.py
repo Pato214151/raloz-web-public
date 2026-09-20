@@ -1,3 +1,8 @@
+"""
+Modelos de la base de datos (SQLAlchemy). Se importan todos aquí para que
+queden registrados al crear la app.
+"""
+
 from app.models.usuario import Usuario
 from app.models.colegio import Colegio
 from app.models.producto import Producto

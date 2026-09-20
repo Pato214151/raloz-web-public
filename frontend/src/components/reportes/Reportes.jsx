@@ -1,3 +1,8 @@
+/**
+ * Reportes: ventas por período, productos más vendidos, cuentas y balance
+ * (ventas contra gastos), con impresión.
+ */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

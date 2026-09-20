@@ -1,3 +1,5 @@
+/** Clientes: lista, alta y edición, e historial de compras de cada uno. */
+
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'

@@ -1,3 +1,9 @@
+/**
+ * Asistente de IA del negocio: se le pregunta en lenguaje normal y responde
+ * con datos reales; también puede ejecutar acciones (según el modo elegido:
+ * solo sugerir o actuar).
+ */
+
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'

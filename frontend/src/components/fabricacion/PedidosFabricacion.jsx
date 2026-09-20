@@ -1,3 +1,8 @@
+/**
+ * Pedidos que hay que fabricar: cambiar de estado, fijar fecha de entrega,
+ * avisar al cliente y registrar el pago del saldo.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

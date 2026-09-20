@@ -1,3 +1,8 @@
+/**
+ * Bandeja de WhatsApp: conversaciones, mensajes, envío de texto e imágenes,
+ * cambio entre bot y atención humana, y exportación del historial.
+ */
+
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

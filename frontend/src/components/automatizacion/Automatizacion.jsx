@@ -1,3 +1,5 @@
+/** Automatizaciones: encender o apagar las tareas que el sistema hace solo. */
+
 import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

@@ -1,3 +1,8 @@
+/**
+ * Sesión del panel: usuario actual, login (normal o con Google), logout y
+ * ayudas para saber el rol. Los tokens se guardan en localStorage.
+ */
+
 import {
   createContext,
   useContext,
@@ -27,6 +32,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+/** Comparte la sesión con toda la app. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
@@ -108,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/** Hook para leer la sesión y sus acciones. */
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext)
   if (!context) throw new Error('useAuth debe usarse dentro de AuthProvider')

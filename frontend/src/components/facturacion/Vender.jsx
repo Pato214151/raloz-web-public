@@ -1,3 +1,8 @@
+/**
+ * Pantalla de venta rápida: elige colegio, arma el carrito con el catálogo,
+ * factura y registra el pago.
+ */
+
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../services/api'

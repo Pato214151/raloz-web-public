@@ -1,3 +1,8 @@
+/**
+ * Configuración de Vite: servidor en la red local y proxy de /api al backend
+ * Flask (puerto 5000).
+ */
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 

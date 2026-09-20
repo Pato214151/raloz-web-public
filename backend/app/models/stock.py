@@ -1,3 +1,7 @@
+"""
+Stock disponible por colegio, producto y talla.
+"""
+
 from app import db
 from datetime import datetime
 

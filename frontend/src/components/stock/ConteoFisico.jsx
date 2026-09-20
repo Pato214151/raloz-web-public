@@ -1,3 +1,5 @@
+/** Conteo físico: se recorre el catálogo y se ajusta el stock real. */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

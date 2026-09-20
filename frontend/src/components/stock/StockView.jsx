@@ -1,3 +1,8 @@
+/**
+ * Stock por colegio, producto y talla: edición rápida, balance y actividad
+ * reciente del equipo.
+ */
+
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'

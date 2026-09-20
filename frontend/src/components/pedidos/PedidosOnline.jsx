@@ -1,3 +1,8 @@
+/**
+ * Pedidos de la tienda en línea: detalle, generar la factura, descargar el PDF
+ * y actualizar la entrega.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'

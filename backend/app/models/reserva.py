@@ -1,3 +1,8 @@
+"""
+Reserva temporal de stock mientras un cliente termina de pagar en la tienda.
+Si no paga, expira y el stock se libera.
+"""
+
 from app import db
 from datetime import datetime
 
