@@ -12,6 +12,8 @@ uniformes escolares en Bogotá: tienda pública, panel administrativo/POS, pasar
 de pagos, facturación electrónica, bot de WhatsApp y una auditoría de seguridad
 documentada. *Full-stack e-commerce platform running in production.*
 
+> **Nota:** esta es la copia pública del código. El repositorio de producción es privado; del historial se retiraron los archivos de migración que contenían datos de clientes.
+
 🛒 [Tienda en vivo](https://ralozcolsas.com) · 🖥️ [Panel admin](https://raloz-web.onrender.com) · 📐 [Arquitectura](docs/ARQUITECTURA.md) · 💼 [Resumen para CV/LinkedIn](docs/PORTFOLIO.md)
 
 > **Empresa:** RALOZ COL SAS · Uniformes Escolares · Bogotá, Colombia  
