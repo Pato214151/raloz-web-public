@@ -5,6 +5,7 @@
 ![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL%20(Supabase)-4169E1?logo=postgresql&logoColor=white)
 ![Payments](https://img.shields.io/badge/Pagos-MercadoPago-00B1EA?logo=mercadopago&logoColor=white)
 ![Deploy](https://img.shields.io/badge/Deploy-Render%20%7C%20Cloudflare-46E3B7?logo=cloudflare&logoColor=white)
+[![CI](https://github.com/Pato214151/raloz-web-public/actions/workflows/ci.yml/badge.svg)](https://github.com/Pato214151/raloz-web-public/actions/workflows/ci.yml)
 ![Code](https://img.shields.io/badge/Code-~23k%20LOC-success)
 
 **Plataforma full-stack de e-commerce, en producción**, para un negocio real de
