@@ -303,3 +303,42 @@ cd frontend && npm run typecheck && npm run build
 ---
 
 *RALOZ COL SAS — Sistema desarrollado a medida · Bogotá, Colombia*
+
+---
+
+## Lo que salió mal (y cómo lo arreglé)
+
+> Este sistema lo uso yo mismo en el mostrador. Empezó en mi computador, sin control de versiones, y lo subí a Git cuando aprendí a usarlo (por eso el historial arranca en 2026, aunque el sistema funciona desde 2025). Eso significa que cada error lo vi de frente: una factura que no salía, un ticket cortado, un cliente escribiendo por WhatsApp a las 9 p. m. Estos son los que más me enseñaron.
+
+**El correo que nunca llegaba.**
+Las facturas se generaban bien, pero el correo al cliente nunca salía. Probé Gmail, después Outlook, y nada. El problema no era la cuenta: Render bloquea el puerto SMTP en los servidores gratuitos. Cambié el envío a la API HTTP de Brevo. Y ahí apareció el segundo error: los PDF llegaban vacíos, porque después de generar el PDF en memoria el cursor quedaba al final del archivo y lo que se codificaba en base64 era nada. Un `seek(0)` lo arregló. Aprendí a no pelearme con la configuración cuando el problema es la infraestructura.
+
+**Pagos que se perdían.**
+MercadoPago avisa por webhook cuando alguien paga. Si mi servidor fallaba en ese momento, yo respondía como si todo estuviera bien y MercadoPago no volvía a avisar: el cliente pagó, pero el pedido nunca se confirmaba. Ahora, si algo falla, respondo con error 500 para que MercadoPago reintente, y además me llega un aviso para revisarlo a mano. Un pago no se puede perder en silencio.
+
+**Las horas salían con 5 horas de más.**
+Un mensaje de WhatsApp de las 2:04 p. m. aparecía a las 7:04 p. m. El backend guardaba la hora en UTC pero la enviaba sin la marca de zona ("Z"), y el navegador la interpretaba como hora de Colombia. Le agregué la marca de zona y una prueba para que no vuelva a pasar. Todavía me falta aplicar el mismo arreglo en otros módulos (facturas, pedidos, caja) y lo tengo anotado.
+
+**El ticket que salía cortado.**
+Configuré los tickets a 58 mm porque pensé que era el estándar. La impresora del local (SAT Q22) es de 80 mm y el ticket salía angosto. Después apareció una Epson TM‑U220, que es de matriz de puntos, y ahí el ancho útil es 76 mm. Terminé ajustando el formato por impresora. Aprendí que el hardware real no se puede adivinar desde el código.
+
+**La bandeja de WhatsApp fallaba.**
+Un error al cargar un chat tumbaba la bandeja entera y la dejaba en blanco. Y en contactos, el cuadro de texto perdía el foco con cada letra: había que hacer clic después de cada tecla. La causa era que definí un componente dentro de otro, y React lo recreaba en cada pulsación. Lo saqué al nivel del módulo y se arregló. Ese error no se me olvida más.
+
+**Las fotos del iPhone no subían.**
+En el panel, algunas imágenes simplemente no cargaban. Eran fotos HEIC de iPhone, que el procesador no entendía. Además la vista previa no aparecía porque mi propia política de seguridad (CSP) bloqueaba las URLs `blob:`. Ahora detecto HEIC con un mensaje claro, el procesador tiene un respaldo, y la CSP permite `blob:` solo para imágenes.
+
+**Pantalla en blanco después de cada despliegue.**
+Si alguien tenía el panel abierto cuando yo publicaba una versión nueva, la pantalla quedaba en blanco, sin ningún error visible. Los archivos JavaScript de la versión anterior ya no existían, mi servidor respondía con el `index.html` en su lugar, y el navegador recibía HTML donde esperaba JavaScript. Para quien está atendiendo en el mostrador, eso es "el sistema se dañó". Ahora los archivos que no existen devuelven un 404 limpio, y si una vista no carga, la página se recarga una sola vez para tomar la versión nueva.
+
+**El bot de WhatsApp con IA.**
+Aquí aprendí más que en cualquier otra parte:
+- Google retiró los modelos Gemini 2.x y el bot empezó a responder con error 404 de un día para otro. Pasé a los modelos vigentes y ahora el sistema prueba varios modelos en orden.
+- Render tarda en "despertar" y la IA se cortaba a los 15 segundos. Subí el tiempo de espera a 40.
+- Grok devolvía 429 (demasiadas peticiones). Reduje llamadas, agregué reintentos y dejé Gemini como motor principal y Grok de respaldo.
+- El bot le aplicaba 50 % de descuento a un colegio que en realidad paga completo. Lo quité.
+- Si el cliente escribía "gracias" al final, el bot se "tragaba" el pedido. Ahora eso no cierra la conversación.
+- Probé con chats reales de clientes (sin datos personales) y convertí cada falla en una prueba automática.
+
+**Lo que haría distinto hoy.**
+Guardé el dinero como `Float` (debería ser `Numeric`, porque `float` pierde centavos), cada pago apunta a una sola factura (en la vida real un pago cubre varias) y el saldo se guarda en una columna en vez de calcularse. Funciona, pero en mi siguiente proyecto (Landscape Admin) lo diseñé bien desde el principio.
